@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# webbook generated content
+content/.webbook/indexes/
+content/.webbook/revisions/
+content/.webbook/uploads/
