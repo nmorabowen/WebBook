@@ -2,7 +2,7 @@
 title: Plane Stress Element
 slug: plane-stress-element
 createdAt: '2026-03-02T02:58:47.271Z'
-updatedAt: '2026-03-02T05:36:02.328Z'
+updatedAt: '2026-03-02T05:43:11.935Z'
 publishedAt: '2026-03-02T02:59:32.325Z'
 kind: chapter
 bookSlug: fem
@@ -47,9 +47,13 @@ https://www.youtube.com/watch?v=SKVKNy-xw_0
 
 ## Relaciones Esfuerzo - Deformación
 Para un cuerpo plano de espesor constante que se yace en un plano cartesiano $xy$, la relación esfuerzo - deformación (o relación constitutiva) de un material *isotropico lineal elástico* es:
+
+:::align-center
 $$
 [\sigma]=[E][\epsilon]+[\sigma_0]
 $$
+:::
+
 $$
 [\epsilon]=[E]^{-1}[\sigma]+[\epsilon_0]
 $$

@@ -376,20 +376,57 @@ button {
   margin-left: auto;
 }
 
+.alignment-block.align-left .math-display,
+.alignment-block.align-center .math-display,
+.alignment-block.align-right .math-display {
+  display: flex;
+  width: 100%;
+}
+
+.book-prose .math-display {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin: 1.4rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.alignment-block.align-left .math-display {
+  justify-content: flex-start;
+}
+
+.alignment-block.align-center .math-display {
+  justify-content: center;
+}
+
+.alignment-block.align-right .math-display {
+  justify-content: flex-end;
+}
+
 .book-prose .math-inline {
   display: inline;
   white-space: nowrap;
 }
 
-.book-prose .math-display {
-  display: block;
-  margin: 1.4rem 0;
+.book-prose mjx-container[jax="SVG"][display="true"] {
+  margin: 0;
+  max-width: 100%;
 }
 
-.book-prose mjx-container[jax="SVG"][display="true"] {
-  margin: 1.4rem 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+.alignment-block.align-left mjx-container[jax="SVG"][display="true"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.alignment-block.align-center mjx-container[jax="SVG"][display="true"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.alignment-block.align-right mjx-container[jax="SVG"][display="true"] {
+  margin-left: auto;
+  margin-right: 0;
 }
 
 .book-prose mjx-container[jax="SVG"] {
