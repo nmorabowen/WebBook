@@ -1,0 +1,224 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/api/books/[bookSlug]",
+      "regex": "^/api/books/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPbookSlug": "nxtPbookSlug"
+      },
+      "namedRegex": "^/api/books/(?<nxtPbookSlug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/books/[bookSlug]/chapters",
+      "regex": "^/api/books/([^/]+?)/chapters(?:/)?$",
+      "routeKeys": {
+        "nxtPbookSlug": "nxtPbookSlug"
+      },
+      "namedRegex": "^/api/books/(?<nxtPbookSlug>[^/]+?)/chapters(?:/)?$"
+    },
+    {
+      "page": "/api/books/[bookSlug]/chapters/[chapterSlug]",
+      "regex": "^/api/books/([^/]+?)/chapters/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPbookSlug": "nxtPbookSlug",
+        "nxtPchapterSlug": "nxtPchapterSlug"
+      },
+      "namedRegex": "^/api/books/(?<nxtPbookSlug>[^/]+?)/chapters/(?<nxtPchapterSlug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/notes/[slug]",
+      "regex": "^/api/notes/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/notes/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/app/books/[bookSlug]",
+      "regex": "^/app/books/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPbookSlug": "nxtPbookSlug"
+      },
+      "namedRegex": "^/app/books/(?<nxtPbookSlug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/app/books/[bookSlug]/chapters/[chapterSlug]",
+      "regex": "^/app/books/([^/]+?)/chapters/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPbookSlug": "nxtPbookSlug",
+        "nxtPchapterSlug": "nxtPchapterSlug"
+      },
+      "namedRegex": "^/app/books/(?<nxtPbookSlug>[^/]+?)/chapters/(?<nxtPchapterSlug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/app/notes/[slug]",
+      "regex": "^/app/notes/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/app/notes/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/books/[bookSlug]",
+      "regex": "^/books/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPbookSlug": "nxtPbookSlug"
+      },
+      "namedRegex": "^/books/(?<nxtPbookSlug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/books/[bookSlug]/[chapterSlug]",
+      "regex": "^/books/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPbookSlug": "nxtPbookSlug",
+        "nxtPchapterSlug": "nxtPchapterSlug"
+      },
+      "namedRegex": "^/books/(?<nxtPbookSlug>[^/]+?)/(?<nxtPchapterSlug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/notes/[slug]",
+      "regex": "^/notes/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/notes/(?<nxtPslug>[^/]+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/api/auth/login",
+      "regex": "^/api/auth/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/login(?:/)?$"
+    },
+    {
+      "page": "/api/auth/logout",
+      "regex": "^/api/auth/logout(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/logout(?:/)?$"
+    },
+    {
+      "page": "/api/books",
+      "regex": "^/api/books(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/books(?:/)?$"
+    },
+    {
+      "page": "/api/content/tree",
+      "regex": "^/api/content/tree(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/content/tree(?:/)?$"
+    },
+    {
+      "page": "/api/execute/python",
+      "regex": "^/api/execute/python(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/execute/python(?:/)?$"
+    },
+    {
+      "page": "/api/notes",
+      "regex": "^/api/notes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/notes(?:/)?$"
+    },
+    {
+      "page": "/api/publish",
+      "regex": "^/api/publish(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/publish(?:/)?$"
+    },
+    {
+      "page": "/api/revisions/restore",
+      "regex": "^/api/revisions/restore(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/revisions/restore(?:/)?$"
+    },
+    {
+      "page": "/api/search",
+      "regex": "^/api/search(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/search(?:/)?$"
+    },
+    {
+      "page": "/api/unpublish",
+      "regex": "^/api/unpublish(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/unpublish(?:/)?$"
+    },
+    {
+      "page": "/app",
+      "regex": "^/app(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/app(?:/)?$"
+    },
+    {
+      "page": "/favicon.ico",
+      "regex": "^/favicon\\.ico(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/favicon\\.ico(?:/)?$"
+    },
+    {
+      "page": "/login",
+      "regex": "^/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/login(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

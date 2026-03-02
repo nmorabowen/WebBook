@@ -1,0 +1,3 @@
+{
+  "/api/books/[bookSlug]/chapters/[chapterSlug]/route": "app/api/books/[bookSlug]/chapters/[chapterSlug]/route.js"
+}

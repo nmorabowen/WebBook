@@ -1,0 +1,12 @@
+{
+  "pages": {},
+  "app": {
+    "[project]/src/app/app/books/[bookSlug]/chapters/[chapterSlug]/page": [
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2",
+      "static/media/68d403cf9f2c68c5-s.p.f9f15f61.woff2",
+      "static/media/051742360c26797e-s.p.102b7f24.woff2"
+    ]
+  },
+  "appUsingSizeAdjust": true,
+  "pagesUsingSizeAdjust": false
+}

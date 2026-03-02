@@ -1,0 +1,8 @@
+.git
+.next
+node_modules
+coverage
+dist
+npm-debug.log*
+content/.webbook/indexes
+content/.webbook/revisions
