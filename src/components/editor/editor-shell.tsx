@@ -33,6 +33,8 @@ import {
   Youtube,
 } from "lucide-react";
 import {
+  bookTypographyLimits,
+  bookTypographyStyle,
   defaultBookTypography,
   normalizeBookTypography,
   type BookTypography,
@@ -140,6 +142,7 @@ export function EditorShell({
   const [inlineTextSize, setInlineTextSize] = useState<(typeof inlineTextSizeOptions)[number]["value"]>("inherit");
   const [inlineTextColor, setInlineTextColor] = useState("#8f5335");
   const [isPending, startTransition] = useTransition();
+  const contentTypographyStyle = bookTypographyStyle(typography);
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
@@ -281,7 +284,7 @@ export function EditorShell({
       description: mode === "book" ? summary : undefined,
       theme: mode === "book" ? theme : undefined,
       fontPreset,
-      typography: mode === "book" ? typography : undefined,
+      typography: mode === "book" || mode === "note" ? typography : undefined,
       order: mode === "chapter" ? order : undefined,
     }),
     [
@@ -899,9 +902,167 @@ export function EditorShell({
     },
   ];
 
+  const renderTypographyPanel = ({
+    title,
+    description,
+    open = false,
+  }: {
+    title: string;
+    description: string;
+    open?: boolean;
+    }) => (
+      (() => {
+        const renderTypographyControl = <K extends keyof BookTypography>({
+          keyName,
+          label,
+          description,
+          inputId,
+          fallback,
+          format = (value: number) => String(value),
+        }: {
+          keyName: K;
+          label: string;
+          description: string;
+          inputId: string;
+          fallback: number;
+          format?: (value: number) => string;
+        }) => {
+          const limits = bookTypographyLimits[keyName];
+          const value = typography[keyName] as number;
+
+          return (
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className="paper-label mb-0" htmlFor={inputId}>
+                  {label}
+                </label>
+                <span className="text-sm text-[var(--paper-muted)]">{format(value)}</span>
+              </div>
+              <p className="text-sm leading-6 text-[var(--paper-muted)]">{description}</p>
+              <input
+                id={inputId}
+                type="range"
+                min={limits.min}
+                max={limits.max}
+                step={limits.step}
+                value={value}
+                onChange={(event) =>
+                  updateTypography(
+                    keyName,
+                    (Number(event.target.value) || fallback) as BookTypography[K],
+                  )
+                }
+              />
+              <input
+                className="paper-input"
+                type="number"
+                min={limits.min}
+                max={limits.max}
+                step={limits.step}
+                value={value}
+                onChange={(event) =>
+                  updateTypography(
+                    keyName,
+                    (Number(event.target.value) || fallback) as BookTypography[K],
+                  )
+                }
+              />
+            </div>
+          );
+        };
+
+        return (
+      <details
+        className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.58)] p-5"
+        style={workspacePanelStyle}
+      open={open}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <div>
+          <p className="paper-label mb-1">{title}</p>
+          <p className="text-sm text-[var(--paper-muted)]">{description}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="paper-button paper-button-secondary px-3 py-2 text-sm"
+            onClick={(event) => {
+              event.preventDefault();
+              void saveTypography();
+            }}
+          >
+            Save typography
+          </button>
+          <ChevronDown className="h-4 w-4 text-[var(--paper-muted)]" />
+        </div>
+      </summary>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          {renderTypographyControl({
+            keyName: "bodyFontSize",
+            label: "Body font size",
+            description: "Sets the base size used for paragraph text across the page.",
+            inputId: `${pageId}-body-font-size`,
+            fallback: defaultBookTypography.bodyFontSize,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
+          {renderTypographyControl({
+            keyName: "bodyLineHeight",
+            label: "Body line height",
+            description: "Controls vertical breathing room between lines of body text.",
+            inputId: `${pageId}-body-line-height`,
+            fallback: defaultBookTypography.bodyLineHeight,
+            format: (value) => value.toFixed(2),
+          })}
+          {renderTypographyControl({
+            keyName: "headingBaseSize",
+            label: "Heading size",
+            description: "Defines the top heading size that the lower levels scale down from.",
+            inputId: `${pageId}-heading-base-size`,
+            fallback: defaultBookTypography.headingBaseSize,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
+          {renderTypographyControl({
+            keyName: "headingScale",
+            label: "Heading scale",
+            description: "Changes how quickly heading levels step down from h1 to h4.",
+            inputId: `${pageId}-heading-scale`,
+            fallback: defaultBookTypography.headingScale,
+            format: (value) => `${value.toFixed(2)}x`,
+          })}
+          {renderTypographyControl({
+            keyName: "headingIndentStep",
+            label: "Heading indent step",
+            description: "Adds extra left offset for deeper heading levels and their section content.",
+            inputId: `${pageId}-heading-indent-step`,
+            fallback: defaultBookTypography.headingIndentStep,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
+          {renderTypographyControl({
+            keyName: "paragraphSpacing",
+            label: "Paragraph spacing",
+            description: "Sets the spacing between paragraphs, callouts, media, and display blocks.",
+            inputId: `${pageId}-paragraph-spacing`,
+            fallback: defaultBookTypography.paragraphSpacing,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
+          {renderTypographyControl({
+            keyName: "contentWidth",
+            label: "Reading width",
+            description: "Limits the text measure so the reading column feels tighter or wider.",
+            inputId: `${pageId}-content-width`,
+            fallback: defaultBookTypography.contentWidth,
+            format: (value) => `${value.toFixed(0)}ch`,
+          })}
+        </div>
+      </details>
+        );
+      })()
+    );
+
   return (
     <div
-      className="grid items-start xl:grid-cols-[minmax(0,1fr)_420px]"
+      className="grid items-start editor-workspace-layout"
       style={workspaceGapStyle}
     >
       <section className="grid auto-rows-max content-start self-start" style={workspaceGapStyle}>
@@ -909,12 +1070,27 @@ export function EditorShell({
           className="flex flex-wrap items-start justify-between gap-4 self-start border border-[var(--paper-border)] bg-[rgba(255,255,255,0.58)] p-5"
           style={workspacePanelStyle}
         >
-          <div className="grid gap-2">
+          <div
+            className="grid gap-2"
+            data-font-preset={fontPreset}
+            style={contentTypographyStyle}
+          >
             <div className="flex items-center gap-2">
               <span className="paper-badge">{mode}</span>
               <span className="paper-badge">{status}</span>
             </div>
-            <h1 className="font-serif text-4xl leading-none">{title}</h1>
+            <h1 className={mode === "chapter" ? "chapter-hero-title" : "book-hero-title"}>
+              {title}
+            </h1>
+            {summary ? (
+              <p
+                className={
+                  mode === "chapter" ? "chapter-hero-summary mt-3" : "book-hero-summary mt-3"
+                }
+              >
+                {summary}
+              </p>
+            ) : null}
             <p className="text-sm text-[var(--paper-muted)]">{saveMessage}</p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -938,179 +1114,6 @@ export function EditorShell({
             ) : null}
           </div>
         </div>
-
-        {mode === "book" ? (
-          <details
-            className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.58)] p-5"
-            style={workspacePanelStyle}
-            open
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-              <div>
-                <p className="paper-label mb-1">Advanced typography</p>
-                <p className="text-sm text-[var(--paper-muted)]">
-                  Control heading scale, body size, spacing, and reading width.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="paper-button paper-button-secondary px-3 py-2 text-sm"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    void saveTypography();
-                  }}
-                >
-                  Save typography
-                </button>
-                <ChevronDown className="h-4 w-4 text-[var(--paper-muted)]" />
-              </div>
-            </summary>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="paper-label" htmlFor={`${pageId}-body-font-size`}>
-                  Body font size
-                </label>
-                <input
-                  id={`${pageId}-body-font-size`}
-                  className="paper-input"
-                  type="number"
-                  min={0.9}
-                  max={1.6}
-                  step={0.02}
-                  value={typography.bodyFontSize}
-                  onChange={(event) =>
-                    updateTypography(
-                      "bodyFontSize",
-                      Number(event.target.value) || defaultBookTypography.bodyFontSize,
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className="paper-label" htmlFor={`${pageId}-body-line-height`}>
-                  Body line height
-                </label>
-                <input
-                  id={`${pageId}-body-line-height`}
-                  className="paper-input"
-                  type="number"
-                  min={1.4}
-                  max={2.4}
-                  step={0.05}
-                  value={typography.bodyLineHeight}
-                  onChange={(event) =>
-                    updateTypography(
-                      "bodyLineHeight",
-                      Number(event.target.value) || defaultBookTypography.bodyLineHeight,
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className="paper-label" htmlFor={`${pageId}-heading-base-size`}>
-                  Heading size
-                </label>
-                <input
-                  id={`${pageId}-heading-base-size`}
-                  className="paper-input"
-                  type="number"
-                  min={2.2}
-                  max={5}
-                  step={0.05}
-                  value={typography.headingBaseSize}
-                  onChange={(event) =>
-                    updateTypography(
-                      "headingBaseSize",
-                      Number(event.target.value) || defaultBookTypography.headingBaseSize,
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className="paper-label" htmlFor={`${pageId}-heading-scale`}>
-                  Heading scale
-                </label>
-                <input
-                  id={`${pageId}-heading-scale`}
-                  className="paper-input"
-                  type="number"
-                  min={1.05}
-                  max={1.8}
-                  step={0.05}
-                  value={typography.headingScale}
-                  onChange={(event) =>
-                    updateTypography(
-                      "headingScale",
-                      Number(event.target.value) || defaultBookTypography.headingScale,
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className="paper-label" htmlFor={`${pageId}-heading-indent-step`}>
-                  Heading indent step
-                </label>
-                <input
-                  id={`${pageId}-heading-indent-step`}
-                  className="paper-input"
-                  type="number"
-                  min={0}
-                  max={3}
-                  step={0.05}
-                  value={typography.headingIndentStep}
-                  onChange={(event) =>
-                    updateTypography(
-                      "headingIndentStep",
-                      Number(event.target.value) || 0,
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className="paper-label" htmlFor={`${pageId}-paragraph-spacing`}>
-                  Paragraph spacing
-                </label>
-                <input
-                  id={`${pageId}-paragraph-spacing`}
-                  className="paper-input"
-                  type="number"
-                  min={0.5}
-                  max={2.4}
-                  step={0.05}
-                  value={typography.paragraphSpacing}
-                  onChange={(event) =>
-                    updateTypography(
-                      "paragraphSpacing",
-                      Number(event.target.value) || defaultBookTypography.paragraphSpacing,
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className="paper-label" htmlFor={`${pageId}-content-width`}>
-                  Reading width
-                </label>
-                <input
-                  id={`${pageId}-content-width`}
-                  className="paper-input"
-                  type="number"
-                  min={32}
-                  max={180}
-                  step={1}
-                  value={typography.contentWidth}
-                  onChange={(event) =>
-                    updateTypography(
-                      "contentWidth",
-                      Number(event.target.value) || defaultBookTypography.contentWidth,
-                    )
-                  }
-                />
-              </div>
-            </div>
-          </details>
-        ) : null}
 
         <div
           ref={editorSplitRef}
@@ -1341,6 +1344,22 @@ export function EditorShell({
             </div>
           </div>
         </div>
+
+        {mode === "book"
+          ? renderTypographyPanel({
+              title: "Advanced typography",
+              description:
+                "Control heading scale, body size, spacing, and reading width.",
+            })
+          : null}
+
+        {mode === "note"
+          ? renderTypographyPanel({
+              title: "Note typography",
+              description:
+                "Control heading scale, body size, spacing, indentation, and reading width for this note.",
+              })
+            : null}
       </section>
 
       <aside className="grid self-start" style={workspaceGapStyle}>

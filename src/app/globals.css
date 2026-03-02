@@ -111,6 +111,12 @@ button {
   gap: 20px;
 }
 
+.app-shell-layout,
+.preview-shell-layout,
+.editor-workspace-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .public-shell-layout {
   align-items: stretch;
 }
@@ -162,7 +168,7 @@ button {
 
 .paper-panel {
   border: 1px solid var(--paper-border);
-  border-radius: var(--radius-panel);
+  border-radius: var(--workspace-radius-panel, var(--radius-panel));
   background: var(--paper-panel);
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(20px);
@@ -204,7 +210,7 @@ button {
 .paper-select {
   width: 100%;
   border: 1px solid rgba(73, 57, 38, 0.18);
-  border-radius: 18px;
+  border-radius: var(--workspace-radius-sm, 18px);
   background: rgba(255, 252, 247, 0.92);
   color: var(--paper-ink);
   padding: 0.85rem 1rem;
@@ -253,7 +259,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-radius: 18px;
+  border-radius: var(--workspace-radius-sm, 18px);
   padding: 0.75rem 0.9rem;
   color: var(--paper-muted);
   transition:
@@ -273,7 +279,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  border-radius: 14px;
+  border-radius: var(--workspace-radius-xs, 14px);
   padding: 0.65rem 0.75rem;
   text-align: left;
   color: var(--paper-ink);
@@ -385,7 +391,7 @@ button {
 .book-prose h4 {
   margin-top: 2.35rem;
   margin-bottom: 0.95rem;
-  font-family: var(--font-ui), sans-serif;
+  font-family: var(--font-reading), serif;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.15;
@@ -423,6 +429,22 @@ button {
   padding-left: 1.45rem;
 }
 
+.book-prose ul {
+  list-style: disc;
+}
+
+.book-prose ol {
+  list-style: decimal;
+}
+
+.book-prose li > ul {
+  list-style: circle;
+}
+
+.book-prose li > ol {
+  list-style: lower-alpha;
+}
+
 .book-prose a {
   color: var(--paper-accent);
   text-decoration: underline;
@@ -445,9 +467,9 @@ button {
 }
 
 .callout-block {
-  margin: 1.2rem 0;
+  margin: var(--book-block-spacing, 1rem) 0;
   border-left: 4px solid rgba(143, 83, 53, 0.3);
-  border-radius: 18px;
+  border-radius: var(--workspace-radius-sm, 18px);
   background: rgba(255, 255, 255, 0.42);
   padding: 1rem 1.1rem 1rem 1.2rem;
 }
@@ -527,7 +549,7 @@ button {
 
 .book-prose pre {
   overflow-x: auto;
-  border-radius: 24px;
+  border-radius: var(--workspace-radius-lg, 24px);
   background: var(--paper-code);
   color: var(--paper-code-text);
   padding: 1.1rem 1.2rem;
@@ -544,23 +566,23 @@ button {
 
 .book-prose img {
   max-width: 100%;
-  border-radius: 22px;
+  border-radius: var(--workspace-radius-md, 22px);
 }
 
 .media-block {
-  margin: 1.4rem 0;
+  margin: var(--book-block-spacing, 1rem) 0;
 }
 
 .book-image {
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: 22px;
+  border-radius: var(--workspace-radius-md, 22px);
 }
 
 .alignment-block {
   width: 100%;
-  margin: 1.4rem 0;
+  margin: var(--book-block-spacing, 1rem) 0;
 }
 
 .alignment-block.align-left {
@@ -597,7 +619,7 @@ button {
   display: flex;
   width: 100%;
   justify-content: center;
-  margin: 1.4rem 0;
+  margin: var(--book-block-spacing, 1rem) 0;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -677,7 +699,7 @@ button {
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border: 1px solid var(--paper-border);
-  border-radius: 24px;
+  border-radius: var(--workspace-radius-lg, 24px);
   background: rgba(31, 24, 18, 0.08);
   box-shadow: 0 18px 40px rgba(32, 28, 24, 0.08);
 }
@@ -732,6 +754,7 @@ button {
 
 .book-chapter-card-title {
   margin: 0;
+  font-family: var(--font-reading), serif;
   font-size: var(--book-h3-size, 1.55rem);
   line-height: 1.15;
   font-weight: 600;
@@ -799,7 +822,7 @@ button {
   min-height: var(--editor-pane-height);
   height: var(--editor-pane-height);
   border: 1px solid var(--paper-border);
-  border-radius: 24px;
+  border-radius: var(--workspace-radius-lg, 24px);
   background: rgba(255, 250, 240, 0.72);
 }
 
@@ -904,11 +927,30 @@ button {
 @media (min-width: 1280px) {
   .public-shell-layout {
     grid-template-columns:
-      minmax(0, var(--public-left-panel-width, 260px))
+      minmax(0, var(--public-left-panel-width, var(--workspace-public-left-panel-width, 260px)))
       18px
       minmax(0, 1fr)
       18px
-      minmax(0, var(--public-right-panel-width, 260px));
+      minmax(0, var(--public-right-panel-width, var(--workspace-public-right-panel-width, 260px)));
+  }
+
+  .app-shell-layout {
+    grid-template-columns:
+      minmax(0, var(--workspace-app-sidebar-width, 280px))
+      minmax(0, 1fr)
+      minmax(0, var(--workspace-app-inspector-width, 300px));
+  }
+
+  .preview-shell-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, var(--workspace-public-right-panel-width, 260px));
+  }
+
+  .editor-workspace-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, var(--workspace-app-inspector-width, 300px));
   }
 
   .public-shell-panel.is-collapsed,

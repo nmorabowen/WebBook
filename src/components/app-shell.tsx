@@ -21,7 +21,7 @@ export function AppShell({
     <WorkspaceStyleFrame generalSettings={generalSettings}>
       <div className="paper-shell">
         <div
-          className="paper-grid xl:grid-cols-[280px_minmax(0,1fr)_300px]"
+          className="paper-grid app-shell-layout"
           style={{ gap: "var(--workspace-tile-spacing)" }}
         >
           <aside

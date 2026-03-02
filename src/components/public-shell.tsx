@@ -6,6 +6,11 @@ import { ArrowLeft, BookOpenText, GripVertical, Search } from "lucide-react";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
+import {
+  DEFAULT_GENERAL_SETTINGS,
+  GENERAL_SETTINGS_LIMITS,
+} from "@/lib/general-settings-config";
+import { normalizeGeneralSettings } from "@/lib/general-settings";
 import { cn } from "@/lib/utils";
 
 type PublicShellProps = {
@@ -19,34 +24,15 @@ type PublicShellProps = {
   readingWidth?: number;
 };
 
-const LEFT_PANEL_KEY = "webbook.public-shell.left-width";
-const RIGHT_PANEL_KEY = "webbook.public-shell.right-width";
-const defaultLeftWidth = 260;
-const defaultRightWidth = 260;
-
 function clampPanelWidth(width: number) {
   if (width <= 164) {
     return 0;
   }
 
-  return Math.max(220, Math.min(460, Math.round(width)));
-}
-
-function readStoredWidth(key: string, fallback: number) {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) {
-      return fallback;
-    }
-
-    return clampPanelWidth(Number(raw));
-  } catch {
-    return fallback;
-  }
+  return Math.max(
+    GENERAL_SETTINGS_LIMITS.publicLeftPanelWidth.min,
+    Math.min(GENERAL_SETTINGS_LIMITS.publicLeftPanelWidth.max, Math.round(width)),
+  );
 }
 
 export function PublicShell({
@@ -59,9 +45,12 @@ export function PublicShell({
   generalSettings,
   readingWidth,
 }: PublicShellProps) {
+  const normalizedSettings = normalizeGeneralSettings(
+    generalSettings ?? DEFAULT_GENERAL_SETTINGS,
+  );
   const activeBook = tree.books.find((item) => item.meta.slug === bookSlug);
-  const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
-  const [rightWidth, setRightWidth] = useState(defaultRightWidth);
+  const [leftWidth, setLeftWidth] = useState(normalizedSettings.publicLeftPanelWidth);
+  const [rightWidth, setRightWidth] = useState(normalizedSettings.publicRightPanelWidth);
   const [dragTarget, setDragTarget] = useState<"left" | "right" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hasRightPanel = Boolean(rightPanel);
@@ -69,21 +58,12 @@ export function PublicShell({
   const isRightCollapsed = !hasRightPanel || rightWidth === 0;
 
   useEffect(() => {
-    setLeftWidth(readStoredWidth(LEFT_PANEL_KEY, defaultLeftWidth));
-    setRightWidth(readStoredWidth(RIGHT_PANEL_KEY, defaultRightWidth));
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(LEFT_PANEL_KEY, String(leftWidth));
-    } catch {}
-  }, [leftWidth]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(RIGHT_PANEL_KEY, String(rightWidth));
-    } catch {}
-  }, [rightWidth]);
+    setLeftWidth(normalizedSettings.publicLeftPanelWidth);
+    setRightWidth(normalizedSettings.publicRightPanelWidth);
+  }, [
+    normalizedSettings.publicLeftPanelWidth,
+    normalizedSettings.publicRightPanelWidth,
+  ]);
 
   useEffect(() => {
     if (!dragTarget) {
@@ -218,7 +198,10 @@ export function PublicShell({
               </div>
             )}
 
-            <div className="mt-auto rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.55)] p-4">
+            <div
+              className="mt-auto border border-[var(--paper-border)] bg-[rgba(255,255,255,0.55)] p-4"
+              style={{ borderRadius: "var(--workspace-radius-lg)" }}
+            >
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Search className="h-4 w-4 text-[var(--paper-accent)]" />
                 Linked thinking

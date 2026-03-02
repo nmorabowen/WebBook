@@ -39,7 +39,7 @@ export default async function NotePage({
       currentPath={`/notes/${note.meta.slug}`}
       fontPreset={note.meta.fontPreset ?? "source-serif"}
       generalSettings={generalSettings}
-      readingWidth={46}
+      readingWidth={note.meta.typography?.contentWidth}
       rightPanel={
         <TocPanel
           toc={toc}
@@ -59,6 +59,7 @@ export default async function NotePage({
         requester="public"
         allowExecution={note.meta.allowExecution}
         fontPreset={note.meta.fontPreset ?? "source-serif"}
+        typography={note.meta.typography}
         generalSettings={generalSettings}
       />
     </PublicShell>

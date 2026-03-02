@@ -41,10 +41,7 @@ export default async function EditorPreviewPage({
     return (
       <WorkspaceStyleFrame generalSettings={generalSettings}>
         <div className="paper-shell" data-font-preset={loaded.content.meta.fontPreset ?? "source-serif"}>
-          <div
-            className="paper-grid xl:grid-cols-[minmax(0,1fr)_260px]"
-            style={{ gap: `${generalSettings.tileSpacing}rem` }}
-          >
+          <div className="paper-grid preview-shell-layout" style={{ gap: `${generalSettings.tileSpacing}rem` }}>
             <main
               className="paper-panel paper-panel-strong p-6 md:p-10"
               style={{ borderRadius: `${generalSettings.cornerRadius}px` }}
@@ -59,6 +56,7 @@ export default async function EditorPreviewPage({
                 requester="admin"
                 allowExecution={loaded.content.meta.allowExecution}
                 fontPreset={loaded.content.meta.fontPreset ?? "source-serif"}
+                typography={loaded.content.meta.typography}
                 generalSettings={generalSettings}
                 sourceNavigation
               />
@@ -85,10 +83,7 @@ export default async function EditorPreviewPage({
     return (
       <WorkspaceStyleFrame generalSettings={generalSettings}>
         <div className="paper-shell" data-font-preset={book.meta.fontPreset ?? "source-serif"}>
-          <div
-            className="paper-grid xl:grid-cols-[minmax(0,1fr)_260px]"
-            style={{ gap: `${generalSettings.tileSpacing}rem` }}
-          >
+          <div className="paper-grid preview-shell-layout" style={{ gap: `${generalSettings.tileSpacing}rem` }}>
             <main
               className="paper-panel paper-panel-strong p-6 md:p-10"
               style={{ borderRadius: `${generalSettings.cornerRadius}px` }}
@@ -140,10 +135,7 @@ export default async function EditorPreviewPage({
           className="paper-shell"
           data-font-preset={chapter.meta.fontPreset ?? book.meta.fontPreset ?? "source-serif"}
         >
-          <div
-            className="paper-grid xl:grid-cols-[minmax(0,1fr)_260px]"
-            style={{ gap: `${generalSettings.tileSpacing}rem` }}
-          >
+          <div className="paper-grid preview-shell-layout" style={{ gap: `${generalSettings.tileSpacing}rem` }}>
             <main
               className="paper-panel paper-panel-strong p-6 md:p-10"
               style={{ borderRadius: `${generalSettings.cornerRadius}px` }}

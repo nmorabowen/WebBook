@@ -2,7 +2,7 @@
 title: Direct Stiffness Method
 slug: direct-stiffness-method
 createdAt: '2026-03-02T02:58:14.277Z'
-updatedAt: '2026-03-02T06:57:58.137Z'
+updatedAt: '2026-03-02T14:28:11.074Z'
 publishedAt: '2026-03-02T03:00:14.580Z'
 kind: chapter
 bookSlug: fem

@@ -52,6 +52,7 @@ export default async function AppNotePage({
           visibility: loaded.content.meta.visibility,
           allowExecution: loaded.content.meta.allowExecution,
           fontPreset: loaded.content.meta.fontPreset ?? "source-serif",
+          typography: loaded.content.meta.typography,
         }}
         toc={toc}
         backlinks={loaded.backlinks}

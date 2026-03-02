@@ -25,6 +25,8 @@ import {
 } from "@/lib/content/schemas";
 import { defaultBookTypography, normalizeBookTypography } from "@/lib/book-typography";
 import { env } from "@/lib/env";
+import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
+import { normalizeGeneralSettings } from "@/lib/general-settings";
 import { isSafeSlug, safeJsonParse, stripMarkdown, toSlug } from "@/lib/utils";
 
 const contentRoot = path.join(process.cwd(), env.contentRoot);
@@ -34,15 +36,6 @@ const systemRoot = path.join(contentRoot, ".webbook");
 const revisionsRoot = path.join(systemRoot, "revisions");
 const indexesRoot = path.join(systemRoot, "indexes");
 const settingsFilePath = path.join(systemRoot, "settings.json");
-
-const defaultGeneralSettings: GeneralSettings = {
-  cornerRadius: 28,
-  tileSpacing: 1.5,
-  collapseBookChaptersByDefault: true,
-  mathFontSize: 1,
-  mathFontColor: "#201c18",
-  mathFontFamily: "mathjax-newcm",
-};
 
 type IndexState = {
   manifest: ManifestEntry[];
@@ -115,7 +108,7 @@ async function ensureSettingsFile() {
   } catch {
     await writeFileAtomic(
       settingsFilePath,
-      JSON.stringify(defaultGeneralSettings, null, 2),
+      JSON.stringify(DEFAULT_GENERAL_SETTINGS, null, 2),
     );
   }
 }
@@ -495,6 +488,7 @@ export async function ensureContentScaffold() {
         visibility: "public",
         allowExecution: true,
         fontPreset: "source-serif",
+        typography: defaultBookTypography,
         createdAt: now,
         updatedAt: now,
         publishedAt: now,
@@ -526,18 +520,22 @@ export async function getGeneralSettings(): Promise<GeneralSettings> {
   await ensureContentScaffold();
   try {
     const raw = await fs.readFile(settingsFilePath, "utf8");
-    return saveGeneralSettingsSchema.parse({
-      ...defaultGeneralSettings,
-      ...safeJsonParse<Record<string, unknown>>(raw, {}),
-    });
+    return saveGeneralSettingsSchema.parse(
+      normalizeGeneralSettings({
+        ...DEFAULT_GENERAL_SETTINGS,
+        ...safeJsonParse<Record<string, unknown>>(raw, {}),
+      }),
+    );
   } catch {
-    return defaultGeneralSettings;
+    return normalizeGeneralSettings(DEFAULT_GENERAL_SETTINGS);
   }
 }
 
 export async function updateGeneralSettings(input: unknown) {
   await ensureContentScaffold();
-  const settings = saveGeneralSettingsSchema.parse(input);
+  const settings = saveGeneralSettingsSchema.parse(
+    normalizeGeneralSettings(input as Partial<GeneralSettings>),
+  );
   await writeFileAtomic(settingsFilePath, JSON.stringify(settings, null, 2));
   return settings;
 }
@@ -968,6 +966,7 @@ export async function updateNote(slug: string, input: unknown) {
       visibility: data.visibility,
       allowExecution: data.allowExecution,
       fontPreset: data.fontPreset,
+      typography: normalizeBookTypography(data.typography ?? existing.meta.typography),
       updatedAt: now,
       publishedAt:
         data.status === "published"
@@ -1102,6 +1101,7 @@ export async function duplicateNote(slug: string) {
         publishedAt: undefined,
         updatedAt: now,
         createdAt: now,
+        typography: normalizeBookTypography(existing.meta.typography),
       } satisfies NoteMeta,
       existing.body,
     ),
@@ -1200,6 +1200,7 @@ export async function publishContentById(id: string, published: boolean) {
       visibility: published ? "public" : note.meta.visibility,
       allowExecution: note.meta.allowExecution,
       fontPreset: note.meta.fontPreset ?? "source-serif",
+      typography: normalizeBookTypography(note.meta.typography),
       createRevision: true,
     });
   }

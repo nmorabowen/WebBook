@@ -1,8 +1,13 @@
 {
+  "colorTheme": "harbor",
   "cornerRadius": 0,
   "tileSpacing": 0.75,
   "collapseBookChaptersByDefault": true,
   "mathFontSize": 1,
   "mathFontColor": "#000077",
-  "mathFontFamily": "mathjax-newcm"
+  "mathFontFamily": "mathjax-newcm",
+  "appSidebarWidth": 320,
+  "appInspectorWidth": 300,
+  "publicLeftPanelWidth": 260,
+  "publicRightPanelWidth": 260
 }

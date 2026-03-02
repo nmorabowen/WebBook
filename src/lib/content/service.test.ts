@@ -198,4 +198,61 @@ describe("content service", () => {
     expect(book.chapters.map((chapter) => chapter.meta.order)).toEqual([1, 2]);
     expect(book.chapters[0]?.meta.fontPreset).toBe("oswald");
   });
+
+  it("persists note typography settings across save, duplicate, and public reads", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Styled Note",
+      slug: "styled-note",
+      summary: "Note typography test",
+      body: "# Styled Note",
+      status: "published",
+      visibility: "public",
+      allowExecution: true,
+      fontPreset: "lato",
+      typography: {
+        bodyFontSize: 1.2,
+        bodyLineHeight: 2.1,
+        headingBaseSize: 4.3,
+        headingScale: 1.3,
+        headingIndentStep: 0.6,
+        paragraphSpacing: 1.35,
+        contentWidth: 64,
+      },
+    });
+
+    await service.updateNote("styled-note", {
+      title: "Styled Note",
+      slug: "styled-note",
+      summary: "Updated note typography test",
+      body: "# Styled Note\n\nBody",
+      status: "published",
+      visibility: "public",
+      allowExecution: true,
+      fontPreset: "lato",
+      typography: {
+        bodyFontSize: 1.16,
+        bodyLineHeight: 1.95,
+        headingBaseSize: 3.9,
+        headingScale: 1.24,
+        headingIndentStep: 0.5,
+        paragraphSpacing: 1.2,
+        contentWidth: 58,
+      },
+    });
+
+    const note = await service.getNote("styled-note");
+    const publicNote = await service.getPublicNote("styled-note");
+    const duplicate = await service.duplicateNote("styled-note");
+
+    expect(note?.meta.typography?.bodyFontSize).toBe(1.16);
+    expect(note?.meta.typography?.headingIndentStep).toBe(0.5);
+    expect(note?.meta.typography?.contentWidth).toBe(58);
+    expect(publicNote?.meta.typography?.headingBaseSize).toBe(3.9);
+    expect(publicNote?.meta.typography?.paragraphSpacing).toBe(1.2);
+    expect(duplicate?.meta.typography?.bodyLineHeight).toBe(1.95);
+    expect(duplicate?.meta.typography?.contentWidth).toBe(58);
+  });
 });

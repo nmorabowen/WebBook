@@ -10,6 +10,16 @@ export type BookTypography = {
   contentWidth: number;
 };
 
+export const bookTypographyLimits = {
+  bodyFontSize: { min: 0.9, max: 1.6, step: 0.02 },
+  bodyLineHeight: { min: 1.05, max: 2.4, step: 0.05 },
+  headingBaseSize: { min: 1.4, max: 5, step: 0.05 },
+  headingScale: { min: 1.05, max: 1.8, step: 0.05 },
+  headingIndentStep: { min: 0, max: 3, step: 0.05 },
+  paragraphSpacing: { min: 0.5, max: 2.4, step: 0.05 },
+  contentWidth: { min: 32, max: 180, step: 1 },
+} as const;
+
 export const defaultBookTypography: BookTypography = {
   bodyFontSize: 1.08,
   bodyLineHeight: 1.9,
@@ -26,30 +36,54 @@ export function normalizeBookTypography(
   const contentWidth = Number(input?.contentWidth ?? defaultBookTypography.contentWidth);
   return {
     bodyFontSize: Math.max(
-      0.9,
-      Math.min(1.6, Number(input?.bodyFontSize ?? defaultBookTypography.bodyFontSize)),
+      bookTypographyLimits.bodyFontSize.min,
+      Math.min(
+        bookTypographyLimits.bodyFontSize.max,
+        Number(input?.bodyFontSize ?? defaultBookTypography.bodyFontSize),
+      ),
     ),
     bodyLineHeight: Math.max(
-      1.4,
-      Math.min(2.4, Number(input?.bodyLineHeight ?? defaultBookTypography.bodyLineHeight)),
+      bookTypographyLimits.bodyLineHeight.min,
+      Math.min(
+        bookTypographyLimits.bodyLineHeight.max,
+        Number(input?.bodyLineHeight ?? defaultBookTypography.bodyLineHeight),
+      ),
     ),
     headingBaseSize: Math.max(
-      2.2,
-      Math.min(5, Number(input?.headingBaseSize ?? defaultBookTypography.headingBaseSize)),
+      bookTypographyLimits.headingBaseSize.min,
+      Math.min(
+        bookTypographyLimits.headingBaseSize.max,
+        Number(input?.headingBaseSize ?? defaultBookTypography.headingBaseSize),
+      ),
     ),
     headingScale: Math.max(
-      1.05,
-      Math.min(1.8, Number(input?.headingScale ?? defaultBookTypography.headingScale)),
+      bookTypographyLimits.headingScale.min,
+      Math.min(
+        bookTypographyLimits.headingScale.max,
+        Number(input?.headingScale ?? defaultBookTypography.headingScale),
+      ),
     ),
     headingIndentStep: Math.max(
-      0,
-      Math.min(3, Number(input?.headingIndentStep ?? defaultBookTypography.headingIndentStep)),
+      bookTypographyLimits.headingIndentStep.min,
+      Math.min(
+        bookTypographyLimits.headingIndentStep.max,
+        Number(input?.headingIndentStep ?? defaultBookTypography.headingIndentStep),
+      ),
     ),
     paragraphSpacing: Math.max(
-      0.5,
-      Math.min(2.4, Number(input?.paragraphSpacing ?? defaultBookTypography.paragraphSpacing)),
+      bookTypographyLimits.paragraphSpacing.min,
+      Math.min(
+        bookTypographyLimits.paragraphSpacing.max,
+        Number(input?.paragraphSpacing ?? defaultBookTypography.paragraphSpacing),
+      ),
     ),
-    contentWidth: Math.max(32, Math.min(180, Number.isFinite(contentWidth) ? contentWidth : defaultBookTypography.contentWidth)),
+    contentWidth: Math.max(
+      bookTypographyLimits.contentWidth.min,
+      Math.min(
+        bookTypographyLimits.contentWidth.max,
+        Number.isFinite(contentWidth) ? contentWidth : defaultBookTypography.contentWidth,
+      ),
+    ),
   };
 }
 

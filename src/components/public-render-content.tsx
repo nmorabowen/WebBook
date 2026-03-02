@@ -4,6 +4,7 @@ import { MarkdownRenderer } from "@/components/markdown/markdown-renderer";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import type { GeneralSettings, ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
+import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
 
 type PreviewChapterItem = {
   slug: string;
@@ -49,8 +50,13 @@ export function PublicRenderContent({
   sourceNavigation = false,
   generalSettings,
 }: PublicRenderContentProps) {
-  const cardRadius = `${Math.max((generalSettings?.cornerRadius ?? 28) - 6, 0)}px`;
-  const tileSpacing = `${generalSettings?.tileSpacing ?? 1.5}rem`;
+  const cardRadius = `${Math.max(
+    (generalSettings?.cornerRadius ?? DEFAULT_GENERAL_SETTINGS.cornerRadius) - 6,
+    0,
+  )}px`;
+  const tileSpacing = `${
+    generalSettings?.tileSpacing ?? DEFAULT_GENERAL_SETTINGS.tileSpacing
+  }rem`;
   const layoutStyle = {
     ...bookTypographyStyle(typography),
     gap: tileSpacing,
@@ -146,8 +152,8 @@ export function PublicRenderContent({
     <div className="reading-column grid" style={layoutStyle}>
       <div className="reading-width-frame grid gap-3">
         <span className="paper-badge">Standalone note</span>
-        <h1 className="font-serif text-6xl leading-[0.95] tracking-[-0.04em]">{title}</h1>
-        {summary ? <p className="text-lg leading-8 text-[var(--paper-muted)]">{summary}</p> : null}
+        <h1 className="book-hero-title">{title}</h1>
+        {summary ? <p className="book-hero-summary">{summary}</p> : null}
       </div>
 
       <div className="reading-width-frame">

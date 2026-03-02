@@ -1,19 +1,44 @@
 import { z } from "zod";
 import { fontPresetValues } from "@/lib/font-presets";
 import { mathJaxFontValues } from "@/lib/mathjax-fonts";
+import { bookTypographyLimits } from "@/lib/book-typography";
+import { colorThemeValues } from "@/lib/color-themes";
+import { GENERAL_SETTINGS_LIMITS } from "@/lib/general-settings-config";
 
 export const statusSchema = z.enum(["draft", "published"]);
 export const visibilitySchema = z.enum(["public", "private"]);
 export const fontPresetSchema = z.enum(fontPresetValues);
 export const mathJaxFontFamilySchema = z.enum(mathJaxFontValues);
+export const colorThemeSchema = z.enum(colorThemeValues);
 export const bookTypographySchema = z.object({
-  bodyFontSize: z.number().min(0.9).max(1.6),
-  bodyLineHeight: z.number().min(1.4).max(2.4),
-  headingBaseSize: z.number().min(2.2).max(5),
-  headingScale: z.number().min(1.05).max(1.8),
-  headingIndentStep: z.number().min(0).max(3),
-  paragraphSpacing: z.number().min(0.5).max(2.4),
-  contentWidth: z.number().min(32).max(180),
+  bodyFontSize: z
+    .number()
+    .min(bookTypographyLimits.bodyFontSize.min)
+    .max(bookTypographyLimits.bodyFontSize.max),
+  bodyLineHeight: z
+    .number()
+    .min(bookTypographyLimits.bodyLineHeight.min)
+    .max(bookTypographyLimits.bodyLineHeight.max),
+  headingBaseSize: z
+    .number()
+    .min(bookTypographyLimits.headingBaseSize.min)
+    .max(bookTypographyLimits.headingBaseSize.max),
+  headingScale: z
+    .number()
+    .min(bookTypographyLimits.headingScale.min)
+    .max(bookTypographyLimits.headingScale.max),
+  headingIndentStep: z
+    .number()
+    .min(bookTypographyLimits.headingIndentStep.min)
+    .max(bookTypographyLimits.headingIndentStep.max),
+  paragraphSpacing: z
+    .number()
+    .min(bookTypographyLimits.paragraphSpacing.min)
+    .max(bookTypographyLimits.paragraphSpacing.max),
+  contentWidth: z
+    .number()
+    .min(bookTypographyLimits.contentWidth.min)
+    .max(bookTypographyLimits.contentWidth.max),
 });
 
 export const baseMetaSchema = z.object({
@@ -52,6 +77,7 @@ export const noteMetaSchema = baseMetaSchema.extend({
   visibility: visibilitySchema,
   allowExecution: z.boolean(),
   fontPreset: fontPresetSchema.optional(),
+  typography: bookTypographySchema.optional(),
 });
 
 export type BookMeta = z.infer<typeof bookMetaSchema>;
@@ -137,6 +163,7 @@ export const saveNoteSchema = z.object({
   visibility: visibilitySchema.default("private"),
   allowExecution: z.boolean().default(true),
   fontPreset: fontPresetSchema.default("source-serif"),
+  typography: bookTypographySchema.optional(),
   createRevision: z.boolean().optional(),
 });
 
@@ -175,12 +202,38 @@ export const reorderChaptersSchema = z.object({
 });
 
 export const generalSettingsSchema = z.object({
-  cornerRadius: z.number().min(0).max(40),
-  tileSpacing: z.number().min(0.15).max(2.5),
+  colorTheme: colorThemeSchema,
+  cornerRadius: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.cornerRadius.min)
+    .max(GENERAL_SETTINGS_LIMITS.cornerRadius.max),
+  tileSpacing: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.tileSpacing.min)
+    .max(GENERAL_SETTINGS_LIMITS.tileSpacing.max),
   collapseBookChaptersByDefault: z.boolean(),
-  mathFontSize: z.number().min(0.8).max(2.5),
+  mathFontSize: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.mathFontSize.min)
+    .max(GENERAL_SETTINGS_LIMITS.mathFontSize.max),
   mathFontColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/),
   mathFontFamily: mathJaxFontFamilySchema,
+  appSidebarWidth: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.appSidebarWidth.min)
+    .max(GENERAL_SETTINGS_LIMITS.appSidebarWidth.max),
+  appInspectorWidth: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.appInspectorWidth.min)
+    .max(GENERAL_SETTINGS_LIMITS.appInspectorWidth.max),
+  publicLeftPanelWidth: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.publicLeftPanelWidth.min)
+    .max(GENERAL_SETTINGS_LIMITS.publicLeftPanelWidth.max),
+  publicRightPanelWidth: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.publicRightPanelWidth.min)
+    .max(GENERAL_SETTINGS_LIMITS.publicRightPanelWidth.max),
 });
 
 export const saveGeneralSettingsSchema = generalSettingsSchema;

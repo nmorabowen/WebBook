@@ -2,87 +2,29 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { GeneralSettings } from "@/lib/content/schemas";
-
-const STORAGE_KEY = "webbook.general-settings";
-const SETTINGS_EVENT = "webbook-general-settings";
-const defaultGeneralSettings: GeneralSettings = {
-  cornerRadius: 28,
-  tileSpacing: 1.5,
-  collapseBookChaptersByDefault: true,
-  mathFontSize: 1,
-  mathFontColor: "#201c18",
-  mathFontFamily: "mathjax-newcm",
-};
-
-function normalizeSettings(input?: Partial<GeneralSettings> | null): GeneralSettings {
-  return {
-    cornerRadius: Math.max(
-      0,
-      Math.min(40, Number(input?.cornerRadius ?? defaultGeneralSettings.cornerRadius)),
-    ),
-    tileSpacing: Math.max(
-      0.15,
-      Math.min(2.5, Number(input?.tileSpacing ?? defaultGeneralSettings.tileSpacing)),
-    ),
-    collapseBookChaptersByDefault:
-      typeof input?.collapseBookChaptersByDefault === "boolean"
-        ? input.collapseBookChaptersByDefault
-        : defaultGeneralSettings.collapseBookChaptersByDefault,
-    mathFontSize: Math.max(
-      0.8,
-      Math.min(2.5, Number(input?.mathFontSize ?? defaultGeneralSettings.mathFontSize)),
-    ),
-    mathFontColor:
-      typeof input?.mathFontColor === "string" &&
-      /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(input.mathFontColor)
-        ? input.mathFontColor
-        : defaultGeneralSettings.mathFontColor,
-    mathFontFamily:
-      typeof input?.mathFontFamily === "string" && input.mathFontFamily
-        ? input.mathFontFamily
-        : defaultGeneralSettings.mathFontFamily,
-  };
-}
-
-function readStoredSettings(): GeneralSettings | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    return normalizeSettings(JSON.parse(raw) as Partial<GeneralSettings>);
-  } catch {
-    return null;
-  }
-}
-
-function isDefaultSettings(input?: Partial<GeneralSettings> | null) {
-  const normalized = normalizeSettings(input);
-  return (
-    normalized.cornerRadius === defaultGeneralSettings.cornerRadius &&
-    normalized.tileSpacing === defaultGeneralSettings.tileSpacing &&
-    normalized.collapseBookChaptersByDefault ===
-      defaultGeneralSettings.collapseBookChaptersByDefault &&
-    normalized.mathFontSize === defaultGeneralSettings.mathFontSize &&
-    normalized.mathFontColor === defaultGeneralSettings.mathFontColor &&
-    normalized.mathFontFamily === defaultGeneralSettings.mathFontFamily
-  );
-}
+import { colorThemePresets } from "@/lib/color-themes";
+import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
+import {
+  GENERAL_SETTINGS_EVENT,
+  GENERAL_SETTINGS_STORAGE_KEY,
+  isDefaultGeneralSettings,
+  normalizeGeneralSettings,
+  readStoredGeneralSettings,
+} from "@/lib/general-settings";
 
 function resolvePreferredSettings(
   incoming?: GeneralSettings,
   stored?: GeneralSettings | null,
 ) {
-  if (stored && (!incoming || (isDefaultSettings(incoming) && !isDefaultSettings(stored)))) {
+  if (
+    stored &&
+    (!incoming ||
+      (isDefaultGeneralSettings(incoming) && !isDefaultGeneralSettings(stored)))
+  ) {
     return stored;
   }
 
-  return normalizeSettings(incoming ?? stored ?? defaultGeneralSettings);
+  return normalizeGeneralSettings(incoming ?? stored ?? DEFAULT_GENERAL_SETTINGS);
 }
 
 type WorkspaceStyleFrameProps = {
@@ -95,18 +37,23 @@ export function WorkspaceStyleFrame({
   children,
 }: WorkspaceStyleFrameProps) {
   const [resolvedSettings, setResolvedSettings] = useState<GeneralSettings>(() =>
-    resolvePreferredSettings(generalSettings, readStoredSettings()),
+    resolvePreferredSettings(generalSettings, readStoredGeneralSettings()),
   );
 
   useEffect(() => {
-    setResolvedSettings(resolvePreferredSettings(generalSettings, readStoredSettings()));
+    setResolvedSettings(resolvePreferredSettings(generalSettings, readStoredGeneralSettings()));
   }, [
+    generalSettings?.colorTheme,
     generalSettings?.cornerRadius,
     generalSettings?.tileSpacing,
     generalSettings?.collapseBookChaptersByDefault,
     generalSettings?.mathFontSize,
     generalSettings?.mathFontColor,
     generalSettings?.mathFontFamily,
+    generalSettings?.appSidebarWidth,
+    generalSettings?.appInspectorWidth,
+    generalSettings?.publicLeftPanelWidth,
+    generalSettings?.publicRightPanelWidth,
   ]);
 
   useEffect(() => {
@@ -116,33 +63,85 @@ export function WorkspaceStyleFrame({
     };
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY) {
+      if (event.key !== GENERAL_SETTINGS_STORAGE_KEY) {
         return;
       }
 
-      setResolvedSettings(resolvePreferredSettings(generalSettings, readStoredSettings()));
+      setResolvedSettings(
+        resolvePreferredSettings(generalSettings, readStoredGeneralSettings()),
+      );
     };
 
-    window.addEventListener(SETTINGS_EVENT, handleSettingsEvent as EventListener);
+    window.addEventListener(GENERAL_SETTINGS_EVENT, handleSettingsEvent as EventListener);
     window.addEventListener("storage", handleStorage);
 
     return () => {
-      window.removeEventListener(SETTINGS_EVENT, handleSettingsEvent as EventListener);
+      window.removeEventListener(
+        GENERAL_SETTINGS_EVENT,
+        handleSettingsEvent as EventListener,
+      );
       window.removeEventListener("storage", handleStorage);
     };
   }, [generalSettings]);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(resolvedSettings));
+      window.localStorage.setItem(
+        GENERAL_SETTINGS_STORAGE_KEY,
+        JSON.stringify(resolvedSettings),
+      );
     } catch {}
   }, [resolvedSettings]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const palette = colorThemePresets[resolvedSettings.colorTheme];
+    const entries = [
+      ["--paper-cream", palette.cream],
+      ["--paper-ink", palette.ink],
+      ["--paper-muted", palette.muted],
+      ["--paper-border", palette.border],
+      ["--paper-accent", palette.accent],
+      ["--paper-accent-soft", palette.accentSoft],
+      ["--paper-panel", palette.panel],
+      ["--paper-panel-strong", palette.panelStrong],
+      ["--paper-code", palette.code],
+      ["--paper-code-text", palette.codeText],
+      ["--paper-success", palette.success],
+      ["--paper-danger", palette.danger],
+    ] as const;
+
+    for (const [name, value] of entries) {
+      root.style.setProperty(name, value);
+    }
+  }, [resolvedSettings.colorTheme]);
+
   const style = {
+    "--paper-cream": colorThemePresets[resolvedSettings.colorTheme].cream,
+    "--paper-ink": colorThemePresets[resolvedSettings.colorTheme].ink,
+    "--paper-muted": colorThemePresets[resolvedSettings.colorTheme].muted,
+    "--paper-border": colorThemePresets[resolvedSettings.colorTheme].border,
+    "--paper-accent": colorThemePresets[resolvedSettings.colorTheme].accent,
+    "--paper-accent-soft": colorThemePresets[resolvedSettings.colorTheme].accentSoft,
+    "--paper-panel": colorThemePresets[resolvedSettings.colorTheme].panel,
+    "--paper-panel-strong": colorThemePresets[resolvedSettings.colorTheme].panelStrong,
+    "--paper-code": colorThemePresets[resolvedSettings.colorTheme].code,
+    "--paper-code-text": colorThemePresets[resolvedSettings.colorTheme].codeText,
+    "--paper-success": colorThemePresets[resolvedSettings.colorTheme].success,
+    "--paper-danger": colorThemePresets[resolvedSettings.colorTheme].danger,
     "--workspace-corner-radius": `${resolvedSettings.cornerRadius}px`,
+    "--workspace-radius-panel": `${resolvedSettings.cornerRadius}px`,
+    "--workspace-radius-lg": `${Math.max(resolvedSettings.cornerRadius - 4, 0)}px`,
+    "--workspace-radius-md": `${Math.max(resolvedSettings.cornerRadius - 8, 0)}px`,
+    "--workspace-radius-sm": `${Math.max(resolvedSettings.cornerRadius - 10, 0)}px`,
+    "--workspace-radius-xs": `${Math.max(resolvedSettings.cornerRadius - 14, 0)}px`,
     "--workspace-tile-spacing": `${resolvedSettings.tileSpacing}rem`,
     "--workspace-math-font-size": `${resolvedSettings.mathFontSize}em`,
     "--workspace-math-color": resolvedSettings.mathFontColor,
+    "--workspace-app-sidebar-width": `${resolvedSettings.appSidebarWidth}px`,
+    "--workspace-app-inspector-width": `${resolvedSettings.appInspectorWidth}px`,
+    "--workspace-public-left-panel-width": `${resolvedSettings.publicLeftPanelWidth}px`,
+    "--workspace-public-right-panel-width": `${resolvedSettings.publicRightPanelWidth}px`,
   } as CSSProperties;
 
   return <div style={style}>{children}</div>;
