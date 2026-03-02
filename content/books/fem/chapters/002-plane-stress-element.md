@@ -2,50 +2,29 @@
 title: Plane Stress Element
 slug: plane-stress-element
 createdAt: '2026-03-02T02:58:47.271Z'
-updatedAt: '2026-03-02T05:43:11.935Z'
+updatedAt: '2026-03-02T07:20:52.475Z'
 publishedAt: '2026-03-02T02:59:32.325Z'
 kind: chapter
 bookSlug: fem
 order: 2
 summary: A fresh chapter.
 status: published
-allowExecution: true
+allowExecution: false
 fontPreset: archivo-narrow
 ---
 # Introducción
 
 ## Representación de una Placa
 
-
-```python
-print("Hello, WebBook")
-```
-
-
-$$
-x^2 + y^2 = z^2
-$$
-
-
-:::align-center
-![images](/media/2026-03-02/images-77f68e32.jpg){width=60%}
-:::
-
-
-https://www.youtube.com/watch?v=SKVKNy-xw_0
-
-
-<iframe width="1417" height="797" src="https://www.youtube.com/embed/1Fh6-vuUw4E" title="Painting a Custom Queen of Hearts 3D Printed Statue" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
 ![[RepresentacionMatematicaPlaca.png]]
 
 ### Modelo Matemático de la Placa
-
 
 ![[InternalStressPlate.png]]
 
 
 ## Relaciones Esfuerzo - Deformación
+
 Para un cuerpo plano de espesor constante que se yace en un plano cartesiano $xy$, la relación esfuerzo - deformación (o relación constitutiva) de un material *isotropico lineal elástico* es:
 
 :::align-center
@@ -129,6 +108,7 @@ Los esfuerzos en los problemas de esfuerzos en el plano (**plane strain**) son l
 
 ![[DifferentialElementStrains | 600]]
 La relaciones *strain-displacement* son utilizadas para obtener un **campo de deformaciones** unitarias a partir de un **campo de desplazamientos**.
+
 De forma general la deformación unitaria normal esta representada por el cambio de desplazamiento a lo largo de la longitud original y la deformación unitaria cortante esta definida como el cambio en el angulo. De forma que tenemos:
 $$
 \epsilon_x=\Delta u/ \Delta x

@@ -4,6 +4,7 @@ import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
   getBacklinks,
+  getGeneralSettings,
   getManifest,
   getPublicChapter,
   getPublicContentTree,
@@ -24,11 +25,12 @@ export default async function ChapterPage({
   }
 
   const { book, chapter } = result;
-  const [tree, manifest, backlinks, revisions] = await Promise.all([
+  const [tree, manifest, backlinks, revisions, generalSettings] = await Promise.all([
     getPublicContentTree(),
     getManifest(),
     getBacklinks(chapter.id),
     listRevisions(chapter.id),
+    getGeneralSettings(),
   ]);
   const toc = extractToc(chapter.body);
 
@@ -38,6 +40,8 @@ export default async function ChapterPage({
       currentPath={`/books/${book.meta.slug}/${chapter.meta.slug}`}
       bookSlug={book.meta.slug}
       fontPreset={chapter.meta.fontPreset ?? book.meta.fontPreset ?? "source-serif"}
+      generalSettings={generalSettings}
+      readingWidth={book.meta.typography?.contentWidth}
       rightPanel={
         <TocPanel
           toc={toc}
@@ -58,6 +62,7 @@ export default async function ChapterPage({
         allowExecution={chapter.meta.allowExecution}
         fontPreset={chapter.meta.fontPreset ?? book.meta.fontPreset ?? "source-serif"}
         typography={book.meta.typography}
+        generalSettings={generalSettings}
         bookTitle={book.meta.title}
         chapterOrder={chapter.meta.order}
       />

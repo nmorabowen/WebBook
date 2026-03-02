@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { fontPresetValues } from "@/lib/font-presets";
+import { mathJaxFontValues } from "@/lib/mathjax-fonts";
 
 export const statusSchema = z.enum(["draft", "published"]);
 export const visibilitySchema = z.enum(["public", "private"]);
 export const fontPresetSchema = z.enum(fontPresetValues);
+export const mathJaxFontFamilySchema = z.enum(mathJaxFontValues);
 export const bookTypographySchema = z.object({
   bodyFontSize: z.number().min(0.9).max(1.6),
   bodyLineHeight: z.number().min(1.4).max(2.4),
@@ -11,7 +13,7 @@ export const bookTypographySchema = z.object({
   headingScale: z.number().min(1.05).max(1.8),
   headingIndentStep: z.number().min(0).max(3),
   paragraphSpacing: z.number().min(0.5).max(2.4),
-  contentWidth: z.number().min(32).max(72),
+  contentWidth: z.number().min(32).max(180),
 });
 
 export const baseMetaSchema = z.object({
@@ -171,3 +173,16 @@ export const restoreRevisionSchema = z.object({
 export const reorderChaptersSchema = z.object({
   chapterSlugs: z.array(z.string().min(1)).min(1),
 });
+
+export const generalSettingsSchema = z.object({
+  cornerRadius: z.number().min(0).max(40),
+  tileSpacing: z.number().min(0.15).max(2.5),
+  collapseBookChaptersByDefault: z.boolean(),
+  mathFontSize: z.number().min(0.8).max(2.5),
+  mathFontColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/),
+  mathFontFamily: mathJaxFontFamilySchema,
+});
+
+export const saveGeneralSettingsSchema = generalSettingsSchema;
+
+export type GeneralSettings = z.infer<typeof generalSettingsSchema>;

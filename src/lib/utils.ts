@@ -217,3 +217,57 @@ export function parseImageSizingFromUrl(url: string) {
     height: dimensions.height,
   };
 }
+
+function normalizeInlineTextSize(value: string | null) {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "inherit" || normalized === "auto") {
+    return undefined;
+  }
+
+  if (/^\d+(\.\d+)?(px|rem|em|%)$/.test(normalized)) {
+    return normalized;
+  }
+
+  return undefined;
+}
+
+export function buildInlineTextStyleHref(style: {
+  color?: string;
+  size?: string;
+}) {
+  const params = new URLSearchParams();
+  if (style.color && /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(style.color)) {
+    params.set("color", style.color);
+  }
+  const normalizedSize = normalizeInlineTextSize(style.size ?? null);
+  if (normalizedSize) {
+    params.set("size", normalizedSize);
+  }
+
+  const query = params.toString();
+  return query ? `wb-text://style?${query}` : "wb-text://style";
+}
+
+export function parseInlineTextStyleHref(href: string) {
+  if (!href.startsWith("wb-text://style")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(href);
+    const color = parsed.searchParams.get("color");
+    const size = normalizeInlineTextSize(parsed.searchParams.get("size"));
+
+    return {
+      color:
+        color && /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(color) ? color : undefined,
+      size,
+    };
+  } catch {
+    return null;
+  }
+}

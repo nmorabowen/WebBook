@@ -2,7 +2,7 @@
 title: Computational Chapter
 slug: computational-chapter
 createdAt: '2026-03-02T00:05:12.254Z'
-updatedAt: '2026-03-02T03:55:07.295Z'
+updatedAt: '2026-03-02T06:30:27.118Z'
 publishedAt: '2026-03-02T00:05:12.254Z'
 kind: chapter
 bookSlug: webbook-handbook

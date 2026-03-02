@@ -2,12 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { GeneralSettings } from "@/lib/content/schemas";
 
 type DashboardCreatePanelProps = {
   kind: "book" | "note";
+  generalSettings?: GeneralSettings;
 };
 
-export function DashboardCreatePanel({ kind }: DashboardCreatePanelProps) {
+export function DashboardCreatePanel({
+  kind,
+  generalSettings,
+}: DashboardCreatePanelProps) {
   const router = useRouter();
   const [title, setTitle] = useState(kind === "book" ? "New book" : "New note");
   const [isPending, startTransition] = useTransition();
@@ -57,7 +62,10 @@ export function DashboardCreatePanel({ kind }: DashboardCreatePanelProps) {
   };
 
   return (
-    <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-5">
+    <div
+      className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-5"
+      style={{ borderRadius: `${generalSettings?.cornerRadius ?? 28}px` }}
+    >
       <p className="paper-label">{kind === "book" ? "Create book" : "Create note"}</p>
       <div className="grid gap-3">
         <input

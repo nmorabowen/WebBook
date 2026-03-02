@@ -10,6 +10,7 @@ import {
   type ChapterMeta,
   type ContentRecord,
   type ContentTree,
+  type GeneralSettings,
   type ManifestEntry,
   type NoteMeta,
   type NoteRecord,
@@ -18,6 +19,7 @@ import {
   restoreRevisionSchema,
   saveBookSchema,
   saveChapterSchema,
+  saveGeneralSettingsSchema,
   saveNoteSchema,
   type SearchDocument,
 } from "@/lib/content/schemas";
@@ -31,6 +33,16 @@ const notesRoot = path.join(contentRoot, "notes");
 const systemRoot = path.join(contentRoot, ".webbook");
 const revisionsRoot = path.join(systemRoot, "revisions");
 const indexesRoot = path.join(systemRoot, "indexes");
+const settingsFilePath = path.join(systemRoot, "settings.json");
+
+const defaultGeneralSettings: GeneralSettings = {
+  cornerRadius: 28,
+  tileSpacing: 1.5,
+  collapseBookChaptersByDefault: true,
+  mathFontSize: 1,
+  mathFontColor: "#201c18",
+  mathFontFamily: "mathjax-newcm",
+};
 
 type IndexState = {
   manifest: ManifestEntry[];
@@ -89,6 +101,23 @@ async function readDirectoryEntries(directoryPath: string) {
 
 async function ensureDirectory(directoryPath: string) {
   await fs.mkdir(directoryPath, { recursive: true });
+}
+
+async function writeFileAtomic(filePath: string, content: string) {
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  await fs.writeFile(tempPath, content, "utf8");
+  await fs.rename(tempPath, filePath);
+}
+
+async function ensureSettingsFile() {
+  try {
+    await fs.access(settingsFilePath);
+  } catch {
+    await writeFileAtomic(
+      settingsFilePath,
+      JSON.stringify(defaultGeneralSettings, null, 2),
+    );
+  }
 }
 
 function noteId(slug: string) {
@@ -387,7 +416,9 @@ export async function ensureContentScaffold() {
     ensureDirectory(notesRoot),
     ensureDirectory(revisionsRoot),
     ensureDirectory(indexesRoot),
+    ensureDirectory(systemRoot),
   ]);
+  await ensureSettingsFile();
 
   const existingBooks = await readDirectoryEntries(booksRoot);
   const existingNotes = await readDirectoryEntries(notesRoot);
@@ -489,6 +520,26 @@ export async function ensureContentScaffold() {
   }
 
   await rebuildIndexes();
+}
+
+export async function getGeneralSettings(): Promise<GeneralSettings> {
+  await ensureContentScaffold();
+  try {
+    const raw = await fs.readFile(settingsFilePath, "utf8");
+    return saveGeneralSettingsSchema.parse({
+      ...defaultGeneralSettings,
+      ...safeJsonParse<Record<string, unknown>>(raw, {}),
+    });
+  } catch {
+    return defaultGeneralSettings;
+  }
+}
+
+export async function updateGeneralSettings(input: unknown) {
+  await ensureContentScaffold();
+  const settings = saveGeneralSettingsSchema.parse(input);
+  await writeFileAtomic(settingsFilePath, JSON.stringify(settings, null, 2));
+  return settings;
 }
 
 export async function listContent() {

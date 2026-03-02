@@ -6,6 +6,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   BookMarked,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Download,
   Ellipsis,
@@ -16,12 +18,13 @@ import {
   PenSquare,
   Trash2,
 } from "lucide-react";
-import type { ContentTree } from "@/lib/content/schemas";
+import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
 import { cn } from "@/lib/utils";
 
 type AuthoringSidebarProps = {
   tree: ContentTree;
   currentPath?: string;
+  generalSettings?: GeneralSettings;
 };
 
 type DropIndicator = {
@@ -50,6 +53,26 @@ type DownloadableChapter = {
   meta: { slug: string };
   raw: string;
 };
+
+const COLLAPSED_BOOKS_STORAGE_KEY = "webbook.authoring-sidebar.collapsed-books";
+
+function defaultCollapsedBooks(
+  tree: ContentTree,
+  currentPath?: string,
+  generalSettings?: GeneralSettings,
+) {
+  const activeBookSlug = currentPath?.startsWith("/app/books/")
+    ? currentPath.split("/")[3]
+    : null;
+  const collapseByDefault = generalSettings?.collapseBookChaptersByDefault ?? true;
+
+  return Object.fromEntries(
+    tree.books.map((book) => [
+      book.meta.slug,
+      book.meta.slug === activeBookSlug ? false : collapseByDefault,
+    ]),
+  ) as Record<string, boolean>;
+}
 
 function applyChapterOrder(
   tree: ContentTree,
@@ -232,9 +255,13 @@ function ActionMenu({
 export function AuthoringSidebar({
   tree,
   currentPath,
+  generalSettings,
 }: AuthoringSidebarProps) {
   const router = useRouter();
   const [localTree, setLocalTree] = useState(tree);
+  const [collapsedBooks, setCollapsedBooks] = useState<Record<string, boolean>>(() =>
+    defaultCollapsedBooks(tree, currentPath, generalSettings),
+  );
   const [draggedChapter, setDraggedChapter] = useState<{
     bookSlug: string;
     chapterSlug: string;
@@ -248,6 +275,54 @@ export function AuthoringSidebar({
   useEffect(() => {
     setLocalTree(tree);
   }, [tree]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLLAPSED_BOOKS_STORAGE_KEY);
+      if (!raw) {
+        setCollapsedBooks(defaultCollapsedBooks(tree, currentPath, generalSettings));
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as Record<string, boolean>;
+      setCollapsedBooks({
+        ...defaultCollapsedBooks(tree, currentPath, generalSettings),
+        ...parsed,
+      });
+    } catch {}
+  }, [tree, currentPath, generalSettings]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        COLLAPSED_BOOKS_STORAGE_KEY,
+        JSON.stringify(collapsedBooks),
+      );
+    } catch {}
+  }, [collapsedBooks]);
+
+  useEffect(() => {
+    if (!currentPath?.startsWith("/app/books/")) {
+      return;
+    }
+
+    const pathSegments = currentPath.split("/");
+    const activeBookSlug = pathSegments[3];
+    if (!activeBookSlug) {
+      return;
+    }
+
+    setCollapsedBooks((current) => {
+      if (!current[activeBookSlug]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [activeBookSlug]: false,
+      };
+    });
+  }, [currentPath]);
 
   const triggerDownload = (fileName: string, blob: Blob) => {
     const objectUrl = URL.createObjectURL(blob);
@@ -485,6 +560,13 @@ export function AuthoringSidebar({
     });
   };
 
+  const toggleBookCollapsed = (bookSlug: string) => {
+    setCollapsedBooks((current) => ({
+      ...current,
+      [bookSlug]: !current[bookSlug],
+    }));
+  };
+
   return (
     <>
       <div className="flex items-center justify-between gap-3">
@@ -501,6 +583,11 @@ export function AuthoringSidebar({
 
       <div className="grid gap-2">
         <NavLink href="/app" label="Dashboard" active={currentPath === "/app"} />
+        <NavLink
+          href="/app/settings/general"
+          label="General settings"
+          active={currentPath === "/app/settings/general"}
+        />
       </div>
 
       <section className="grid gap-3">
@@ -512,6 +599,23 @@ export function AuthoringSidebar({
           {localTree.books.map((book) => (
             <div key={book.meta.slug} className="grid gap-1">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex shrink-0 items-center justify-center rounded-full p-1 text-[var(--paper-muted)] transition hover:text-[var(--paper-ink)]"
+                  onClick={() => toggleBookCollapsed(book.meta.slug)}
+                  aria-label={
+                    collapsedBooks[book.meta.slug]
+                      ? `Expand ${book.meta.title}`
+                      : `Collapse ${book.meta.title}`
+                  }
+                  aria-expanded={!collapsedBooks[book.meta.slug]}
+                >
+                  {collapsedBooks[book.meta.slug] ? (
+                    <ChevronRight className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
                 <div className="min-w-0 flex-1">
                   <NavLink
                     href={`/app/books/${book.meta.slug}`}
@@ -538,109 +642,111 @@ export function AuthoringSidebar({
                 ) : null}
               </div>
 
-              <div className="grid gap-1 border-l border-[rgba(73,57,38,0.12)] pl-1">
-                {book.chapters.map((chapter) => {
-                  const chapterPath = `/app/books/${book.meta.slug}/chapters/${chapter.meta.slug}`;
-                  const chapterActionSlug = `${book.meta.slug}/${chapter.meta.slug}`;
-                  const indicator =
-                    dropIndicator?.bookSlug === book.meta.slug &&
-                    dropIndicator.chapterSlug === chapter.meta.slug
-                      ? dropIndicator.position
-                      : null;
+              {!collapsedBooks[book.meta.slug] ? (
+                <div className="grid gap-1 border-l border-[rgba(73,57,38,0.12)] pl-1">
+                  {book.chapters.map((chapter) => {
+                    const chapterPath = `/app/books/${book.meta.slug}/chapters/${chapter.meta.slug}`;
+                    const chapterActionSlug = `${book.meta.slug}/${chapter.meta.slug}`;
+                    const indicator =
+                      dropIndicator?.bookSlug === book.meta.slug &&
+                      dropIndicator.chapterSlug === chapter.meta.slug
+                        ? dropIndicator.position
+                        : null;
 
-                  return (
-                    <NavLink
-                      key={`${book.meta.slug}/${chapter.meta.slug}`}
-                      href={chapterPath}
-                      label={`Chapter ${chapter.meta.order}: ${chapter.meta.title}`}
-                      active={currentPath === chapterPath}
-                      chapter
-                      dragging={
-                        draggedChapter?.bookSlug === book.meta.slug &&
-                        draggedChapter.chapterSlug === chapter.meta.slug
-                      }
-                      dropIndicator={indicator}
-                      dragHandle={
-                        <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[var(--paper-muted)]" />
-                      }
-                      trailingAction={
-                        <ActionMenu
-                          open={openMenuId === `chapter:${chapterActionSlug}`}
-                          busy={
-                            pendingActionId?.startsWith(
-                              `chapter:${chapterActionSlug}:`,
-                            ) ?? false
-                          }
-                          onToggle={() =>
-                            setOpenMenuId((current) =>
-                              current === `chapter:${chapterActionSlug}`
-                                ? null
-                                : `chapter:${chapterActionSlug}`,
-                            )
-                          }
-                          onDuplicate={() =>
-                            runItemAction("chapter", chapterActionSlug, "duplicate")
-                          }
-                          onDelete={() =>
-                            runItemAction("chapter", chapterActionSlug, "delete")
-                          }
-                          onDownload={() =>
-                            runItemAction("chapter", chapterActionSlug, "download")
-                          }
-                        />
-                      }
-                      onDragStart={(event) => {
-                        setDraggedChapter({
-                          bookSlug: book.meta.slug,
-                          chapterSlug: chapter.meta.slug,
-                        });
-                        event.dataTransfer.effectAllowed = "move";
-                        event.dataTransfer.setData(
-                          "text/plain",
-                          `${book.meta.slug}:${chapter.meta.slug}`,
-                        );
-                      }}
-                      onDragEnd={() => {
-                        setDraggedChapter(null);
-                        setDropIndicator(null);
-                      }}
-                      onDragOver={(event) => {
-                        if (
-                          !draggedChapter ||
-                          draggedChapter.bookSlug !== book.meta.slug ||
+                    return (
+                      <NavLink
+                        key={`${book.meta.slug}/${chapter.meta.slug}`}
+                        href={chapterPath}
+                        label={`Chapter ${chapter.meta.order}: ${chapter.meta.title}`}
+                        active={currentPath === chapterPath}
+                        chapter
+                        dragging={
+                          draggedChapter?.bookSlug === book.meta.slug &&
                           draggedChapter.chapterSlug === chapter.meta.slug
-                        ) {
-                          return;
                         }
+                        dropIndicator={indicator}
+                        dragHandle={
+                          <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[var(--paper-muted)]" />
+                        }
+                        trailingAction={
+                          <ActionMenu
+                            open={openMenuId === `chapter:${chapterActionSlug}`}
+                            busy={
+                              pendingActionId?.startsWith(
+                                `chapter:${chapterActionSlug}:`,
+                              ) ?? false
+                            }
+                            onToggle={() =>
+                              setOpenMenuId((current) =>
+                                current === `chapter:${chapterActionSlug}`
+                                  ? null
+                                  : `chapter:${chapterActionSlug}`,
+                              )
+                            }
+                            onDuplicate={() =>
+                              runItemAction("chapter", chapterActionSlug, "duplicate")
+                            }
+                            onDelete={() =>
+                              runItemAction("chapter", chapterActionSlug, "delete")
+                            }
+                            onDownload={() =>
+                              runItemAction("chapter", chapterActionSlug, "download")
+                            }
+                          />
+                        }
+                        onDragStart={(event) => {
+                          setDraggedChapter({
+                            bookSlug: book.meta.slug,
+                            chapterSlug: chapter.meta.slug,
+                          });
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData(
+                            "text/plain",
+                            `${book.meta.slug}:${chapter.meta.slug}`,
+                          );
+                        }}
+                        onDragEnd={() => {
+                          setDraggedChapter(null);
+                          setDropIndicator(null);
+                        }}
+                        onDragOver={(event) => {
+                          if (
+                            !draggedChapter ||
+                            draggedChapter.bookSlug !== book.meta.slug ||
+                            draggedChapter.chapterSlug === chapter.meta.slug
+                          ) {
+                            return;
+                          }
 
-                        event.preventDefault();
-                        const bounds = event.currentTarget.getBoundingClientRect();
-                        const position =
-                          event.clientY - bounds.top > bounds.height / 2
-                            ? "after"
-                            : "before";
+                          event.preventDefault();
+                          const bounds = event.currentTarget.getBoundingClientRect();
+                          const position =
+                            event.clientY - bounds.top > bounds.height / 2
+                              ? "after"
+                              : "before";
 
-                        setDropIndicator({
-                          bookSlug: book.meta.slug,
-                          chapterSlug: chapter.meta.slug,
-                          position,
-                        });
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        handleDrop(
-                          book.meta.slug,
-                          chapter.meta.slug,
-                          dropIndicator?.bookSlug === book.meta.slug &&
-                            dropIndicator.chapterSlug === chapter.meta.slug
-                            ? dropIndicator.position
-                            : "before",
-                        );
-                      }}
-                    />
-                  );
-                })}
-              </div>
+                          setDropIndicator({
+                            bookSlug: book.meta.slug,
+                            chapterSlug: chapter.meta.slug,
+                            position,
+                          });
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          handleDrop(
+                            book.meta.slug,
+                            chapter.meta.slug,
+                            dropIndicator?.bookSlug === book.meta.slug &&
+                              dropIndicator.chapterSlug === chapter.meta.slug
+                              ? dropIndicator.position
+                              : "before",
+                          );
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

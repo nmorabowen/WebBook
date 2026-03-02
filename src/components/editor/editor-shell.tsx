@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   useTransition,
+  type CSSProperties,
 } from "react";
 import Link from "next/link";
 import {
@@ -20,8 +21,11 @@ import {
   Code2,
   CloudUpload,
   Globe,
+  GripVertical,
   ImagePlus,
   Italic,
+  List,
+  ListOrdered,
   RefreshCcw,
   Save,
   Sigma,
@@ -36,7 +40,7 @@ import {
 import type { ManifestEntry } from "@/lib/content/schemas";
 import { fontPresetOptions, type FontPreset } from "@/lib/font-presets";
 import type { TocItem } from "@/lib/markdown/shared";
-import { normalizeYouTubeEmbedInput } from "@/lib/utils";
+import { buildInlineTextStyleHref, cn, normalizeYouTubeEmbedInput } from "@/lib/utils";
 
 type EditorShellProps = {
   mode: "note" | "book" | "chapter";
@@ -81,6 +85,14 @@ type ImageUploadPayload = {
   alt: string;
 };
 
+const inlineTextSizeOptions = [
+  { value: "inherit", label: "Text size" },
+  { value: "0.9em", label: "Small" },
+  { value: "1em", label: "Base" },
+  { value: "1.15em", label: "Large" },
+  { value: "1.3em", label: "XL" },
+] as const;
+
 export function EditorShell({
   mode,
   path,
@@ -95,6 +107,12 @@ export function EditorShell({
   updateEndpoint,
   extraActions,
 }: EditorShellProps) {
+  const workspacePanelStyle = {
+    borderRadius: "var(--workspace-corner-radius, 28px)",
+  } as CSSProperties;
+  const workspaceGapStyle = {
+    gap: "var(--workspace-tile-spacing, 1.5rem)",
+  } as CSSProperties;
   const [title, setTitle] = useState(initialValues.title);
   const [slug, setSlug] = useState(initialValues.slug);
   const [summary, setSummary] = useState(initialValues.summary ?? initialValues.description ?? "");
@@ -116,10 +134,26 @@ export function EditorShell({
   const [saveMessage, setSaveMessage] = useState<string>("Ready");
   const [imageUploadPending, setImageUploadPending] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
+  const [editorSplitRatio, setEditorSplitRatio] = useState(52);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
+  const [previewOffset, setPreviewOffset] = useState(0);
+  const [inlineTextSize, setInlineTextSize] = useState<(typeof inlineTextSizeOptions)[number]["value"]>("inherit");
+  const [inlineTextColor, setInlineTextColor] = useState("#8f5335");
   const [isPending, startTransition] = useTransition();
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewFrameRef = useRef<HTMLIFrameElement>(null);
+  const editorSplitRef = useRef<HTMLDivElement>(null);
+  const sourcePanelRef = useRef<HTMLDivElement>(null);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const previewViewportRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef(initialValues.body);
+  const sourceViewportRef = useRef({
+    selectionStart: 0,
+    selectionEnd: 0,
+    scrollTop: 0,
+    scrollLeft: 0,
+  });
   const historyRef = useRef<EditorSnapshot[]>([
     {
       body: initialValues.body,
@@ -137,10 +171,103 @@ export function EditorShell({
     scrollLeft: number;
   } | null>(null);
   const deferredBody = useDeferredValue(body);
+  const isSourceCollapsed = editorSplitRatio <= 4;
+  const isPreviewCollapsed = editorSplitRatio >= 96;
+  const editorSplitStyle = {
+    "--editor-source-fr": isSourceCollapsed ? "0.001fr" : `${editorSplitRatio}fr`,
+    "--editor-preview-fr": isPreviewCollapsed
+      ? "0.001fr"
+      : `${100 - editorSplitRatio}fr`,
+  } as CSSProperties;
 
   useEffect(() => {
     bodyRef.current = body;
   }, [body]);
+
+  useLayoutEffect(() => {
+    const sourcePanel = sourcePanelRef.current;
+    const previewPanel = previewPanelRef.current;
+    const textarea = sourceRef.current;
+    const previewViewport = previewViewportRef.current;
+
+    if (!sourcePanel || !previewPanel || !textarea || !previewViewport) {
+      return;
+    }
+
+    const updatePreviewOffset = () => {
+      const sourceTop =
+        textarea.getBoundingClientRect().top - sourcePanel.getBoundingClientRect().top;
+      const previewTop =
+        previewViewport.getBoundingClientRect().top - previewPanel.getBoundingClientRect().top;
+      const nextOffset = Math.max(0, Math.round(sourceTop - previewTop));
+      setPreviewOffset((current) => (current === nextOffset ? current : nextOffset));
+    };
+
+    updatePreviewOffset();
+
+    const resizeObserver = new ResizeObserver(updatePreviewOffset);
+    resizeObserver.observe(sourcePanel);
+    resizeObserver.observe(previewPanel);
+    resizeObserver.observe(textarea);
+    resizeObserver.observe(previewViewport);
+    window.addEventListener("resize", updatePreviewOffset);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updatePreviewOffset);
+    };
+  }, [fontPreset, isPreviewCollapsed, isSourceCollapsed]);
+
+  const updateSplitFromClientX = (clientX: number) => {
+    const container = editorSplitRef.current;
+    if (!container) {
+      return;
+    }
+
+    const bounds = container.getBoundingClientRect();
+    if (bounds.width <= 0) {
+      return;
+    }
+
+    const rawRatio = ((clientX - bounds.left) / bounds.width) * 100;
+    if (rawRatio <= 4) {
+      setEditorSplitRatio(0);
+      return;
+    }
+
+    if (rawRatio >= 96) {
+      setEditorSplitRatio(100);
+      return;
+    }
+
+    setEditorSplitRatio(Math.max(18, Math.min(82, Math.round(rawRatio))));
+  };
+
+  useEffect(() => {
+    if (!isDraggingSplit) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      updateSplitFromClientX(event.clientX);
+    };
+
+    const finishDragging = () => {
+      setIsDraggingSplit(false);
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishDragging);
+
+    return () => {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishDragging);
+    };
+  }, [isDraggingSplit]);
 
   const payload = useMemo(
     () => ({
@@ -213,6 +340,7 @@ export function EditorShell({
     textarea.setSelectionRange(pendingSelection.start, pendingSelection.end);
     textarea.scrollTop = pendingSelection.scrollTop;
     textarea.scrollLeft = pendingSelection.scrollLeft;
+    rememberSourceViewport(textarea);
     pendingSelectionRef.current = null;
   }, [body]);
 
@@ -238,6 +366,28 @@ export function EditorShell({
 
     setSaveState("saved");
     setSaveMessage("Snapshot saved");
+    setPreviewVersion((current) => current + 1);
+  };
+
+  const saveTypography = async () => {
+    setSaveState("saving");
+    setSaveMessage("Saving typography...");
+    const response = await fetch(updateEndpoint, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      setSaveState("error");
+      setSaveMessage("Typography save failed");
+      return;
+    }
+
+    setSaveState("saved");
+    setSaveMessage("Typography saved");
     setPreviewVersion((current) => current + 1);
   };
 
@@ -276,6 +426,15 @@ export function EditorShell({
       ...current,
       [key]: value,
     }));
+  };
+
+  const rememberSourceViewport = (textarea: HTMLTextAreaElement) => {
+    sourceViewportRef.current = {
+      selectionStart: textarea.selectionStart,
+      selectionEnd: textarea.selectionEnd,
+      scrollTop: textarea.scrollTop,
+      scrollLeft: textarea.scrollLeft,
+    };
   };
 
   const commitBody = (
@@ -381,6 +540,96 @@ export function EditorShell({
     });
   };
 
+  const sourceOffsetFromLine = (content: string, line: number) => {
+    if (line <= 1) {
+      return 0;
+    }
+
+    let currentLine = 1;
+    for (let index = 0; index < content.length; index += 1) {
+      if (currentLine === line) {
+        return index;
+      }
+
+      if (content[index] === "\n") {
+        currentLine += 1;
+      }
+    }
+
+    return content.length;
+  };
+
+  const sourceLineFromOffset = (content: string, offset: number) => {
+    let line = 1;
+    for (let index = 0; index < Math.min(offset, content.length); index += 1) {
+      if (content[index] === "\n") {
+        line += 1;
+      }
+    }
+
+    return line;
+  };
+
+  const focusSourceLine = (line: number) => {
+    const textarea = sourceRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const normalizedLine = Math.max(1, line - 1);
+    const offset = sourceOffsetFromLine(bodyRef.current, normalizedLine);
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 28;
+    const scrollTop = Math.max(0, (normalizedLine - 2) * lineHeight);
+
+    textarea.focus();
+    textarea.setSelectionRange(offset, offset);
+    textarea.scrollTop = scrollTop;
+    textarea.scrollLeft = 0;
+    rememberSourceViewport(textarea);
+  };
+
+  const revealCurrentSourceInPreview = () => {
+    const textarea = sourceRef.current;
+    const previewWindow = previewFrameRef.current?.contentWindow;
+    if (!textarea || !previewWindow) {
+      return;
+    }
+
+    const line = sourceLineFromOffset(bodyRef.current, textarea.selectionStart);
+    previewWindow.postMessage(
+      {
+        type: "webbook-editor-preview-line",
+        line,
+      },
+      window.location.origin,
+    );
+  };
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
+      const data = event.data;
+      if (
+        !data ||
+        typeof data !== "object" ||
+        data.type !== "webbook-preview-source-line" ||
+        typeof data.line !== "number"
+      ) {
+        return;
+      }
+
+      focusSourceLine(data.line);
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
+
   const uploadImageAndInsert = async (
     file: File,
     selection?: {
@@ -466,6 +715,44 @@ export function EditorShell({
     });
   };
 
+  const applyInlineTextStyle = () => {
+    applyMarkdown((selectedText) => {
+      const nextSelection = selectedText || "styled text";
+      const href = buildInlineTextStyleHref({
+        color: inlineTextColor,
+        size: inlineTextSize,
+      });
+
+      return {
+        nextSelection,
+        replacement: `[${nextSelection}](${href})`,
+        selectionOffsetStart: 1,
+      };
+    });
+  };
+
+  const applyList = (ordered: boolean) => {
+    applyMarkdown((selectedText) => {
+      const content = selectedText || "List item";
+      const lines = content.split("\n");
+      const formattedLines = lines.map((line, index) => {
+        if (!line.trim()) {
+          return "";
+        }
+
+        return ordered ? `${index + 1}. ${line}` : `- ${line}`;
+      });
+      const replacement = formattedLines.join("\n");
+      const firstPrefixLength = ordered ? 3 : 2;
+
+      return {
+        nextSelection: content,
+        replacement,
+        selectionOffsetStart: firstPrefixLength,
+      };
+    });
+  };
+
   const toolbarActions: Array<{
     id: string;
     label: string;
@@ -534,6 +821,20 @@ export function EditorShell({
         }),
     },
     {
+      id: "bullet-list",
+      label: "Bulleted list",
+      title: "Bulleted list",
+      icon: <List className="h-4 w-4" />,
+      run: () => applyList(false),
+    },
+    {
+      id: "numbered-list",
+      label: "Numbered list",
+      title: "Numbered list",
+      icon: <ListOrdered className="h-4 w-4" />,
+      run: () => applyList(true),
+    },
+    {
       id: "code-block",
       label: "Code block",
       title: "Code block",
@@ -599,9 +900,15 @@ export function EditorShell({
   ];
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <section className="grid gap-5">
-        <div className="flex flex-wrap items-start justify-between gap-4 rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.58)] p-5">
+    <div
+      className="grid items-start xl:grid-cols-[minmax(0,1fr)_420px]"
+      style={workspaceGapStyle}
+    >
+      <section className="grid auto-rows-max content-start self-start" style={workspaceGapStyle}>
+        <div
+          className="flex flex-wrap items-start justify-between gap-4 self-start border border-[var(--paper-border)] bg-[rgba(255,255,255,0.58)] p-5"
+          style={workspacePanelStyle}
+        >
           <div className="grid gap-2">
             <div className="flex items-center gap-2">
               <span className="paper-badge">{mode}</span>
@@ -632,122 +939,12 @@ export function EditorShell({
           </div>
         </div>
 
-        <div className="grid gap-4 rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.6)] p-5 md:grid-cols-2">
-          <div>
-            <label className="paper-label" htmlFor={`${pageId}-title`}>
-              Title
-            </label>
-            <input
-              id={`${pageId}-title`}
-              className="paper-input"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="paper-label" htmlFor={`${pageId}-slug`}>
-              Slug
-            </label>
-            <input
-              id={`${pageId}-slug`}
-              className="paper-input"
-              value={slug}
-              onChange={(event) => setSlug(event.target.value)}
-            />
-          </div>
-          <div className={mode === "chapter" ? "" : "md:col-span-2"}>
-            <label className="paper-label" htmlFor={`${pageId}-summary`}>
-              {mode === "book" ? "Description" : "Summary"}
-            </label>
-            <input
-              id={`${pageId}-summary`}
-              className="paper-input"
-              value={summary}
-              onChange={(event) => setSummary(event.target.value)}
-            />
-          </div>
-          {mode === "chapter" ? (
-            <div>
-              <label className="paper-label" htmlFor={`${pageId}-order`}>
-                Order
-              </label>
-              <input
-                id={`${pageId}-order`}
-                className="paper-input"
-                type="number"
-                min={0}
-                value={order}
-                onChange={(event) => setOrder(Number(event.target.value) || 0)}
-              />
-            </div>
-          ) : null}
-          {mode === "book" ? (
-            <div>
-              <label className="paper-label" htmlFor={`${pageId}-theme`}>
-                Theme
-              </label>
-              <select
-                id={`${pageId}-theme`}
-                className="paper-select"
-                value={theme}
-                onChange={(event) => setTheme(event.target.value as "paper" | "graphite")}
-              >
-                <option value="paper">Paper</option>
-                <option value="graphite">Graphite</option>
-              </select>
-            </div>
-          ) : null}
-          <div>
-            <label className="paper-label" htmlFor={`${pageId}-font-preset`}>
-              Page font
-            </label>
-            <select
-              id={`${pageId}-font-preset`}
-              className="paper-select"
-              value={fontPreset}
-              onChange={(event) => setFontPreset(event.target.value as FontPreset)}
-            >
-              {fontPresetOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {mode !== "chapter" ? (
-            <div>
-              <label className="paper-label" htmlFor={`${pageId}-visibility`}>
-                Visibility
-              </label>
-              <select
-                id={`${pageId}-visibility`}
-                className="paper-select"
-                value={visibility}
-                onChange={(event) =>
-                  setVisibility(event.target.value as "public" | "private")
-                }
-              >
-                <option value="private">Private</option>
-                <option value="public">Public</option>
-              </select>
-            </div>
-          ) : null}
-          {mode !== "book" ? (
-            <label className="flex items-center gap-3 rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] px-4 py-3">
-              <input
-                type="checkbox"
-                checked={allowExecution}
-                onChange={(event) => setAllowExecution(event.target.checked)}
-              />
-              <span className="text-sm text-[var(--paper-muted)]">
-                Allow Python execution on the public page
-              </span>
-            </label>
-          ) : null}
-        </div>
-
         {mode === "book" ? (
-          <details className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.58)] p-5" open>
+          <details
+            className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.58)] p-5"
+            style={workspacePanelStyle}
+            open
+          >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <div>
                 <p className="paper-label mb-1">Advanced typography</p>
@@ -755,7 +952,19 @@ export function EditorShell({
                   Control heading scale, body size, spacing, and reading width.
                 </p>
               </div>
-              <ChevronDown className="h-4 w-4 text-[var(--paper-muted)]" />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="paper-button paper-button-secondary px-3 py-2 text-sm"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void saveTypography();
+                  }}
+                >
+                  Save typography
+                </button>
+                <ChevronDown className="h-4 w-4 text-[var(--paper-muted)]" />
+              </div>
             </summary>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -888,7 +1097,7 @@ export function EditorShell({
                   className="paper-input"
                   type="number"
                   min={32}
-                  max={72}
+                  max={180}
                   step={1}
                   value={typography.contentWidth}
                   onChange={(event) =>
@@ -903,19 +1112,40 @@ export function EditorShell({
           </details>
         ) : null}
 
-        <div className="grid gap-5 xl:grid-cols-2">
-          <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.6)] p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
+        <div
+          ref={editorSplitRef}
+          className={cn("editor-split-layout", isDraggingSplit && "editor-split-layout-dragging")}
+          style={editorSplitStyle}
+        >
+          <div
+            ref={sourcePanelRef}
+            className={cn(
+              "editor-split-panel rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.6)] p-4",
+              isSourceCollapsed && "is-collapsed",
+            )}
+            style={workspacePanelStyle}
+          >
+              <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="paper-label">Markdown source</p>
                 <p className="text-sm text-[var(--paper-muted)]">
                   Use markdown, `[[wiki links]]`, and fenced `python exec` blocks.
                 </p>
               </div>
-              <span className="paper-badge">
-                <CloudUpload className="h-3.5 w-3.5" />
-                {saveState}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="paper-button paper-button-secondary px-3 py-2 text-sm"
+                    onClick={revealCurrentSourceInPreview}
+                    disabled={isPreviewCollapsed}
+                  >
+                  Reveal in preview
+                </button>
+                <span className="paper-badge">
+                  <CloudUpload className="h-3.5 w-3.5" />
+                  {saveState}
+                </span>
+              </div>
             </div>
             <div className="editor-toolbar">
               <input
@@ -941,26 +1171,71 @@ export function EditorShell({
                   title={action.title}
                   aria-label={action.label}
                   disabled={imageUploadPending && action.id === "image"}
+                  >
+                    {action.icon}
+                  </button>
+                ))}
+              <div className="editor-toolbar-divider" aria-hidden="true" />
+              <label className="editor-toolbar-control">
+                <span className="sr-only">Inline text size</span>
+                <select
+                  className="paper-select editor-toolbar-select"
+                  value={inlineTextSize}
+                  onChange={(event) =>
+                    setInlineTextSize(
+                      event.target.value as (typeof inlineTextSizeOptions)[number]["value"],
+                    )
+                  }
+                  aria-label="Inline text size"
                 >
-                  {action.icon}
-                </button>
-              ))}
+                  {inlineTextSizeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="editor-toolbar-control">
+                <span className="sr-only">Inline text color</span>
+                <input
+                  type="color"
+                  className="editor-toolbar-color"
+                  value={inlineTextColor}
+                  onChange={(event) => setInlineTextColor(event.target.value)}
+                  aria-label="Inline text color"
+                />
+              </label>
+              <button
+                type="button"
+                className="editor-toolbar-button px-3"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={applyInlineTextStyle}
+                title="Apply text style to selection"
+                aria-label="Apply text style to selection"
+              >
+                <span className="text-xs font-semibold">Aa</span>
+              </button>
             </div>
             <div data-font-preset={fontPreset}>
               <textarea
                 ref={sourceRef}
                 className="paper-textarea editor-source"
                 value={body}
-                onChange={(event) =>
+                onChange={(event) => {
+                  rememberSourceViewport(event.target);
                   commitBody(event.target.value, {
                     start: event.target.selectionStart,
                     end: event.target.selectionEnd,
                     scrollTop: event.target.scrollTop,
                     scrollLeft: event.target.scrollLeft,
-                  })
-                }
+                  });
+                }}
+                onClick={(event) => rememberSourceViewport(event.currentTarget)}
+                onSelect={(event) => rememberSourceViewport(event.currentTarget)}
+                onScroll={(event) => rememberSourceViewport(event.currentTarget)}
                 onKeyDown={(event) => {
                   const isPrimaryModifier = event.metaKey || event.ctrlKey;
+                  rememberSourceViewport(event.currentTarget);
                   if (!isPrimaryModifier) {
                     return;
                   }
@@ -991,6 +1266,7 @@ export function EditorShell({
                   }
                 }}
                 onPaste={(event) => {
+                  rememberSourceViewport(event.currentTarget);
                   const items = Array.from(event.clipboardData?.items ?? []);
                   const imageItem = items.find((item) => item.type.startsWith("image/"));
                   const file = imageItem?.getAsFile();
@@ -1010,12 +1286,34 @@ export function EditorShell({
             </div>
           </div>
 
-          <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.6)] p-4">
+          <button
+            type="button"
+            className="editor-split-handle"
+            aria-label="Resize editor panels"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setIsDraggingSplit(true);
+              updateSplitFromClientX(event.clientX);
+            }}
+          >
+            <span className="editor-split-grip">
+              <GripVertical className="h-4 w-4" />
+            </span>
+          </button>
+
+          <div
+            ref={previewPanelRef}
+            className={cn(
+              "editor-split-panel rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.6)] p-4",
+              isPreviewCollapsed && "is-collapsed",
+            )}
+            style={workspacePanelStyle}
+          >
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="paper-label">Live preview</p>
                 <p className="text-sm text-[var(--paper-muted)]">
-                  Uses the saved public-page render path. Updates after autosave.
+                  Uses the saved public-page render path. Click a preview dot to jump to source.
                 </p>
               </div>
               <span className="paper-badge">
@@ -1023,8 +1321,18 @@ export function EditorShell({
                 Preview
               </span>
             </div>
-            <div className="editor-preview pr-1" data-font-preset={fontPreset}>
+            <div
+              ref={previewViewportRef}
+              className="editor-preview pr-1"
+              data-font-preset={fontPreset}
+            >
+              <div
+                className="editor-preview-offset"
+                aria-hidden="true"
+                style={{ height: `${previewOffset}px` }}
+              />
               <iframe
+                ref={previewFrameRef}
                 key={`${pageId}-${previewVersion}`}
                 title="Live preview"
                 src={`/app/preview?pageId=${encodeURIComponent(pageId)}&v=${previewVersion}`}
@@ -1035,8 +1343,131 @@ export function EditorShell({
         </div>
       </section>
 
-      <aside className="grid gap-5">
-        <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5">
+      <aside className="grid self-start" style={workspaceGapStyle}>
+        <div
+          className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+          style={workspacePanelStyle}
+        >
+          <p className="paper-label">Page settings</p>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+            <div>
+              <label className="paper-label" htmlFor={`${pageId}-title`}>
+                Title
+              </label>
+              <input
+                id={`${pageId}-title`}
+                className="paper-input"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="paper-label" htmlFor={`${pageId}-slug`}>
+                Slug
+              </label>
+              <input
+                id={`${pageId}-slug`}
+                className="paper-input"
+                value={slug}
+                onChange={(event) => setSlug(event.target.value)}
+              />
+            </div>
+            <div className={mode === "chapter" ? "" : "md:col-span-2 xl:col-span-1"}>
+              <label className="paper-label" htmlFor={`${pageId}-summary`}>
+                {mode === "book" ? "Description" : "Summary"}
+              </label>
+              <input
+                id={`${pageId}-summary`}
+                className="paper-input"
+                value={summary}
+                onChange={(event) => setSummary(event.target.value)}
+              />
+            </div>
+            {mode === "chapter" ? (
+              <div>
+                <label className="paper-label" htmlFor={`${pageId}-order`}>
+                  Order
+                </label>
+                <input
+                  id={`${pageId}-order`}
+                  className="paper-input"
+                  type="number"
+                  min={0}
+                  value={order}
+                  onChange={(event) => setOrder(Number(event.target.value) || 0)}
+                />
+              </div>
+            ) : null}
+            {mode === "book" ? (
+              <div>
+                <label className="paper-label" htmlFor={`${pageId}-theme`}>
+                  Theme
+                </label>
+                <select
+                  id={`${pageId}-theme`}
+                  className="paper-select"
+                  value={theme}
+                  onChange={(event) => setTheme(event.target.value as "paper" | "graphite")}
+                >
+                  <option value="paper">Paper</option>
+                  <option value="graphite">Graphite</option>
+                </select>
+              </div>
+            ) : null}
+            <div>
+              <label className="paper-label" htmlFor={`${pageId}-font-preset`}>
+                Page font
+              </label>
+              <select
+                id={`${pageId}-font-preset`}
+                className="paper-select"
+                value={fontPreset}
+                onChange={(event) => setFontPreset(event.target.value as FontPreset)}
+              >
+                {fontPresetOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {mode !== "chapter" ? (
+              <div>
+                <label className="paper-label" htmlFor={`${pageId}-visibility`}>
+                  Visibility
+                </label>
+                <select
+                  id={`${pageId}-visibility`}
+                  className="paper-select"
+                  value={visibility}
+                  onChange={(event) =>
+                    setVisibility(event.target.value as "public" | "private")
+                  }
+                >
+                  <option value="private">Private</option>
+                  <option value="public">Public</option>
+                </select>
+              </div>
+            ) : null}
+            {mode !== "book" ? (
+              <label className="flex items-center gap-3 rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] px-4 py-3 md:col-span-2 xl:col-span-1">
+                <input
+                  type="checkbox"
+                  checked={allowExecution}
+                  onChange={(event) => setAllowExecution(event.target.checked)}
+                />
+                <span className="text-sm text-[var(--paper-muted)]">
+                  Allow Python execution on the public page
+                </span>
+              </label>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+          style={workspacePanelStyle}
+        >
           <p className="paper-label">Context</p>
           <div className="grid gap-3">
             <div className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3">
@@ -1054,7 +1485,10 @@ export function EditorShell({
           </div>
         </div>
 
-        <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5">
+        <div
+          className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+          style={workspacePanelStyle}
+        >
           <p className="paper-label">Outline</p>
           <div className="toc-list">
             {toc.map((item) => (
@@ -1070,7 +1504,10 @@ export function EditorShell({
           </div>
         </div>
 
-        <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5">
+        <div
+          className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+          style={workspacePanelStyle}
+        >
           <p className="paper-label">Backlinks</p>
           <div className="grid gap-2">
             {backlinks.length ? (
@@ -1085,7 +1522,10 @@ export function EditorShell({
           </div>
         </div>
 
-        <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5">
+        <div
+          className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+          style={workspacePanelStyle}
+        >
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="paper-label mb-0">Link health</p>
             <button
@@ -1117,7 +1557,10 @@ export function EditorShell({
         </div>
 
         {revisions.length ? (
-          <div className="rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5">
+          <div
+            className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+            style={workspacePanelStyle}
+          >
             <p className="paper-label">Recent revisions</p>
             <div className="grid gap-2">
               {revisions.slice(0, 8).map((revision) => (

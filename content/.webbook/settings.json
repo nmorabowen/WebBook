@@ -1,0 +1,8 @@
+{
+  "cornerRadius": 0,
+  "tileSpacing": 0.75,
+  "collapseBookChaptersByDefault": true,
+  "mathFontSize": 1,
+  "mathFontColor": "#000077",
+  "mathFontFamily": "mathjax-newcm"
+}

@@ -4,6 +4,7 @@ import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
   getBacklinks,
+  getGeneralSettings,
   getManifest,
   getPublicBook,
   getPublicContentTree,
@@ -23,11 +24,12 @@ export default async function BookPage({
     notFound();
   }
 
-  const [tree, manifest, backlinks, revisions] = await Promise.all([
+  const [tree, manifest, backlinks, revisions, generalSettings] = await Promise.all([
     getPublicContentTree(),
     getManifest(),
     getBacklinks(book.id),
     listRevisions(book.id),
+    getGeneralSettings(),
   ]);
   const toc = extractToc(book.body);
 
@@ -37,6 +39,8 @@ export default async function BookPage({
       currentPath={`/books/${book.meta.slug}`}
       bookSlug={book.meta.slug}
       fontPreset={book.meta.fontPreset ?? "source-serif"}
+      generalSettings={generalSettings}
+      readingWidth={book.meta.typography?.contentWidth}
       rightPanel={
         <TocPanel
           toc={toc}
@@ -57,6 +61,7 @@ export default async function BookPage({
         fontPreset={book.meta.fontPreset ?? "source-serif"}
         typography={book.meta.typography}
         bookSlug={book.meta.slug}
+        generalSettings={generalSettings}
         chapters={book.chapters.map((chapter) => ({
           slug: chapter.meta.slug,
           title: chapter.meta.title,

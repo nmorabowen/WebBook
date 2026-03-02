@@ -5,10 +5,13 @@ import { requireSession } from "@/lib/auth";
 import {
   getBook,
   getContentTree,
+  getGeneralSettings,
   getManifest,
   loadRenderableContent,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
+
+export const dynamic = "force-dynamic";
 
 export default async function AppChapterPage({
   params,
@@ -22,10 +25,11 @@ export default async function AppChapterPage({
     notFound();
   }
 
-  const [tree, manifest, book] = await Promise.all([
+  const [tree, manifest, book, generalSettings] = await Promise.all([
     getContentTree(),
     getManifest(),
     getBook(bookSlug),
+    getGeneralSettings(),
   ]);
   const toc = extractToc(loaded.content.body);
 
@@ -33,6 +37,7 @@ export default async function AppChapterPage({
     <AppShell
       tree={tree}
       currentPath={`/app/books/${bookSlug}/chapters/${loaded.content.meta.slug}`}
+      generalSettings={generalSettings}
     >
       <EditorShell
         mode="chapter"

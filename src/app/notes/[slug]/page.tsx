@@ -4,6 +4,7 @@ import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
   getBacklinks,
+  getGeneralSettings,
   getManifest,
   getPublicContentTree,
   getPublicNote,
@@ -23,11 +24,12 @@ export default async function NotePage({
     notFound();
   }
 
-  const [tree, manifest, backlinks, revisions] = await Promise.all([
+  const [tree, manifest, backlinks, revisions, generalSettings] = await Promise.all([
     getPublicContentTree(),
     getManifest(),
     getBacklinks(note.id),
     listRevisions(note.id),
+    getGeneralSettings(),
   ]);
   const toc = extractToc(note.body);
 
@@ -36,6 +38,8 @@ export default async function NotePage({
       tree={tree}
       currentPath={`/notes/${note.meta.slug}`}
       fontPreset={note.meta.fontPreset ?? "source-serif"}
+      generalSettings={generalSettings}
+      readingWidth={46}
       rightPanel={
         <TocPanel
           toc={toc}
@@ -55,6 +59,7 @@ export default async function NotePage({
         requester="public"
         allowExecution={note.meta.allowExecution}
         fontPreset={note.meta.fontPreset ?? "source-serif"}
+        generalSettings={generalSettings}
       />
     </PublicShell>
   );
