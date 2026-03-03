@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PublicRenderContent } from "@/components/public-render-content";
+import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
@@ -43,12 +44,14 @@ export default async function ChapterPage({
       generalSettings={generalSettings}
       readingWidth={book.meta.typography?.contentWidth}
       rightPanel={
-        <TocPanel
-          toc={toc}
-          backlinks={backlinks}
-          updatedAt={chapter.meta.updatedAt}
-          revisions={revisions}
-        />
+        <div className="grid gap-8">
+          <TocPanel toc={toc} />
+          <ReadingMetaPanel
+            backlinks={backlinks}
+            updatedAt={chapter.meta.updatedAt}
+            revisions={revisions}
+          />
+        </div>
       }
     >
       <PublicRenderContent
@@ -65,6 +68,7 @@ export default async function ChapterPage({
         generalSettings={generalSettings}
         bookTitle={book.meta.title}
         chapterOrder={chapter.meta.order}
+        currentRoute={`/books/${book.meta.slug}/${chapter.meta.slug}`}
       />
     </PublicShell>
   );

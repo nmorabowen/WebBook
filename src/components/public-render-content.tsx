@@ -30,6 +30,7 @@ type PublicRenderContentProps = {
   chapters?: PreviewChapterItem[];
   sourceNavigation?: boolean;
   generalSettings?: GeneralSettings;
+  currentRoute?: string;
 };
 
 export function PublicRenderContent({
@@ -49,6 +50,7 @@ export function PublicRenderContent({
   chapters = [],
   sourceNavigation = false,
   generalSettings,
+  currentRoute,
 }: PublicRenderContentProps) {
   const cardRadius = `${Math.max(
     (generalSettings?.cornerRadius ?? DEFAULT_GENERAL_SETTINGS.cornerRadius) - 6,
@@ -83,6 +85,7 @@ export function PublicRenderContent({
             fontPreset={fontPreset}
             typography={typography}
             sourceNavigation={sourceNavigation}
+            currentRoute={currentRoute}
           />
         </div>
       </div>
@@ -108,6 +111,7 @@ export function PublicRenderContent({
             fontPreset={fontPreset}
             typography={typography}
             sourceNavigation={sourceNavigation}
+            currentRoute={currentRoute}
           />
         </div>
 
@@ -166,6 +170,7 @@ export function PublicRenderContent({
           fontPreset={fontPreset}
           typography={typography}
           sourceNavigation={sourceNavigation}
+          currentRoute={currentRoute}
         />
       </div>
     </div>

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export function LoginForm() {
   const router = useRouter();
   const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("webbook-admin");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 

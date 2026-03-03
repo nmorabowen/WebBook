@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PublicRenderContent } from "@/components/public-render-content";
+import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { TocPanel } from "@/components/toc-panel";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import { requireSession } from "@/lib/auth";
@@ -59,6 +60,7 @@ export default async function EditorPreviewPage({
                 typography={loaded.content.meta.typography}
                 generalSettings={generalSettings}
                 sourceNavigation
+                currentRoute={`/notes/${loaded.content.meta.slug}`}
               />
             </main>
             <aside
@@ -67,10 +69,14 @@ export default async function EditorPreviewPage({
             >
               <TocPanel
                 toc={toc}
-                backlinks={backlinks}
-                updatedAt={loaded.content.meta.updatedAt}
-                revisions={revisions}
               />
+              <div className="mt-8">
+                <ReadingMetaPanel
+                  backlinks={backlinks}
+                  updatedAt={loaded.content.meta.updatedAt}
+                  revisions={revisions}
+                />
+              </div>
             </aside>
           </div>
         </div>
@@ -101,6 +107,7 @@ export default async function EditorPreviewPage({
                 bookSlug={book.meta.slug}
                 generalSettings={generalSettings}
                 sourceNavigation
+                currentRoute={`/books/${book.meta.slug}`}
                 chapters={book.chapters.map((chapter) => ({
                   slug: chapter.meta.slug,
                   title: chapter.meta.title,
@@ -115,10 +122,14 @@ export default async function EditorPreviewPage({
             >
               <TocPanel
                 toc={toc}
-                backlinks={backlinks}
-                updatedAt={book.meta.updatedAt}
-                revisions={revisions}
               />
+              <div className="mt-8">
+                <ReadingMetaPanel
+                  backlinks={backlinks}
+                  updatedAt={book.meta.updatedAt}
+                  revisions={revisions}
+                />
+              </div>
             </aside>
           </div>
         </div>
@@ -155,6 +166,7 @@ export default async function EditorPreviewPage({
                 bookTitle={book.meta.title}
                 chapterOrder={chapter.meta.order}
                 sourceNavigation
+                currentRoute={`/books/${book.meta.slug}/${chapter.meta.slug}`}
               />
             </main>
             <aside
@@ -163,10 +175,14 @@ export default async function EditorPreviewPage({
             >
               <TocPanel
                 toc={toc}
-                backlinks={backlinks}
-                updatedAt={chapter.meta.updatedAt}
-                revisions={revisions}
               />
+              <div className="mt-8">
+                <ReadingMetaPanel
+                  backlinks={backlinks}
+                  updatedAt={chapter.meta.updatedAt}
+                  revisions={revisions}
+                />
+              </div>
             </aside>
           </div>
         </div>

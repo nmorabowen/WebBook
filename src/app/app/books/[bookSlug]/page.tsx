@@ -7,6 +7,7 @@ import {
   getContentTree,
   getGeneralSettings,
   getManifest,
+  listMediaForPage,
   loadRenderableContent,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
@@ -18,17 +19,18 @@ export default async function AppBookPage({
 }: {
   params: Promise<{ bookSlug: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const { bookSlug } = await params;
   const loaded = await loadRenderableContent(`book:${bookSlug}`);
   if (!loaded || loaded.content.kind !== "book") {
     notFound();
   }
 
-  const [tree, manifest, generalSettings] = await Promise.all([
+  const [tree, manifest, generalSettings, mediaAssets] = await Promise.all([
     getContentTree(),
     getManifest(),
     getGeneralSettings(),
+    listMediaForPage(loaded.content.id),
   ]);
   const toc = extractToc(loaded.content.body);
 
@@ -37,6 +39,8 @@ export default async function AppBookPage({
       tree={tree}
       currentPath={`/app/books/${loaded.content.meta.slug}`}
       generalSettings={generalSettings}
+      session={session}
+      rightPanel={<div id="editor-shell-right-panel-root" />}
     >
       <EditorShell
         mode="book"
@@ -50,8 +54,8 @@ export default async function AppBookPage({
           description: loaded.content.meta.description,
           body: loaded.content.body,
           status: loaded.content.meta.status,
-          visibility: loaded.content.meta.visibility,
-          theme: loaded.content.meta.theme ?? "paper",
+          featured: loaded.content.meta.featured ?? false,
+          coverColor: loaded.content.meta.coverColor ?? "#292118",
           fontPreset: loaded.content.meta.fontPreset ?? "source-serif",
           typography: loaded.content.meta.typography,
         }}
@@ -59,7 +63,9 @@ export default async function AppBookPage({
         backlinks={loaded.backlinks}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
+        mediaAssets={mediaAssets}
         updateEndpoint={`/api/books/${loaded.content.meta.slug}`}
+        shortcutScopeKey={session.username}
         extraActions={
           <CreateChapterPanel
             bookSlug={loaded.content.meta.slug}

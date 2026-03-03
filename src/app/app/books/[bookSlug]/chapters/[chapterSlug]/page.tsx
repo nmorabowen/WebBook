@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { CreateChapterPanel } from "@/components/editor/create-chapter-panel";
 import { EditorShell } from "@/components/editor/editor-shell";
 import { requireSession } from "@/lib/auth";
 import {
@@ -7,6 +8,7 @@ import {
   getContentTree,
   getGeneralSettings,
   getManifest,
+  listMediaForPage,
   loadRenderableContent,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
@@ -18,18 +20,19 @@ export default async function AppChapterPage({
 }: {
   params: Promise<{ bookSlug: string; chapterSlug: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const { bookSlug, chapterSlug } = await params;
   const loaded = await loadRenderableContent(`chapter:${bookSlug}/${chapterSlug}`);
   if (!loaded || loaded.content.kind !== "chapter") {
     notFound();
   }
 
-  const [tree, manifest, book, generalSettings] = await Promise.all([
+  const [tree, manifest, book, generalSettings, mediaAssets] = await Promise.all([
     getContentTree(),
     getManifest(),
     getBook(bookSlug),
     getGeneralSettings(),
+    listMediaForPage(loaded.content.id),
   ]);
   const toc = extractToc(loaded.content.body);
 
@@ -38,6 +41,8 @@ export default async function AppChapterPage({
       tree={tree}
       currentPath={`/app/books/${bookSlug}/chapters/${loaded.content.meta.slug}`}
       generalSettings={generalSettings}
+      session={session}
+      rightPanel={<div id="editor-shell-right-panel-root" />}
     >
       <EditorShell
         mode="chapter"
@@ -63,7 +68,15 @@ export default async function AppChapterPage({
         backlinks={loaded.backlinks}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
+        mediaAssets={mediaAssets}
         updateEndpoint={`/api/books/${bookSlug}/chapters/${loaded.content.meta.slug}`}
+        shortcutScopeKey={session.username}
+        extraActions={
+          <CreateChapterPanel
+            bookSlug={book.meta.slug}
+            nextOrder={book.chapters.length + 1}
+          />
+        }
       />
     </AppShell>
   );

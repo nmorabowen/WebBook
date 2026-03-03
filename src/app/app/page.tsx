@@ -7,7 +7,7 @@ import { getContentTree, getGeneralSettings } from "@/lib/content/service";
 export const dynamic = "force-dynamic";
 
 export default async function AppDashboardPage() {
-  await requireSession();
+  const session = await requireSession();
   const [tree, generalSettings] = await Promise.all([
     getContentTree(),
     getGeneralSettings(),
@@ -20,12 +20,13 @@ export default async function AppDashboardPage() {
       tree={tree}
       currentPath="/app"
       generalSettings={generalSettings}
+      session={session}
       rightPanel={
         <div className="grid gap-6">
           <div>
             <p className="paper-label">Workspace</p>
             <p className="text-sm leading-7 text-[var(--paper-muted)]">
-              Single-author editing is active. Books and notes are stored as markdown files on disk.
+              Signed in as {session.username}. Books and notes are stored as markdown files on disk.
             </p>
           </div>
           <form action="/api/auth/logout" method="post">

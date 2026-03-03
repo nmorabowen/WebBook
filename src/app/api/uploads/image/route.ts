@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
+import { getGeneralSettings } from "@/lib/content/service";
 import { env } from "@/lib/env";
 
 const allowedMimeTypes = new Map<string, string>([
@@ -27,6 +28,7 @@ function toSafeBaseName(fileName: string) {
 
 export async function POST(request: Request) {
   await requireSession();
+  const settings = await getGeneralSettings();
 
   const formData = await request.formData();
   const file = formData.get("file");
@@ -39,8 +41,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unsupported image type" }, { status: 400 });
   }
 
-  if (file.size > 10 * 1024 * 1024) {
-    return NextResponse.json({ error: "Image exceeds 10MB limit" }, { status: 400 });
+  const maxBytes = settings.imageUploadLimitMb * 1024 * 1024;
+  if (file.size > maxBytes) {
+    return NextResponse.json(
+      { error: `Image exceeds ${settings.imageUploadLimitMb}MB limit` },
+      { status: 400 },
+    );
   }
 
   const uploadsRoot = path.join(

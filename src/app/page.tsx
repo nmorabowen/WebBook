@@ -1,130 +1,178 @@
 import Link from "next/link";
-import { ArrowRight, BookText, Braces, Calculator, PenSquare } from "lucide-react";
-import { getPublicContentTree } from "@/lib/content/service";
+import { ArrowUpRight, BookOpen, FileText, NotebookPen } from "lucide-react";
+import type { CSSProperties } from "react";
+import { getSession } from "@/lib/auth";
+import { LandingBackground } from "@/components/landing-background";
+import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
+import { getGeneralSettings, getPublicContentTree } from "@/lib/content/service";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const tree = await getPublicContentTree();
+  const [tree, session, generalSettings] = await Promise.all([
+    getPublicContentTree(),
+    getSession(),
+    getGeneralSettings(),
+  ]);
+  const featuredBooks = [...tree.books]
+    .filter((book) => book.meta.featured)
+    .sort(
+      (left, right) =>
+        new Date(right.meta.featuredAt ?? right.meta.updatedAt).getTime() -
+        new Date(left.meta.featuredAt ?? left.meta.updatedAt).getTime(),
+    )
+    .slice(0, 3);
+  const displayFeaturedBooks = featuredBooks.length ? featuredBooks : tree.books.slice(0, 3);
 
   return (
-    <div className="paper-shell">
-      <div className="paper-grid gap-8">
-        <section className="paper-panel paper-panel-strong animate-rise overflow-hidden p-8 md:p-10">
-          <div className="grid gap-8 lg:grid-cols-[1.3fr_0.9fr]">
-            <div className="grid gap-6">
-              <span className="paper-badge">WebBook v1</span>
-              <div className="grid gap-4">
-                <h1 className="max-w-4xl font-serif text-5xl leading-[0.95] tracking-[-0.04em] md:text-7xl">
-                  A book-shaped web editor for notes, chapters, equations, and live Python.
-                </h1>
-                <p className="max-w-3xl text-lg leading-8 text-[var(--paper-muted)]">
-                  WebBook combines Obsidian-style markdown, Notion-like editing flow, and
-                  clean publishing into public HTML pages with MathJax and code execution.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Link href="/app" className="paper-button inline-flex items-center gap-2">
-                  Open editor
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  href={tree.books[0] ? `/books/${tree.books[0].meta.slug}` : "/app"}
-                  className="paper-button paper-button-secondary"
-                >
-                  Read sample book
-                </Link>
-              </div>
+    <WorkspaceStyleFrame generalSettings={generalSettings}>
+      <div className="paper-shell library-shell">
+        <LandingBackground />
+
+        <div className="paper-grid gap-8">
+          <header className="library-topbar">
+            <div className="flex items-center gap-3">
+              <span className="paper-badge">WebBook</span>
+            </div>
+            <Link
+              href={session ? "/app" : "/login"}
+              className="library-editor-button"
+            >
+              <NotebookPen className="h-4 w-4" />
+              {session ? "Open editor" : "Editor access"}
+            </Link>
+          </header>
+
+          <section className="library-hero animate-rise">
+            <div className="grid gap-4">
+              <span className="paper-badge">WebBook library</span>
+              <h1 className="max-w-5xl font-serif text-5xl leading-[0.92] tracking-[-0.05em] md:text-7xl">
+                Published books and notes, arranged like a writing desk instead of a dashboard.
+              </h1>
+              <p className="max-w-3xl text-lg leading-8 text-[var(--paper-muted)]">
+                Browse long-form books, chapter collections, and standalone notes with math,
+                code, and notebook-style presentation.
+              </p>
             </div>
 
-            <div className="grid gap-4 self-start">
-              {[
-                {
-                  title: "MathJax first-class",
-                  body: "Inline and block math render in preview and public pages.",
-                  icon: Calculator,
-                },
-                {
-                  title: "Runnable Python",
-                  body: "Code cells can execute from the editor and from published pages.",
-                  icon: Braces,
-                },
-                {
-                  title: "Book + notes",
-                  body: "Books keep ordered chapters, while notes can publish standalone.",
-                  icon: BookText,
-                },
-                {
-                  title: "Markdown writing",
-                  body: "Wiki links, code fences, and prose remain the source of truth.",
-                  icon: PenSquare,
-                },
-              ].map((feature) => (
-                <div
-                  key={feature.title}
-                  className="rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.52)] p-5"
-                >
-                  <feature.icon className="h-5 w-5 text-[var(--paper-accent)]" />
-                  <h2 className="mt-3 text-xl font-semibold">{feature.title}</h2>
-                  <p className="mt-2 text-sm leading-7 text-[var(--paper-muted)]">
-                    {feature.body}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="paper-grid lg:grid-cols-2">
-          <div className="paper-panel p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-serif text-3xl">Published books</h2>
-              <span className="paper-badge">{tree.books.length}</span>
-            </div>
-            <div className="mt-5 grid gap-3">
-              {tree.books.map((book) => (
+            <div className="library-callouts">
+              {displayFeaturedBooks.map((book, index) => (
                 <Link
                   key={book.meta.slug}
                   href={`/books/${book.meta.slug}`}
-                  className="rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-5 transition hover:-translate-y-0.5"
+                  className="library-callout-card"
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-xl font-semibold">{book.meta.title}</h3>
-                    <span className="paper-badge">{book.chapters.length} chapters</span>
+                  <div className="flex items-center gap-3 text-[var(--paper-accent)]">
+                    <BookOpen className="h-4 w-4" />
+                    <span className="paper-label mb-0">
+                      {index === 0 ? "Featured book" : `Featured book ${index + 1}`}
+                    </span>
                   </div>
+                  <h2 className="mt-3 font-serif text-3xl">{book.meta.title}</h2>
                   <p className="mt-2 text-sm leading-7 text-[var(--paper-muted)]">
-                    {book.meta.description ?? "A published WebBook collection."}
+                    {book.meta.description ?? "Start with the main published book collection."}
                   </p>
                 </Link>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="paper-panel p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-serif text-3xl">Standalone notes</h2>
-              <span className="paper-badge">{tree.notes.length}</span>
-            </div>
-            <div className="mt-5 grid gap-3">
-              {tree.notes.map((note) => (
-                <Link
-                  key={note.meta.slug}
-                  href={`/notes/${note.meta.slug}`}
-                  className="rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-5 transition hover:-translate-y-0.5"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-xl font-semibold">{note.meta.title}</h3>
-                    <span className="paper-badge">{note.meta.status}</span>
-                  </div>
-                  <p className="mt-2 text-sm leading-7 text-[var(--paper-muted)]">
-                    {note.meta.summary ?? "A standalone note that can still live inside the same publishing system."}
-                  </p>
-                </Link>
-              ))}
-            </div>
+          <div className="library-shelf-columns">
+            <section className="library-section">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="paper-label">Books</p>
+                  <h2 className="font-serif text-4xl leading-none">Book stack</h2>
+                </div>
+                <span className="paper-badge">{tree.books.length}</span>
+              </div>
+              <div className="moleskine-stack-grid">
+                {tree.books.map((book, index) => (
+                  <Link
+                    key={book.meta.slug}
+                    href={`/books/${book.meta.slug}`}
+                    className="moleskine-stack-item moleskine-stack-book"
+                    style={
+                      {
+                        ["--stack-shift" as string]: `${index * 18}px`,
+                        ["--stack-depth" as string]: `${index}`,
+                        ["--book-cover-color" as string]: book.meta.coverColor ?? "#292118",
+                      } as CSSProperties
+                    }
+                  >
+                    <span className="moleskine-stack-shadow" />
+                    <div className="moleskine-stack-body">
+                      <span className="moleskine-stack-spine">
+                        <BookOpen className="h-4 w-4" />
+                      </span>
+                      <div className="moleskine-stack-content">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="moleskine-kicker">Book</span>
+                          <span className="moleskine-chip">{book.chapters.length} chapters</span>
+                        </div>
+                        <h3 className="moleskine-stack-title">{book.meta.title}</h3>
+                        <p className="moleskine-stack-summary">
+                          {book.meta.description ?? "A published WebBook collection."}
+                        </p>
+                        <div className="moleskine-action">
+                          Read book
+                          <ArrowUpRight className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            <section className="library-section">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="paper-label">Notes</p>
+                  <h2 className="font-serif text-4xl leading-none">Note stack</h2>
+                </div>
+                <span className="paper-badge">{tree.notes.length}</span>
+              </div>
+              <div className="moleskine-stack-grid">
+                {tree.notes.map((note, index) => (
+                  <Link
+                    key={note.meta.slug}
+                    href={`/notes/${note.meta.slug}`}
+                    className="moleskine-stack-item moleskine-stack-note"
+                    style={
+                      {
+                        ["--stack-shift" as string]: `${index * 18}px`,
+                        ["--stack-depth" as string]: `${index}`,
+                      } as CSSProperties
+                    }
+                  >
+                    <span className="moleskine-stack-shadow" />
+                    <div className="moleskine-stack-body">
+                      <span className="moleskine-stack-spine">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <div className="moleskine-stack-content">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="moleskine-kicker">Note</span>
+                          <span className="moleskine-chip">{note.meta.status}</span>
+                        </div>
+                        <h3 className="moleskine-stack-title">{note.meta.title}</h3>
+                        <p className="moleskine-stack-summary">
+                          {note.meta.summary ?? "A standalone note published from the same writing desk."}
+                        </p>
+                        <div className="moleskine-action">
+                          Open note
+                          <ArrowUpRight className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
           </div>
-        </section>
+        </div>
       </div>
-    </div>
+    </WorkspaceStyleFrame>
   );
 }

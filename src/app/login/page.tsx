@@ -11,10 +11,10 @@ export default async function LoginPage() {
   return (
     <div className="paper-shell flex items-center justify-center">
       <div className="paper-panel paper-panel-strong w-full max-w-md p-8">
-        <p className="paper-badge">Admin access</p>
+        <p className="paper-badge">Workspace access</p>
         <h1 className="mt-5 font-serif text-5xl leading-none">Login to WebBook</h1>
         <p className="mt-4 text-sm leading-7 text-[var(--paper-muted)]">
-          Single-author access controls the editor, publishing routes, and code execution management.
+          Sign in to the authoring workspace to manage books, notes, publishing, and code execution.
         </p>
         <div className="mt-8">
           <LoginForm />

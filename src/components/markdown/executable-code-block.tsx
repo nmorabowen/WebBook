@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useState, useTransition } from "react";
 import { LoaderCircle, Play, TriangleAlert } from "lucide-react";
+import { CopyCodeButton } from "@/components/markdown/copy-code-button";
+import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { cn } from "@/lib/utils";
 
 type ExecutionArtifact = {
@@ -77,34 +79,37 @@ export function ExecutableCodeBlock({
   };
 
   return (
-    <div className="my-5 overflow-hidden rounded-[26px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.42)]">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--paper-border)] px-4 py-3">
-        <div className="flex items-center gap-2 text-sm text-[var(--paper-muted)]">
-          <span className="paper-badge">{language}</span>
-          {result?.cached ? <span className="paper-badge">cached</span> : null}
+    <div className="my-5 overflow-hidden rounded-[26px] bg-[var(--paper-code)] text-[var(--paper-code-text)]">
+      <div className="code-block-header">
+        <div className="flex items-center gap-3">
+          <span className="code-block-language">{language}</span>
+          {result?.cached ? <span className="code-block-status">cached</span> : null}
         </div>
-        {executionEnabled && language === "python" ? (
-          <button
-            type="button"
-            className="paper-button flex items-center gap-2 px-4 py-2 text-sm"
-            onClick={run}
-            disabled={isPending}
-          >
-            {isPending ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            Run Python
-          </button>
-        ) : (
-          <span className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--paper-muted)]">
-            Static block
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          <CopyCodeButton code={code} />
+          {executionEnabled && language === "python" ? (
+            <button
+              type="button"
+              className="paper-button flex items-center gap-2 px-4 py-2 text-sm"
+              onClick={run}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              Run Python
+            </button>
+          ) : (
+            <span className="code-block-status">
+              Static block
+            </span>
+          )}
+        </div>
       </div>
       <pre className={cn("m-0 rounded-none", !executionEnabled && "opacity-90")}>
-        <code>{code}</code>
+        <HighlightedCode code={code} language={language} />
       </pre>
       {result ? (
         <div className="animate-rise grid gap-4 border-t border-[var(--paper-border)] px-4 py-4">

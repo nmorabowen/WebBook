@@ -1,13 +1,23 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AuthoringSidebar } from "@/components/authoring-sidebar";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
+import type { SessionPayload } from "@/lib/auth";
 import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
+import { cn } from "@/lib/utils";
+
+const RIGHT_PANEL_STORAGE_KEY = "webbook.app-shell.right-panel-collapsed";
 
 type AppShellProps = {
   tree: ContentTree;
   currentPath?: string;
   children: React.ReactNode;
   rightPanel?: React.ReactNode;
+  rightPanelClassName?: string;
   generalSettings?: GeneralSettings;
+  session?: SessionPayload | null;
 };
 
 export function AppShell({
@@ -15,13 +25,35 @@ export function AppShell({
   currentPath,
   children,
   rightPanel,
+  rightPanelClassName,
   generalSettings,
+  session,
 }: AppShellProps) {
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
+
+  useEffect(() => {
+    const storedValue = window.localStorage.getItem(RIGHT_PANEL_STORAGE_KEY);
+    if (storedValue === "true") {
+      setIsRightPanelCollapsed(true);
+    }
+  }, []);
+
+  const toggleRightPanel = () => {
+    setIsRightPanelCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(RIGHT_PANEL_STORAGE_KEY, String(next));
+      return next;
+    });
+  };
+
   return (
     <WorkspaceStyleFrame generalSettings={generalSettings}>
       <div className="paper-shell">
         <div
-          className="paper-grid app-shell-layout"
+          className={cn(
+            "paper-grid app-shell-layout",
+            isRightPanelCollapsed && "app-shell-layout-inspector-collapsed",
+          )}
           style={{ gap: "var(--workspace-tile-spacing)" }}
         >
           <aside
@@ -32,6 +64,7 @@ export function AppShell({
               tree={tree}
               currentPath={currentPath}
               generalSettings={generalSettings}
+              session={session}
             />
           </aside>
 
@@ -39,14 +72,47 @@ export function AppShell({
             className="paper-panel paper-panel-strong p-5 md:p-7"
             style={{ borderRadius: "var(--workspace-corner-radius)" }}
           >
+            {rightPanel ? (
+              <div className="mb-5 flex justify-end">
+                <button
+                  type="button"
+                  className="app-shell-panel-toggle"
+                  onClick={toggleRightPanel}
+                  aria-expanded={!isRightPanelCollapsed}
+                  aria-label={isRightPanelCollapsed ? "Show inspector panel" : "Hide inspector panel"}
+                >
+                  <ChevronLeft
+                    className={cn("h-4 w-4 transition-transform", !isRightPanelCollapsed && "rotate-180")}
+                  />
+                </button>
+              </div>
+            ) : null}
             {children}
           </main>
 
           <aside
-            className="paper-panel hidden p-6 xl:block"
+            className={cn(
+              "paper-panel app-shell-inspector hidden p-6 xl:block",
+              isRightPanelCollapsed && "is-collapsed",
+            )}
             style={{ borderRadius: "var(--workspace-corner-radius)" }}
           >
-            {rightPanel}
+            {rightPanel ? (
+              <div className={cn("grid gap-5", rightPanelClassName)}>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="app-shell-panel-toggle"
+                    onClick={toggleRightPanel}
+                    aria-expanded={!isRightPanelCollapsed}
+                    aria-label="Hide inspector panel"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                {rightPanel}
+              </div>
+            ) : null}
           </aside>
         </div>
       </div>

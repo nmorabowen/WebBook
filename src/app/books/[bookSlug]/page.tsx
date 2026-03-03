@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PublicRenderContent } from "@/components/public-render-content";
+import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
@@ -42,12 +43,14 @@ export default async function BookPage({
       generalSettings={generalSettings}
       readingWidth={book.meta.typography?.contentWidth}
       rightPanel={
-        <TocPanel
-          toc={toc}
-          backlinks={backlinks}
-          updatedAt={book.meta.updatedAt}
-          revisions={revisions}
-        />
+        <div className="grid gap-8">
+          <TocPanel toc={toc} />
+          <ReadingMetaPanel
+            backlinks={backlinks}
+            updatedAt={book.meta.updatedAt}
+            revisions={revisions}
+          />
+        </div>
       }
     >
       <PublicRenderContent
@@ -62,6 +65,7 @@ export default async function BookPage({
         typography={book.meta.typography}
         bookSlug={book.meta.slug}
         generalSettings={generalSettings}
+        currentRoute={`/books/${book.meta.slug}`}
         chapters={book.chapters.map((chapter) => ({
           slug: chapter.meta.slug,
           title: chapter.meta.title,

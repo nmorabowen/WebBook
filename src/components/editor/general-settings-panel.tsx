@@ -29,6 +29,13 @@ export function GeneralSettingsPanel({
   const [colorTheme, setColorTheme] = useState(initialSettings.colorTheme);
   const [cornerRadius, setCornerRadius] = useState(initialSettings.cornerRadius);
   const [tileSpacing, setTileSpacing] = useState(initialSettings.tileSpacing);
+  const [dividerSpacing, setDividerSpacing] = useState(initialSettings.dividerSpacing);
+  const [dividerColor, setDividerColor] = useState(initialSettings.dividerColor);
+  const [dividerColorInput, setDividerColorInput] = useState(initialSettings.dividerColor);
+  const [dividerWidth, setDividerWidth] = useState(initialSettings.dividerWidth);
+  const [dividerBackgroundSize, setDividerBackgroundSize] = useState(
+    initialSettings.dividerBackgroundSize,
+  );
   const [collapseBookChaptersByDefault, setCollapseBookChaptersByDefault] = useState(
     initialSettings.collapseBookChaptersByDefault,
   );
@@ -38,6 +45,18 @@ export function GeneralSettingsPanel({
     initialSettings.mathFontColor,
   );
   const [mathFontFamily, setMathFontFamily] = useState(initialSettings.mathFontFamily);
+  const [mathInlineVerticalAlign, setMathInlineVerticalAlign] = useState(
+    initialSettings.mathInlineVerticalAlign,
+  );
+  const [mathInlineTranslateY, setMathInlineTranslateY] = useState(
+    initialSettings.mathInlineTranslateY,
+  );
+  const [imageUploadLimitMb, setImageUploadLimitMb] = useState(
+    initialSettings.imageUploadLimitMb,
+  );
+  const [fileUploadLimitMb, setFileUploadLimitMb] = useState(
+    initialSettings.fileUploadLimitMb,
+  );
   const [appSidebarWidth, setAppSidebarWidth] = useState(initialSettings.appSidebarWidth);
   const [appInspectorWidth, setAppInspectorWidth] = useState(
     initialSettings.appInspectorWidth,
@@ -77,8 +96,27 @@ export function GeneralSettingsPanel({
       .math-line {
         font-size: ${mathFontSize}rem;
       }
+      .inline-line {
+        font-size: 1.1rem;
+        line-height: 1.8;
+      }
+      .math-inline {
+        display: inline-flex;
+        align-items: baseline;
+        line-height: 1;
+        transform: translateY(${mathInlineTranslateY}em);
+      }
       mjx-container[jax="SVG"] {
         color: ${mathFontColor};
+      }
+      .math-inline mjx-container[jax="SVG"] {
+        display: inline-flex !important;
+        width: auto !important;
+        max-width: none !important;
+        margin: 0 0.12em;
+        vertical-align: ${mathInlineVerticalAlign}em;
+        white-space: nowrap !important;
+        flex: 0 0 auto;
       }
     </style>
     <script>
@@ -98,8 +136,13 @@ export function GeneralSettingsPanel({
     <script async src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-svg.js"></script>
   </head>
   <body>
-    <div class="preview-shell">
-      <div class="preview-label">${mathJaxFontOptions.find((option) => option.value === mathFontFamily)?.label ?? mathFontFamily}</div>
+      <div class="preview-shell">
+        <div class="preview-label">${mathJaxFontOptions.find((option) => option.value === mathFontFamily)?.label ?? mathFontFamily}</div>
+      <div class="inline-line">
+        Inline sample:
+        <span class="math-inline">\\( e^{i\\pi} + 1 = 0 \\)</span>
+        inside text.
+      </div>
       <div class="math-line">\\[
         \\int_0^{\\pi} \\sin(x)\\,dx = 2
       \\]</div>
@@ -114,7 +157,13 @@ export function GeneralSettingsPanel({
     </div>
   </body>
 </html>`,
-    [mathFontColor, mathFontFamily, mathFontSize],
+    [
+      mathFontColor,
+      mathFontFamily,
+      mathFontSize,
+      mathInlineTranslateY,
+      mathInlineVerticalAlign,
+    ],
   );
 
   const save = () => {
@@ -128,10 +177,18 @@ export function GeneralSettingsPanel({
         colorTheme,
         cornerRadius,
         tileSpacing,
+        dividerSpacing,
+        dividerColor,
+        dividerWidth,
+        dividerBackgroundSize,
         collapseBookChaptersByDefault,
         mathFontSize,
         mathFontColor,
         mathFontFamily,
+        mathInlineVerticalAlign,
+        mathInlineTranslateY,
+        imageUploadLimitMb,
+        fileUploadLimitMb,
         appSidebarWidth,
         appInspectorWidth,
         publicLeftPanelWidth,
@@ -199,11 +256,19 @@ export function GeneralSettingsPanel({
     collapseBookChaptersByDefault,
     colorTheme,
     cornerRadius,
+    dividerBackgroundSize,
+    dividerColor,
+    dividerSpacing,
+    dividerWidth,
     initialSettings.mathFontFamily,
     isPending,
     mathFontColor,
     mathFontFamily,
     mathFontSize,
+    mathInlineTranslateY,
+    mathInlineVerticalAlign,
+    imageUploadLimitMb,
+    fileUploadLimitMb,
     publicLeftPanelWidth,
     publicRightPanelWidth,
     tileSpacing,
@@ -224,7 +289,7 @@ export function GeneralSettingsPanel({
       <div className="grid gap-4">
         <div className="grid gap-3">
           <p className="paper-label mb-0">Color theme</p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-4">
             {colorThemeOptions.map((option) => {
               const palette = colorThemePresets[option.value];
               const active = colorTheme === option.value;
@@ -232,28 +297,49 @@ export function GeneralSettingsPanel({
                 <button
                   key={option.value}
                   type="button"
-                  className="grid justify-items-center gap-2 text-center"
+                  className="grid w-[74px] justify-items-center gap-2 text-center"
                   onClick={() => setColorTheme(option.value)}
                   aria-pressed={active}
                   title={option.label}
                 >
                   <span
-                    className="grid h-12 w-12 place-items-center rounded-full border transition"
+                    className="relative grid h-[54px] w-[54px] place-items-center rounded-full transition"
                     style={{
-                      background: `linear-gradient(135deg, ${palette.cream} 0%, ${palette.panelStrong} 35%, ${palette.accent} 100%)`,
-                      borderColor: active ? "var(--paper-ink)" : "var(--paper-border)",
+                      background: `
+                        radial-gradient(circle at 30% 26%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.38) 18%, transparent 36%),
+                        radial-gradient(circle at 32% 30%, ${palette.panelStrong} 0%, ${palette.panel} 26%, ${palette.cream} 54%, ${palette.accent} 100%)
+                      `,
+                      border: `1px solid ${
+                        active ? "var(--paper-ink)" : "var(--paper-border)"
+                      }`,
                       boxShadow: active
-                        ? "0 0 0 3px rgba(32,28,24,0.12)"
-                        : "0 6px 16px rgba(32,28,24,0.08)",
-                      transform: active ? "translateY(-1px)" : undefined,
+                        ? `0 0 0 3px rgba(32,28,24,0.12),
+                           inset -8px -10px 18px rgba(0,0,0,0.14),
+                           inset 6px 8px 14px rgba(255,255,255,0.52),
+                           0 10px 18px rgba(32,28,24,0.18)`
+                        : `inset -8px -10px 18px rgba(0,0,0,0.12),
+                           inset 6px 8px 14px rgba(255,255,255,0.48),
+                           0 8px 14px rgba(32,28,24,0.12)`,
+                      transform: active ? "translateY(-2px) scale(1.03)" : undefined,
                     }}
                   >
                     <span
-                      className="h-3.5 w-3.5 rounded-full"
-                      style={{ background: palette.accent }}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-2 bottom-[-8px] h-3 rounded-full blur-[6px]"
+                      style={{
+                        background: `color-mix(in srgb, ${palette.accent} 42%, transparent)`,
+                        opacity: active ? 0.55 : 0.35,
+                      }}
+                    />
+                    <span
+                      className="pointer-events-none absolute left-[11px] top-[10px] h-3.5 w-3.5 rounded-full blur-[1px]"
+                      style={{ background: "rgba(255,255,255,0.72)" }}
                     />
                   </span>
-                  <span className="text-xs font-medium text-[var(--paper-muted)]">
+                  <span
+                    className="text-xs font-medium leading-tight text-[var(--paper-muted)]"
+                    style={{ color: active ? "var(--paper-ink)" : "var(--paper-muted)" }}
+                  >
                     {option.label}
                   </span>
                 </button>
@@ -299,6 +385,101 @@ export function GeneralSettingsPanel({
           <p className="mt-2 text-sm text-[var(--paper-muted)]">
             {tileSpacing.toFixed(2)}rem
           </p>
+        </div>
+
+        <div className="grid gap-3 rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.46)] p-4">
+          <div>
+            <p className="paper-label mb-1">Workspace dividers</p>
+            <p className="text-sm leading-7 text-[var(--paper-muted)]">
+              Controls the resize rails between panels in the editor and public reading view.
+            </p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-divider-spacing">
+              Divider spacing
+            </label>
+            <input
+              id="general-divider-spacing"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.dividerSpacing.min}
+              max={GENERAL_SETTINGS_LIMITS.dividerSpacing.max}
+              step={GENERAL_SETTINGS_LIMITS.dividerSpacing.step}
+              value={dividerSpacing}
+              onChange={(event) => setDividerSpacing(Number(event.target.value))}
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">{dividerSpacing}px</p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-divider-width">
+              Divider line width
+            </label>
+            <input
+              id="general-divider-width"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.dividerWidth.min}
+              max={GENERAL_SETTINGS_LIMITS.dividerWidth.max}
+              step={GENERAL_SETTINGS_LIMITS.dividerWidth.step}
+              value={dividerWidth}
+              onChange={(event) => setDividerWidth(Number(event.target.value))}
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">{dividerWidth}px</p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-divider-background-size">
+              Divider background size
+            </label>
+            <input
+              id="general-divider-background-size"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.dividerBackgroundSize.min}
+              max={GENERAL_SETTINGS_LIMITS.dividerBackgroundSize.max}
+              step={GENERAL_SETTINGS_LIMITS.dividerBackgroundSize.step}
+              value={dividerBackgroundSize}
+              onChange={(event) => setDividerBackgroundSize(Number(event.target.value))}
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">
+              {dividerBackgroundSize}px
+            </p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-divider-color">
+              Divider color
+            </label>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <input
+                id="general-divider-color"
+                type="color"
+                value={dividerColor}
+                onChange={(event) => {
+                  setDividerColor(event.target.value);
+                  setDividerColorInput(event.target.value);
+                }}
+                aria-label="Divider color"
+              />
+              <input
+                type="text"
+                className="paper-input max-w-[180px]"
+                value={dividerColorInput}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setDividerColorInput(nextValue);
+                  if (HEX_COLOR_PATTERN.test(nextValue)) {
+                    setDividerColor(nextValue);
+                  }
+                }}
+                spellCheck={false}
+                inputMode="text"
+                aria-label="Divider color hex value"
+              />
+            </div>
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">
+              Used for the divider line and the drag rail background.
+            </p>
+          </div>
         </div>
 
         <div className="grid gap-2 rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.46)] p-4">
@@ -436,6 +617,42 @@ export function GeneralSettingsPanel({
             </p>
           </div>
 
+          <div>
+            <label className="paper-label" htmlFor="general-math-inline-vertical-align">
+              Inline equation baseline offset
+            </label>
+            <input
+              id="general-math-inline-vertical-align"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.mathInlineVerticalAlign.min}
+              max={GENERAL_SETTINGS_LIMITS.mathInlineVerticalAlign.max}
+              step={GENERAL_SETTINGS_LIMITS.mathInlineVerticalAlign.step}
+              value={mathInlineVerticalAlign}
+              onChange={(event) => setMathInlineVerticalAlign(Number(event.target.value))}
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">
+              {mathInlineVerticalAlign.toFixed(2)}em
+            </p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-math-inline-translate-y">
+              Inline equation vertical nudge
+            </label>
+            <input
+              id="general-math-inline-translate-y"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.mathInlineTranslateY.min}
+              max={GENERAL_SETTINGS_LIMITS.mathInlineTranslateY.max}
+              step={GENERAL_SETTINGS_LIMITS.mathInlineTranslateY.step}
+              value={mathInlineTranslateY}
+              onChange={(event) => setMathInlineTranslateY(Number(event.target.value))}
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">
+              {mathInlineTranslateY.toFixed(2)}em
+            </p>
+          </div>
+
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
             <div>
               <label className="paper-label" htmlFor="general-math-font-family">
@@ -504,6 +721,47 @@ export function GeneralSettingsPanel({
             <p className="mt-2 text-sm text-[var(--paper-muted)]">
               Use a hex value like <code>#201c18</code>.
             </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.46)] p-4">
+          <div>
+            <p className="paper-label mb-1">Upload limits</p>
+            <p className="text-sm leading-7 text-[var(--paper-muted)]">
+              Controls the maximum accepted sizes for editor uploads. Folder uploads are compressed to a zip archive first, then checked against the file upload limit.
+            </p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-image-upload-limit">
+              Image upload limit
+            </label>
+            <input
+              id="general-image-upload-limit"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.imageUploadLimitMb.min}
+              max={GENERAL_SETTINGS_LIMITS.imageUploadLimitMb.max}
+              step={GENERAL_SETTINGS_LIMITS.imageUploadLimitMb.step}
+              value={imageUploadLimitMb}
+              onChange={(event) => setImageUploadLimitMb(Number(event.target.value))}
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">{imageUploadLimitMb}MB</p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-file-upload-limit">
+              File and folder upload limit
+            </label>
+            <input
+              id="general-file-upload-limit"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.min}
+              max={GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.max}
+              step={GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.step}
+              value={fileUploadLimitMb}
+              onChange={(event) => setFileUploadLimitMb(Number(event.target.value))}
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">{fileUploadLimitMb}MB</p>
           </div>
         </div>
 

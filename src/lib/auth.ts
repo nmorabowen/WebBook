@@ -1,13 +1,14 @@
-import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
+import { getUserByUsername, verifyUserCredentials } from "@/lib/user-store";
 
 const COOKIE_NAME = "webbook_session";
 
-type SessionPayload = {
+export type SessionPayload = {
   username: string;
+  role: "admin" | "editor";
 };
 
 function getSecretKey() {
@@ -36,7 +37,29 @@ export async function verifySessionToken(token?: string | null) {
 }
 
 export async function getSession() {
-  return { username: env.adminUsername };
+  if (env.authDisabled) {
+    return {
+      username: env.adminUsername.toLowerCase(),
+      role: "admin" as const,
+    };
+  }
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const payload = await verifySessionToken(token);
+  if (!payload) {
+    return null;
+  }
+
+  const user = await getUserByUsername(payload.username);
+  if (!user) {
+    return null;
+  }
+
+  return {
+    username: user.username,
+    role: user.role,
+  };
 }
 
 export async function requireSession() {
@@ -49,16 +72,18 @@ export async function requireSession() {
   return session;
 }
 
+export async function requireAdminSession() {
+  const session = await requireSession();
+
+  if (session.role !== "admin") {
+    redirect("/app");
+  }
+
+  return session;
+}
+
 export async function verifyCredentials(username: string, password: string) {
-  if (username !== env.adminUsername) {
-    return false;
-  }
-
-  if (password === env.adminPassword) {
-    return true;
-  }
-
-  return bcrypt.compare(password, env.adminPasswordHash);
+  return verifyUserCredentials(username, password);
 }
 
 export async function setSessionCookie(token: string) {

@@ -23,6 +23,15 @@ describe("content service", () => {
     const service = await loadService();
     await service.ensureContentScaffold();
 
+    await service.createNote({
+      title: "Scaffold Note",
+      slug: "scaffold-note",
+      summary: "Added by test",
+      body: "# Scaffold Note",
+      status: "draft",
+      allowExecution: true,
+    });
+
     const tree = await service.getContentTree();
     expect(tree.books.length).toBeGreaterThan(0);
     expect(tree.notes.length).toBeGreaterThan(0);
@@ -41,7 +50,6 @@ describe("content service", () => {
       description: "Testing chapter reordering",
       body: "# Finite Elements",
       status: "draft",
-      visibility: "private",
       theme: "paper",
     });
 
@@ -85,7 +93,7 @@ describe("content service", () => {
     ]);
   });
 
-  it("filters the public tree and duplicates a book with draft visibility", async () => {
+  it("filters the public tree and duplicates a draft book", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
 
@@ -95,7 +103,6 @@ describe("content service", () => {
       description: "Should not appear publicly",
       body: "# Private Draft Book",
       status: "draft",
-      visibility: "private",
       theme: "paper",
       fontPreset: "lato",
     });
@@ -106,7 +113,6 @@ describe("content service", () => {
       description: "Should appear publicly",
       body: "# Public Structural Book",
       status: "published",
-      visibility: "public",
       theme: "paper",
       fontPreset: "oswald",
       typography: {
@@ -135,7 +141,6 @@ describe("content service", () => {
 
     expect(publicTree.books.map((book) => book.meta.slug)).toContain("public-structural-book");
     expect(publicTree.books.map((book) => book.meta.slug)).not.toContain("private-draft-book");
-    expect(duplicate?.meta.visibility).toBe("private");
     expect(duplicate?.meta.status).toBe("draft");
     expect(duplicate?.chapters).toHaveLength(1);
     expect(duplicate?.meta.fontPreset).toBe("oswald");
@@ -153,7 +158,6 @@ describe("content service", () => {
       description: "Testing chapter menu actions",
       body: "# Chapter Actions",
       status: "draft",
-      visibility: "private",
       theme: "paper",
     });
 
@@ -199,6 +203,72 @@ describe("content service", () => {
     expect(book.chapters[0]?.meta.fontPreset).toBe("oswald");
   });
 
+  it("reorders books and notes persistently", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Alpha Book",
+      slug: "alpha-book",
+      description: "Alpha",
+      body: "# Alpha",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createBook({
+      title: "Beta Book",
+      slug: "beta-book",
+      description: "Beta",
+      body: "# Beta",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createNote({
+      title: "Alpha Note",
+      slug: "alpha-note",
+      summary: "Alpha",
+      body: "# Alpha Note",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await service.createNote({
+      title: "Beta Note",
+      slug: "beta-note",
+      summary: "Beta",
+      body: "# Beta Note",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await service.reorderBooks({
+      bookSlugs: ["beta-book", "webbook-handbook", "alpha-book"],
+    });
+
+    const beforeReorder = await service.getContentTree();
+    const reorderedNoteSlugs = [
+      "beta-note",
+      ...beforeReorder.notes
+        .map((note) => note.meta.slug)
+        .filter((slug) => slug !== "beta-note"),
+    ];
+
+    await service.reorderNotes({
+      noteSlugs: reorderedNoteSlugs,
+    });
+
+    const tree = await service.getContentTree();
+
+    expect(tree.books.map((book) => book.meta.slug)).toEqual([
+      "beta-book",
+      "webbook-handbook",
+      "alpha-book",
+    ]);
+    expect(tree.notes.map((note) => note.meta.slug)).toEqual(reorderedNoteSlugs);
+  });
+
   it("persists note typography settings across save, duplicate, and public reads", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
@@ -209,7 +279,6 @@ describe("content service", () => {
       summary: "Note typography test",
       body: "# Styled Note",
       status: "published",
-      visibility: "public",
       allowExecution: true,
       fontPreset: "lato",
       typography: {
@@ -229,7 +298,6 @@ describe("content service", () => {
       summary: "Updated note typography test",
       body: "# Styled Note\n\nBody",
       status: "published",
-      visibility: "public",
       allowExecution: true,
       fontPreset: "lato",
       typography: {
@@ -254,5 +322,83 @@ describe("content service", () => {
     expect(publicNote?.meta.typography?.paragraphSpacing).toBe(1.2);
     expect(duplicate?.meta.typography?.bodyLineHeight).toBe(1.95);
     expect(duplicate?.meta.typography?.contentWidth).toBe(58);
+  });
+
+  it("keeps at most three featured books and evicts the oldest featured selection", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    for (const title of ["Book One", "Book Two", "Book Three", "Book Four"]) {
+      await service.createBook({
+        title,
+        slug: title.toLowerCase().replace(/\s+/g, "-"),
+        description: `${title} description`,
+        body: `# ${title}`,
+        status: "published",
+        featured: true,
+        theme: "paper",
+      });
+    }
+
+    const tree = await service.getPublicContentTree();
+    const featuredBooks = tree.books.filter((book) => book.meta.featured);
+
+    expect(featuredBooks.map((book) => book.meta.slug).sort()).toEqual([
+      "book-four",
+      "book-three",
+      "book-two",
+    ]);
+    expect(featuredBooks).toHaveLength(3);
+    expect(featuredBooks.every((book) => typeof book.meta.featuredAt === "string")).toBe(true);
+  });
+
+  it("lists page media, blocks referenced deletes, and soft deletes to trash when forced", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Media Note",
+      slug: "media-note",
+      summary: "Has media",
+      body: "![Figure](/media/notes/media-note/figure.png)",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const uploadsFilePath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "notes",
+      "media-note",
+      "figure.png",
+    );
+    await fs.mkdir(path.dirname(uploadsFilePath), { recursive: true });
+    await fs.writeFile(uploadsFilePath, "image-bytes", "utf8");
+
+    const listedMedia = await service.listMediaForPage("note:media-note");
+    expect(listedMedia).toHaveLength(1);
+    expect(listedMedia[0]?.url).toBe("/media/notes/media-note/figure.png");
+    expect(listedMedia[0]?.references[0]?.id).toBe("note:media-note");
+
+    const blockedDelete = await service.removeMediaAsset(
+      "/media/notes/media-note/figure.png",
+    );
+    expect(blockedDelete.ok).toBe(false);
+    expect(blockedDelete.blocked).toBe(true);
+
+    const forcedDelete = await service.removeMediaAsset(
+      "/media/notes/media-note/figure.png",
+      true,
+    );
+    expect(forcedDelete.ok).toBe(true);
+    expect(forcedDelete.blocked).toBe(false);
+
+    await expect(fs.access(uploadsFilePath)).rejects.toThrow();
+
+    const trashRoot = path.join(process.cwd(), tempRoot, ".webbook", "trash", "uploads");
+    const trashEntries = await fs.readdir(trashRoot);
+    expect(trashEntries.length).toBeGreaterThan(0);
   });
 });

@@ -6,6 +6,7 @@ import {
   getContentTree,
   getGeneralSettings,
   getManifest,
+  listMediaForPage,
   loadRenderableContent,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
@@ -17,17 +18,18 @@ export default async function AppNotePage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const { slug } = await params;
   const loaded = await loadRenderableContent(`note:${slug}`);
   if (!loaded || loaded.content.kind !== "note") {
     notFound();
   }
 
-  const [tree, manifest, generalSettings] = await Promise.all([
+  const [tree, manifest, generalSettings, mediaAssets] = await Promise.all([
     getContentTree(),
     getManifest(),
     getGeneralSettings(),
+    listMediaForPage(loaded.content.id),
   ]);
   const toc = extractToc(loaded.content.body);
 
@@ -36,6 +38,8 @@ export default async function AppNotePage({
       tree={tree}
       currentPath={`/app/notes/${loaded.content.meta.slug}`}
       generalSettings={generalSettings}
+      session={session}
+      rightPanel={<div id="editor-shell-right-panel-root" />}
     >
       <EditorShell
         mode="note"
@@ -49,7 +53,6 @@ export default async function AppNotePage({
           summary: loaded.content.meta.summary,
           body: loaded.content.body,
           status: loaded.content.meta.status,
-          visibility: loaded.content.meta.visibility,
           allowExecution: loaded.content.meta.allowExecution,
           fontPreset: loaded.content.meta.fontPreset ?? "source-serif",
           typography: loaded.content.meta.typography,
@@ -58,7 +61,9 @@ export default async function AppNotePage({
         backlinks={loaded.backlinks}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
+        mediaAssets={mediaAssets}
         updateEndpoint={`/api/notes/${loaded.content.meta.slug}`}
+        shortcutScopeKey={session.username}
       />
     </AppShell>
   );

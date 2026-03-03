@@ -1,3 +1,4 @@
+import matter from "gray-matter";
 import { unified } from "unified";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -21,14 +22,82 @@ export type CodeCell = {
   runtime?: "python";
 };
 
-type Resolver = (target: string) => ManifestEntry | null;
+export type ResolvedWikiTarget = {
+  route: string;
+  title: string;
+};
 
-function headingId(value: string) {
+type Resolver = (target: string) => ResolvedWikiTarget | null;
+
+export function headingId(value: string) {
   return value
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, "")
     .replace(/\s+/g, "-");
+}
+
+export function splitWikiTarget(target: string) {
+  const [rawTarget, ...headingParts] = target.split("#");
+  return {
+    pageTarget: rawTarget.trim(),
+    headingTarget: headingParts.join("#").trim() || undefined,
+  };
+}
+
+function normalizeHeadingQuery(value: string) {
+  return headingId(value);
+}
+
+export function resolveWikiTargetFromManifest(
+  manifest: ManifestEntry[],
+  target: string,
+): ResolvedWikiTarget | null {
+  const { pageTarget, headingTarget } = splitWikiTarget(target);
+  if (!pageTarget && !headingTarget) {
+    return null;
+  }
+
+  const normalizedPageTarget = pageTarget.toLowerCase();
+  const entry =
+    manifest.find((candidate) => {
+      if (candidate.slug === normalizedPageTarget) {
+        return true;
+      }
+
+      return (
+        candidate.kind === "chapter" &&
+        candidate.bookSlug &&
+        `${candidate.bookSlug}/${candidate.slug}` === normalizedPageTarget
+      );
+    }) ?? null;
+
+  if (!entry) {
+    return null;
+  }
+
+  if (!headingTarget) {
+    return {
+      route: entry.route,
+      title: entry.title,
+    };
+  }
+
+  const normalizedHeadingTarget = normalizeHeadingQuery(headingTarget);
+  const heading = entry.headings?.find(
+    (candidate) =>
+      candidate.id === normalizedHeadingTarget ||
+      normalizeHeadingQuery(candidate.value) === normalizedHeadingTarget,
+  );
+
+  if (!heading) {
+    return null;
+  }
+
+  return {
+    route: `${entry.route}#${heading.id}`,
+    title: heading.value,
+  };
 }
 
 export function createWikiLinkPlugin(resolve: Resolver) {
@@ -87,10 +156,18 @@ export function createWikiLinkPlugin(resolve: Resolver) {
 }
 
 export function extractToc(markdown: string) {
-  const tree = unified().use(remarkParse).parse(markdown) as Root;
+  const parsed = matter(markdown);
+  const tree = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .parse(parsed.content) as Root;
   const toc: TocItem[] = [];
   visit(tree, "heading", (node) => {
-    const value = toString(node);
+    const value = toString(node).replace(/\s+/g, " ").trim();
+    if (!value) {
+      return;
+    }
     toc.push({
       depth: node.depth,
       value,

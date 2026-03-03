@@ -31,6 +31,34 @@ export function normalizeGeneralSettings(
         Number(input?.tileSpacing ?? DEFAULT_GENERAL_SETTINGS.tileSpacing),
       ),
     ),
+    dividerSpacing: Math.max(
+      GENERAL_SETTINGS_LIMITS.dividerSpacing.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.dividerSpacing.max,
+        Number(input?.dividerSpacing ?? DEFAULT_GENERAL_SETTINGS.dividerSpacing),
+      ),
+    ),
+    dividerColor:
+      typeof input?.dividerColor === "string" &&
+      /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(input.dividerColor)
+        ? input.dividerColor
+        : DEFAULT_GENERAL_SETTINGS.dividerColor,
+    dividerWidth: Math.max(
+      GENERAL_SETTINGS_LIMITS.dividerWidth.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.dividerWidth.max,
+        Number(input?.dividerWidth ?? DEFAULT_GENERAL_SETTINGS.dividerWidth),
+      ),
+    ),
+    dividerBackgroundSize: Math.max(
+      GENERAL_SETTINGS_LIMITS.dividerBackgroundSize.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.dividerBackgroundSize.max,
+        Number(
+          input?.dividerBackgroundSize ?? DEFAULT_GENERAL_SETTINGS.dividerBackgroundSize,
+        ),
+      ),
+    ),
     collapseBookChaptersByDefault:
       typeof input?.collapseBookChaptersByDefault === "boolean"
         ? input.collapseBookChaptersByDefault
@@ -51,6 +79,36 @@ export function normalizeGeneralSettings(
       typeof input?.mathFontFamily === "string" && input.mathFontFamily
         ? input.mathFontFamily
         : DEFAULT_GENERAL_SETTINGS.mathFontFamily,
+    mathInlineVerticalAlign: Math.max(
+      GENERAL_SETTINGS_LIMITS.mathInlineVerticalAlign.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.mathInlineVerticalAlign.max,
+        Number(
+          input?.mathInlineVerticalAlign ?? DEFAULT_GENERAL_SETTINGS.mathInlineVerticalAlign,
+        ),
+      ),
+    ),
+    mathInlineTranslateY: Math.max(
+      GENERAL_SETTINGS_LIMITS.mathInlineTranslateY.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.mathInlineTranslateY.max,
+        Number(input?.mathInlineTranslateY ?? DEFAULT_GENERAL_SETTINGS.mathInlineTranslateY),
+      ),
+    ),
+    imageUploadLimitMb: Math.max(
+      GENERAL_SETTINGS_LIMITS.imageUploadLimitMb.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.imageUploadLimitMb.max,
+        Number(input?.imageUploadLimitMb ?? DEFAULT_GENERAL_SETTINGS.imageUploadLimitMb),
+      ),
+    ),
+    fileUploadLimitMb: Math.max(
+      GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.max,
+        Number(input?.fileUploadLimitMb ?? DEFAULT_GENERAL_SETTINGS.fileUploadLimitMb),
+      ),
+    ),
     appSidebarWidth: Math.max(
       GENERAL_SETTINGS_LIMITS.appSidebarWidth.min,
       Math.min(
@@ -94,11 +152,19 @@ export function isDefaultGeneralSettings(
     normalized.colorTheme === DEFAULT_GENERAL_SETTINGS.colorTheme &&
     normalized.cornerRadius === DEFAULT_GENERAL_SETTINGS.cornerRadius &&
     normalized.tileSpacing === DEFAULT_GENERAL_SETTINGS.tileSpacing &&
+    normalized.dividerSpacing === DEFAULT_GENERAL_SETTINGS.dividerSpacing &&
+    normalized.dividerColor === DEFAULT_GENERAL_SETTINGS.dividerColor &&
+    normalized.dividerWidth === DEFAULT_GENERAL_SETTINGS.dividerWidth &&
+    normalized.dividerBackgroundSize === DEFAULT_GENERAL_SETTINGS.dividerBackgroundSize &&
     normalized.collapseBookChaptersByDefault ===
       DEFAULT_GENERAL_SETTINGS.collapseBookChaptersByDefault &&
     normalized.mathFontSize === DEFAULT_GENERAL_SETTINGS.mathFontSize &&
     normalized.mathFontColor === DEFAULT_GENERAL_SETTINGS.mathFontColor &&
     normalized.mathFontFamily === DEFAULT_GENERAL_SETTINGS.mathFontFamily &&
+    normalized.mathInlineVerticalAlign === DEFAULT_GENERAL_SETTINGS.mathInlineVerticalAlign &&
+    normalized.mathInlineTranslateY === DEFAULT_GENERAL_SETTINGS.mathInlineTranslateY &&
+    normalized.imageUploadLimitMb === DEFAULT_GENERAL_SETTINGS.imageUploadLimitMb &&
+    normalized.fileUploadLimitMb === DEFAULT_GENERAL_SETTINGS.fileUploadLimitMb &&
     normalized.appSidebarWidth === DEFAULT_GENERAL_SETTINGS.appSidebarWidth &&
     normalized.appInspectorWidth === DEFAULT_GENERAL_SETTINGS.appInspectorWidth &&
     normalized.publicLeftPanelWidth === DEFAULT_GENERAL_SETTINGS.publicLeftPanelWidth &&

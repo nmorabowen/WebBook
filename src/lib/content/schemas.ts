@@ -6,10 +6,10 @@ import { colorThemeValues } from "@/lib/color-themes";
 import { GENERAL_SETTINGS_LIMITS } from "@/lib/general-settings-config";
 
 export const statusSchema = z.enum(["draft", "published"]);
-export const visibilitySchema = z.enum(["public", "private"]);
 export const fontPresetSchema = z.enum(fontPresetValues);
 export const mathJaxFontFamilySchema = z.enum(mathJaxFontValues);
 export const colorThemeSchema = z.enum(colorThemeValues);
+export const hexColorSchema = z.string().regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/);
 export const bookTypographySchema = z.object({
   bodyFontSize: z
     .number()
@@ -52,9 +52,12 @@ export const baseMetaSchema = z.object({
 export const bookMetaSchema = baseMetaSchema.extend({
   kind: z.literal("book"),
   description: z.string().optional(),
+  order: z.number().int().nonnegative().optional(),
   status: statusSchema,
-  visibility: visibilitySchema,
+  featured: z.boolean().optional(),
+  featuredAt: z.string().optional(),
   coverImage: z.string().optional(),
+  coverColor: hexColorSchema.optional(),
   theme: z.enum(["paper", "graphite"]).optional(),
   fontPreset: fontPresetSchema.optional(),
   typography: bookTypographySchema.optional(),
@@ -73,8 +76,8 @@ export const chapterMetaSchema = baseMetaSchema.extend({
 export const noteMetaSchema = baseMetaSchema.extend({
   kind: z.literal("note"),
   summary: z.string().optional(),
+  order: z.number().int().nonnegative().optional(),
   status: statusSchema,
-  visibility: visibilitySchema,
   allowExecution: z.boolean(),
   fontPreset: fontPresetSchema.optional(),
   typography: bookTypographySchema.optional(),
@@ -141,6 +144,12 @@ export type SearchDocument = {
   body: string;
 };
 
+export type ManifestHeading = {
+  id: string;
+  value: string;
+  depth: number;
+};
+
 export type ManifestEntry = {
   id: string;
   kind: "book" | "chapter" | "note";
@@ -148,10 +157,22 @@ export type ManifestEntry = {
   title: string;
   route: string;
   status: "draft" | "published";
-  visibility?: "public" | "private";
   allowExecution?: boolean;
   bookSlug?: string;
   summary?: string;
+  headings?: ManifestHeading[];
+};
+
+export type MediaReference = Pick<ManifestEntry, "id" | "kind" | "title" | "route">;
+
+export type MediaAsset = {
+  name: string;
+  url: string;
+  relativePath: string;
+  folder: string;
+  size: number;
+  modifiedAt: string;
+  references: MediaReference[];
 };
 
 export const saveNoteSchema = z.object({
@@ -160,7 +181,6 @@ export const saveNoteSchema = z.object({
   summary: z.string().optional(),
   body: z.string(),
   status: statusSchema.default("draft"),
-  visibility: visibilitySchema.default("private"),
   allowExecution: z.boolean().default(true),
   fontPreset: fontPresetSchema.default("source-serif"),
   typography: bookTypographySchema.optional(),
@@ -173,8 +193,8 @@ export const saveBookSchema = z.object({
   description: z.string().optional(),
   body: z.string(),
   status: statusSchema.default("draft"),
-  visibility: visibilitySchema.default("private"),
-  theme: z.enum(["paper", "graphite"]).default("paper"),
+  featured: z.boolean().default(false),
+  coverColor: hexColorSchema.default("#292118"),
   fontPreset: fontPresetSchema.default("source-serif"),
   typography: bookTypographySchema.optional(),
   createRevision: z.boolean().optional(),
@@ -201,6 +221,14 @@ export const reorderChaptersSchema = z.object({
   chapterSlugs: z.array(z.string().min(1)).min(1),
 });
 
+export const reorderBooksSchema = z.object({
+  bookSlugs: z.array(z.string().min(1)).min(1),
+});
+
+export const reorderNotesSchema = z.object({
+  noteSlugs: z.array(z.string().min(1)).min(1),
+});
+
 export const generalSettingsSchema = z.object({
   colorTheme: colorThemeSchema,
   cornerRadius: z
@@ -211,6 +239,19 @@ export const generalSettingsSchema = z.object({
     .number()
     .min(GENERAL_SETTINGS_LIMITS.tileSpacing.min)
     .max(GENERAL_SETTINGS_LIMITS.tileSpacing.max),
+  dividerSpacing: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.dividerSpacing.min)
+    .max(GENERAL_SETTINGS_LIMITS.dividerSpacing.max),
+  dividerColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/),
+  dividerWidth: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.dividerWidth.min)
+    .max(GENERAL_SETTINGS_LIMITS.dividerWidth.max),
+  dividerBackgroundSize: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.dividerBackgroundSize.min)
+    .max(GENERAL_SETTINGS_LIMITS.dividerBackgroundSize.max),
   collapseBookChaptersByDefault: z.boolean(),
   mathFontSize: z
     .number()
@@ -218,6 +259,22 @@ export const generalSettingsSchema = z.object({
     .max(GENERAL_SETTINGS_LIMITS.mathFontSize.max),
   mathFontColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/),
   mathFontFamily: mathJaxFontFamilySchema,
+  mathInlineVerticalAlign: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.mathInlineVerticalAlign.min)
+    .max(GENERAL_SETTINGS_LIMITS.mathInlineVerticalAlign.max),
+  mathInlineTranslateY: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.mathInlineTranslateY.min)
+    .max(GENERAL_SETTINGS_LIMITS.mathInlineTranslateY.max),
+  imageUploadLimitMb: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.imageUploadLimitMb.min)
+    .max(GENERAL_SETTINGS_LIMITS.imageUploadLimitMb.max),
+  fileUploadLimitMb: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.min)
+    .max(GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.max),
   appSidebarWidth: z
     .number()
     .min(GENERAL_SETTINGS_LIMITS.appSidebarWidth.min)

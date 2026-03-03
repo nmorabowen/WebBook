@@ -12,10 +12,14 @@ import {
   type ContentTree,
   type GeneralSettings,
   type ManifestEntry,
+  type MediaAsset,
+  type MediaReference,
   type NoteMeta,
   type NoteRecord,
   noteMetaSchema,
+  reorderBooksSchema,
   reorderChaptersSchema,
+  reorderNotesSchema,
   restoreRevisionSchema,
   saveBookSchema,
   saveChapterSchema,
@@ -23,16 +27,33 @@ import {
   saveNoteSchema,
   type SearchDocument,
 } from "@/lib/content/schemas";
-import { defaultBookTypography, normalizeBookTypography } from "@/lib/book-typography";
+import {
+  defaultBookTypography,
+  defaultNoteTypography,
+  normalizeBookTypography,
+} from "@/lib/book-typography";
 import { env } from "@/lib/env";
 import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
 import { normalizeGeneralSettings } from "@/lib/general-settings";
+import {
+  defaultUploadTargetPath,
+  mediaRelativePathToUrl,
+  mediaUrlToRelativePath,
+  normalizeMediaTargetPath,
+} from "@/lib/media-paths";
+import { extractToc, headingId, splitWikiTarget } from "@/lib/markdown/shared";
 import { isSafeSlug, safeJsonParse, stripMarkdown, toSlug } from "@/lib/utils";
+import {
+  buildWorkspaceArchive,
+  restoreWorkspaceArchive,
+} from "@/lib/workspace-transfer";
 
 const contentRoot = path.join(process.cwd(), env.contentRoot);
 const booksRoot = path.join(contentRoot, "books");
 const notesRoot = path.join(contentRoot, "notes");
 const systemRoot = path.join(contentRoot, ".webbook");
+const uploadsRoot = path.join(systemRoot, "uploads");
+const trashUploadsRoot = path.join(systemRoot, "trash", "uploads");
 const revisionsRoot = path.join(systemRoot, "revisions");
 const indexesRoot = path.join(systemRoot, "indexes");
 const settingsFilePath = path.join(systemRoot, "settings.json");
@@ -59,6 +80,10 @@ function chapterFilePath(bookSlug: string, chapterSlug: string, order: number) {
 
 function noteFilePath(slug: string) {
   return path.join(notesRoot, `${slug}.md`);
+}
+
+function contentOrder(order?: number) {
+  return order ?? Number.MAX_SAFE_INTEGER;
 }
 
 function bookFilePath(bookSlug: string) {
@@ -100,6 +125,38 @@ async function writeFileAtomic(filePath: string, content: string) {
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   await fs.writeFile(tempPath, content, "utf8");
   await fs.rename(tempPath, filePath);
+}
+
+function featuredTimestamp(book: BookRecord) {
+  return new Date(book.meta.featuredAt ?? book.meta.updatedAt).getTime();
+}
+
+async function enforceFeaturedBookLimit() {
+  const books = await listBookRecords();
+  const now = new Date().toISOString();
+  const featuredBooks = books
+    .filter((book) => book.meta.featured === true)
+    .sort((left, right) => featuredTimestamp(right) - featuredTimestamp(left));
+
+  await Promise.all(
+    featuredBooks
+      .slice(3)
+      .map((book) =>
+        fs.writeFile(
+          book.filePath,
+          renderMatter(
+            {
+              ...book.meta,
+              featured: false,
+              featuredAt: undefined,
+              updatedAt: now,
+            } satisfies BookMeta,
+            book.body,
+          ),
+          "utf8",
+        ),
+      ),
+  );
 }
 
 async function ensureSettingsFile() {
@@ -257,7 +314,11 @@ async function listBookRecords() {
         }),
     )
   ).filter((book): book is BookRecord => book !== null);
-  return books.sort((left, right) => left.meta.title.localeCompare(right.meta.title));
+  return books.sort(
+    (left, right) =>
+      contentOrder(left.meta.order) - contentOrder(right.meta.order) ||
+      left.meta.title.localeCompare(right.meta.title),
+  );
 }
 
 async function listNoteRecords() {
@@ -275,7 +336,57 @@ async function listNoteRecords() {
         }),
     )
   ).filter((note): note is NoteRecord => note !== null);
-  return notes.sort((left, right) => left.meta.title.localeCompare(right.meta.title));
+  return notes.sort(
+    (left, right) =>
+      contentOrder(left.meta.order) - contentOrder(right.meta.order) ||
+      left.meta.title.localeCompare(right.meta.title),
+  );
+}
+
+function recordToMediaReference(record: ContentRecord): MediaReference {
+  return {
+    id: record.id,
+    kind: record.kind,
+    title: record.meta.title,
+    route: record.route,
+  };
+}
+
+async function listAllContentRecords() {
+  const books = await listBookRecords();
+  const notes = await listNoteRecords();
+  return [
+    ...books,
+    ...books.flatMap((book) => book.chapters),
+    ...notes,
+  ] satisfies ContentRecord[];
+}
+
+async function listFilesRecursively(directoryPath: string): Promise<string[]> {
+  const entries = await readDirectoryEntries(directoryPath);
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const nextPath = path.join(directoryPath, entry.name);
+      if (entry.isDirectory()) {
+        return listFilesRecursively(nextPath);
+      }
+
+      if (entry.isFile()) {
+        return [nextPath];
+      }
+
+      return [];
+    }),
+  );
+
+  return nested.flat();
+}
+
+async function findMediaReferences(url: string): Promise<MediaReference[]> {
+  const records = await listAllContentRecords();
+  return records
+    .filter((record) => record.body.includes(url))
+    .map(recordToMediaReference);
 }
 
 async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] }) {
@@ -292,8 +403,8 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
       title: book.meta.title,
       route: book.route,
       status: book.meta.status,
-      visibility: book.meta.visibility,
       summary: book.meta.description,
+      headings: extractToc(book.body),
     };
 
     manifest.push(bookEntry);
@@ -318,6 +429,7 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
         bookSlug: chapter.meta.bookSlug,
         allowExecution: chapter.meta.allowExecution,
         summary: chapter.meta.summary,
+        headings: extractToc(chapter.body),
       };
 
       manifest.push(chapterEntry);
@@ -343,9 +455,9 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
       title: note.meta.title,
       route: note.route,
       status: note.meta.status,
-      visibility: note.meta.visibility,
       allowExecution: note.meta.allowExecution,
       summary: note.meta.summary,
+      headings: extractToc(note.body),
     };
 
     manifest.push(noteEntry);
@@ -367,7 +479,8 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
 
   for (const item of allContent) {
     for (const target of extractWikiTargets(item.body)) {
-      const resolved = aliasLookup.get(target);
+      const { pageTarget } = splitWikiTarget(target);
+      const resolved = aliasLookup.get(pageTarget || target);
       if (!resolved) {
         continue;
       }
@@ -380,10 +493,6 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
           title: item.meta.title,
           route: item.route,
           status: item.meta.status,
-          visibility:
-            item.kind === "note" || item.kind === "book"
-              ? item.meta.visibility
-              : undefined,
           bookSlug: item.kind === "chapter" ? item.meta.bookSlug : undefined,
         });
       }
@@ -428,11 +537,14 @@ export async function ensureContentScaffold() {
         title: "WebBook Handbook",
         slug: sampleBookSlug,
         description: "An example book blending math, prose, and live code.",
+        order: 1,
         status: "published",
-        visibility: "public",
+        featured: true,
+        coverColor: "#292118",
         theme: "paper",
         fontPreset: "source-serif",
         typography: defaultBookTypography,
+        featuredAt: now,
         createdAt: now,
         updatedAt: now,
         publishedAt: now,
@@ -484,11 +596,11 @@ export async function ensureContentScaffold() {
         title: "WebBook Notes",
         slug: "webbook-notes",
         summary: "Standalone notes can publish outside a book.",
+        order: 1,
         status: "published",
-        visibility: "public",
         allowExecution: true,
         fontPreset: "source-serif",
-        typography: defaultBookTypography,
+        typography: defaultNoteTypography,
         createdAt: now,
         updatedAt: now,
         publishedAt: now,
@@ -540,6 +652,21 @@ export async function updateGeneralSettings(input: unknown) {
   return settings;
 }
 
+export async function exportWorkspaceArchive() {
+  await ensureContentScaffold();
+  return buildWorkspaceArchive(contentRoot);
+}
+
+export async function importWorkspaceArchive(archiveBuffer: Buffer) {
+  await restoreWorkspaceArchive(archiveBuffer, contentRoot);
+  await ensureContentScaffold();
+  await rebuildIndexes();
+  return {
+    tree: await getContentTree(),
+    settings: await getGeneralSettings(),
+  };
+}
+
 export async function listContent() {
   await ensureContentScaffold();
   const [books, notes] = await Promise.all([listBookRecords(), listNoteRecords()]);
@@ -560,11 +687,7 @@ function toContentTree(
 
   return {
     books: books
-      .filter(
-        (book) =>
-          !publicOnly ||
-          (book.meta.status === "published" && book.meta.visibility === "public"),
-      )
+      .filter((book) => !publicOnly || book.meta.status === "published")
       .map((book) => ({
         meta: book.meta,
         route: book.route,
@@ -576,11 +699,7 @@ function toContentTree(
           })),
       })),
     notes: notes
-      .filter(
-        (note) =>
-          !publicOnly ||
-          (note.meta.status === "published" && note.meta.visibility === "public"),
-      )
+      .filter((note) => !publicOnly || note.meta.status === "published")
       .map((note) => ({
         meta: note.meta,
         route: note.route,
@@ -623,7 +742,7 @@ export async function getNote(slug: string) {
 
 export async function getPublicBook(bookSlug: string) {
   const book = await getBook(bookSlug);
-  if (book.meta.status !== "published" || book.meta.visibility !== "public") {
+  if (book.meta.status !== "published") {
     return null;
   }
   return {
@@ -646,7 +765,7 @@ export async function getPublicChapter(bookSlug: string, chapterSlug: string) {
 
 export async function getPublicNote(slug: string) {
   const note = await getNote(slug);
-  if (!note || note.meta.status !== "published" || note.meta.visibility !== "public") {
+  if (!note || note.meta.status !== "published") {
     return null;
   }
   return note;
@@ -691,15 +810,29 @@ export async function getManifest() {
 
 export async function unresolvedWikiLinks(markdown: string) {
   const manifest = await getManifest();
-  const aliases = new Set(
-    manifest.flatMap((entry) => [
-      entry.slug,
-      entry.kind === "chapter" && entry.bookSlug
-        ? `${entry.bookSlug}/${entry.slug}`
-        : null,
-    ]),
-  );
-  return extractWikiTargets(markdown).filter((target) => !aliases.has(target));
+  const aliasLookup = new Map<string, ManifestEntry>();
+  manifest.forEach((entry) => {
+    buildAliases(entry).forEach((alias) => aliasLookup.set(alias, entry));
+  });
+
+  return extractWikiTargets(markdown).filter((target) => {
+    const { pageTarget, headingTarget } = splitWikiTarget(target);
+    const resolved = aliasLookup.get(pageTarget || target);
+    if (!resolved) {
+      return true;
+    }
+
+    if (!headingTarget) {
+      return false;
+    }
+
+    const normalizedHeading = headingId(headingTarget);
+    return !resolved.headings?.some(
+      (heading) =>
+        heading.id === normalizedHeading ||
+        headingId(heading.value) === normalizedHeading,
+    );
+  });
 }
 
 async function createRevision(id: string, raw: string) {
@@ -724,6 +857,12 @@ export async function createBook(input: unknown) {
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
   const now = new Date().toISOString();
+  const existingBooks = await listBookRecords();
+  const nextOrder =
+    existingBooks.reduce(
+      (highestOrder, book) => Math.max(highestOrder, book.meta.order ?? 0),
+      0,
+    ) + 1;
   const directoryPath = bookDirectory(slug);
   await ensureDirectory(path.join(directoryPath, "chapters"));
   const raw = renderMatter(
@@ -732,9 +871,11 @@ export async function createBook(input: unknown) {
       title: data.title,
       slug,
       description: data.description,
+      order: nextOrder,
       status: data.status,
-      visibility: data.visibility,
-      theme: data.theme,
+      featured: data.featured,
+      coverColor: data.coverColor,
+      featuredAt: data.featured ? now : undefined,
       fontPreset: data.fontPreset,
       typography: normalizeBookTypography(data.typography),
       createdAt: now,
@@ -744,6 +885,9 @@ export async function createBook(input: unknown) {
     data.body,
   );
   await fs.writeFile(bookFilePath(slug), raw, "utf8");
+  if (data.featured) {
+    await enforceFeaturedBookLimit();
+  }
   await rebuildIndexes();
   return getBook(slug);
 }
@@ -759,8 +903,13 @@ export async function updateBook(bookSlug: string, input: unknown) {
       slug: existing.meta.slug,
       description: data.description,
       status: data.status,
-      visibility: data.visibility,
-      theme: data.theme,
+      featured: data.featured,
+      coverColor: data.coverColor,
+      featuredAt: data.featured
+        ? existing.meta.featured
+          ? existing.meta.featuredAt ?? now
+          : now
+        : undefined,
       fontPreset: data.fontPreset,
       typography: normalizeBookTypography(data.typography ?? existing.meta.typography),
       updatedAt: now,
@@ -775,6 +924,9 @@ export async function updateBook(bookSlug: string, input: unknown) {
     await createRevision(existing.id, existing.raw);
   }
   await fs.writeFile(existing.filePath, raw, "utf8");
+  if (data.featured) {
+    await enforceFeaturedBookLimit();
+  }
   await rebuildIndexes();
   return getBook(existing.meta.slug);
 }
@@ -923,21 +1075,118 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
   return getBook(bookSlug);
 }
 
+export async function reorderBooks(input: unknown) {
+  const data = reorderBooksSchema.parse(input);
+  const books = await listBookRecords();
+  const bookMap = new Map(books.map((book) => [book.meta.slug, book] as const));
+  const uniqueSlugs = new Set(data.bookSlugs);
+
+  if (data.bookSlugs.length !== books.length || uniqueSlugs.size !== books.length) {
+    throw new Error("Book reorder payload does not match the current workspace");
+  }
+
+  for (const slug of data.bookSlugs) {
+    ensureSafeSlugOrThrow(slug);
+    if (!bookMap.has(slug)) {
+      throw new Error(`Unknown book slug: ${slug}`);
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  await Promise.all(
+    data.bookSlugs.map(async (slug, index) => {
+      const book = bookMap.get(slug);
+      if (!book) {
+        throw new Error(`Unknown book slug: ${slug}`);
+      }
+
+      await fs.writeFile(
+        book.filePath,
+        renderMatter(
+          {
+            ...book.meta,
+            order: index + 1,
+            updatedAt: now,
+          } satisfies BookMeta,
+          book.body,
+        ),
+        "utf8",
+      );
+    }),
+  );
+
+  await rebuildIndexes();
+  return getContentTree();
+}
+
+export async function reorderNotes(input: unknown) {
+  const data = reorderNotesSchema.parse(input);
+  const notes = await listNoteRecords();
+  const noteMap = new Map(notes.map((note) => [note.meta.slug, note] as const));
+  const uniqueSlugs = new Set(data.noteSlugs);
+
+  if (data.noteSlugs.length !== notes.length || uniqueSlugs.size !== notes.length) {
+    throw new Error("Note reorder payload does not match the current workspace");
+  }
+
+  for (const slug of data.noteSlugs) {
+    ensureSafeSlugOrThrow(slug);
+    if (!noteMap.has(slug)) {
+      throw new Error(`Unknown note slug: ${slug}`);
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  await Promise.all(
+    data.noteSlugs.map(async (slug, index) => {
+      const note = noteMap.get(slug);
+      if (!note) {
+        throw new Error(`Unknown note slug: ${slug}`);
+      }
+
+      await fs.writeFile(
+        note.filePath,
+        renderMatter(
+          {
+            ...note.meta,
+            order: index + 1,
+            updatedAt: now,
+          } satisfies NoteMeta,
+          note.body,
+        ),
+        "utf8",
+      );
+    }),
+  );
+
+  await rebuildIndexes();
+  return getContentTree();
+}
+
 export async function createNote(input: unknown) {
   const data = saveNoteSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
   const now = new Date().toISOString();
+  const existingNotes = await listNoteRecords();
+  const nextOrder =
+    existingNotes.reduce(
+      (highestOrder, note) => Math.max(highestOrder, note.meta.order ?? 0),
+      0,
+    ) + 1;
   const raw = renderMatter(
     {
       kind: "note",
       title: data.title,
       slug,
       summary: data.summary,
+      order: nextOrder,
       status: data.status,
-      visibility: data.visibility,
       allowExecution: data.allowExecution,
       fontPreset: data.fontPreset,
+      typography: normalizeBookTypography(data.typography, defaultNoteTypography),
       createdAt: now,
       updatedAt: now,
       publishedAt: data.status === "published" ? now : undefined,
@@ -963,10 +1212,12 @@ export async function updateNote(slug: string, input: unknown) {
       slug: existing.meta.slug,
       summary: data.summary,
       status: data.status,
-      visibility: data.visibility,
       allowExecution: data.allowExecution,
       fontPreset: data.fontPreset,
-      typography: normalizeBookTypography(data.typography ?? existing.meta.typography),
+      typography: normalizeBookTypography(
+        data.typography ?? existing.meta.typography,
+        defaultNoteTypography,
+      ),
       updatedAt: now,
       publishedAt:
         data.status === "published"
@@ -991,6 +1242,11 @@ export async function duplicateBook(bookSlug: string) {
     new Set(allBooks.map((book) => book.meta.slug)),
   );
   const now = new Date().toISOString();
+  const nextOrder =
+    allBooks.reduce(
+      (highestOrder, book) => Math.max(highestOrder, book.meta.order ?? 0),
+      0,
+    ) + 1;
   const directoryPath = bookDirectory(nextSlug);
 
   await ensureDirectory(path.join(directoryPath, "chapters"));
@@ -1001,12 +1257,15 @@ export async function duplicateBook(bookSlug: string) {
         ...existing.meta,
         title: nextCopyTitle(existing.meta.title),
         slug: nextSlug,
+        order: nextOrder,
         status: "draft",
-        visibility: "private",
+        featured: false,
+        featuredAt: undefined,
+        coverColor: existing.meta.coverColor ?? "#292118",
         publishedAt: undefined,
         updatedAt: now,
         createdAt: now,
-        typography: normalizeBookTypography(existing.meta.typography),
+        typography: normalizeBookTypography(existing.meta.typography, defaultNoteTypography),
       } satisfies BookMeta,
       existing.body,
     ),
@@ -1088,6 +1347,11 @@ export async function duplicateNote(slug: string) {
     new Set(allNotes.map((note) => note.meta.slug)),
   );
   const now = new Date().toISOString();
+  const nextOrder =
+    allNotes.reduce(
+      (highestOrder, note) => Math.max(highestOrder, note.meta.order ?? 0),
+      0,
+    ) + 1;
 
   await fs.writeFile(
     noteFilePath(nextSlug),
@@ -1096,12 +1360,12 @@ export async function duplicateNote(slug: string) {
         ...existing.meta,
         title: nextCopyTitle(existing.meta.title),
         slug: nextSlug,
+        order: nextOrder,
         status: "draft",
-        visibility: "private",
         publishedAt: undefined,
         updatedAt: now,
         createdAt: now,
-        typography: normalizeBookTypography(existing.meta.typography),
+        typography: normalizeBookTypography(existing.meta.typography, defaultNoteTypography),
       } satisfies NoteMeta,
       existing.body,
     ),
@@ -1114,11 +1378,35 @@ export async function duplicateNote(slug: string) {
 
 export async function deleteBook(bookSlug: string) {
   const book = await getBook(bookSlug);
+  const books = await listBookRecords();
   await createRevision(book.id, book.raw);
   for (const chapter of book.chapters) {
     await createRevision(chapter.id, chapter.raw);
   }
   await fs.rm(bookDirectory(bookSlug), { recursive: true, force: true });
+  const now = new Date().toISOString();
+  await Promise.all(
+    books
+      .filter((entry) => entry.meta.slug !== bookSlug)
+      .sort(
+        (left, right) =>
+          contentOrder(left.meta.order) - contentOrder(right.meta.order),
+      )
+      .map((entry, index) =>
+        fs.writeFile(
+          entry.filePath,
+          renderMatter(
+            {
+              ...entry.meta,
+              order: index + 1,
+              updatedAt: now,
+            } satisfies BookMeta,
+            entry.body,
+          ),
+          "utf8",
+        ),
+      ),
+  );
   await rebuildIndexes();
 }
 
@@ -1175,12 +1463,36 @@ export async function deleteChapter(bookSlug: string, chapterSlug: string) {
 
 export async function deleteNote(slug: string) {
   const note = await getNote(slug);
+  const notes = await listNoteRecords();
   if (!note) {
     throw new Error("Note not found");
   }
 
   await createRevision(note.id, note.raw);
   await fs.rm(note.filePath, { force: true });
+  const now = new Date().toISOString();
+  await Promise.all(
+    notes
+      .filter((entry) => entry.meta.slug !== slug)
+      .sort(
+        (left, right) =>
+          contentOrder(left.meta.order) - contentOrder(right.meta.order),
+      )
+      .map((entry, index) =>
+        fs.writeFile(
+          entry.filePath,
+          renderMatter(
+            {
+              ...entry.meta,
+              order: index + 1,
+              updatedAt: now,
+            } satisfies NoteMeta,
+            entry.body,
+          ),
+          "utf8",
+        ),
+      ),
+  );
   await rebuildIndexes();
 }
 
@@ -1197,10 +1509,9 @@ export async function publishContentById(id: string, published: boolean) {
       summary: note.meta.summary,
       body: note.body,
       status: published ? "published" : "draft",
-      visibility: published ? "public" : note.meta.visibility,
       allowExecution: note.meta.allowExecution,
       fontPreset: note.meta.fontPreset ?? "source-serif",
-      typography: normalizeBookTypography(note.meta.typography),
+      typography: normalizeBookTypography(note.meta.typography, defaultNoteTypography),
       createRevision: true,
     });
   }
@@ -1212,8 +1523,8 @@ export async function publishContentById(id: string, published: boolean) {
       description: book.meta.description,
       body: book.body,
       status: published ? "published" : "draft",
-      visibility: published ? "public" : book.meta.visibility,
-      theme: book.meta.theme ?? "paper",
+      featured: book.meta.featured ?? false,
+      coverColor: book.meta.coverColor ?? "#292118",
       fontPreset: book.meta.fontPreset ?? "source-serif",
       typography: normalizeBookTypography(book.meta.typography),
       createRevision: true,
@@ -1280,5 +1591,66 @@ export async function loadRenderableContent(id: string) {
     backlinks: await getBacklinks(id),
     revisions: await listRevisions(id),
     unresolvedLinks: await unresolvedWikiLinks(content.body),
+  };
+}
+
+export async function listMediaForPage(pageId: string): Promise<MediaAsset[]> {
+  const relativeFolder = normalizeMediaTargetPath(defaultUploadTargetPath(pageId));
+  const directoryPath = path.join(uploadsRoot, ...relativeFolder.split("/"));
+
+  try {
+    await fs.access(directoryPath);
+  } catch {
+    return [];
+  }
+
+  const files = await listFilesRecursively(directoryPath);
+  const assets = await Promise.all(
+    files.map(async (filePath) => {
+      const relativePath = path.relative(uploadsRoot, filePath).split(path.sep).join("/");
+      const url = mediaRelativePathToUrl(relativePath);
+      const stats = await fs.stat(filePath);
+
+      return {
+        name: path.basename(filePath),
+        url,
+        relativePath,
+        folder: relativeFolder,
+        size: stats.size,
+        modifiedAt: stats.mtime.toISOString(),
+        references: await findMediaReferences(url),
+      } satisfies MediaAsset;
+    }),
+  );
+
+  return assets.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+}
+
+export async function removeMediaAsset(url: string, force = false) {
+  const relativePath = mediaUrlToRelativePath(url);
+  const resolvedPath = path.resolve(uploadsRoot, ...relativePath.split("/"));
+
+  if (!resolvedPath.startsWith(path.resolve(uploadsRoot))) {
+    throw new Error("Invalid media asset path");
+  }
+
+  const references = await findMediaReferences(url);
+  if (references.length > 0 && !force) {
+    return {
+      ok: false as const,
+      blocked: true,
+      references,
+    };
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const destinationPath = path.join(trashUploadsRoot, timestamp, ...relativePath.split("/"));
+  await ensureDirectory(path.dirname(destinationPath));
+  await fs.rename(resolvedPath, destinationPath);
+
+  return {
+    ok: true as const,
+    blocked: false,
+    references,
   };
 }

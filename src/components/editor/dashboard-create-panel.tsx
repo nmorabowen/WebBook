@@ -32,8 +32,6 @@ export function DashboardCreatePanel({
                 description: "A fresh WebBook.",
                 body: "# New book\n\nOutline the idea here.",
                 status: "draft",
-                visibility: "private",
-                theme: "paper",
               }
             : {
                 title,
@@ -41,8 +39,16 @@ export function DashboardCreatePanel({
                 summary: "A fresh standalone note.",
                 body: "# New note\n\nStart writing here.",
                 status: "draft",
-                visibility: "private",
                 allowExecution: true,
+                typography: {
+                  bodyFontSize: 1,
+                  bodyLineHeight: 1,
+                  headingBaseSize: 2.5,
+                  headingScale: 1.25,
+                  headingIndentStep: 0,
+                  paragraphSpacing: 1,
+                  contentWidth: 75,
+                },
               },
         ),
       });

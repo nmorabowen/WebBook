@@ -2,7 +2,7 @@
 title: Plane Stress Element
 slug: plane-stress-element
 createdAt: '2026-03-02T02:58:47.271Z'
-updatedAt: '2026-03-02T15:25:49.337Z'
+updatedAt: '2026-03-03T06:31:36.913Z'
 publishedAt: '2026-03-02T02:59:32.325Z'
 kind: chapter
 bookSlug: fem
@@ -21,6 +21,7 @@ fontPreset: archivo-narrow
 ### Modelo Matemático de la Placa
 
 ![[InternalStressPlate.png]]
+
 
 
 ## Relaciones Esfuerzo - Deformación

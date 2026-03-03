@@ -1,0 +1,17 @@
+export const bookCoverColorPresets = [
+  { value: "#292118", label: "Classic Umber" },
+  { value: "#3a2b22", label: "Mocha" },
+  { value: "#4b3426", label: "Walnut" },
+  { value: "#6b4636", label: "Cedar Brown" },
+  { value: "#7a4030", label: "Burnt Sienna" },
+  { value: "#8f5335", label: "Sepia" },
+  { value: "#9b5c3b", label: "Terracotta" },
+  { value: "#876847", label: "Bronze Linen" },
+  { value: "#4f6678", label: "Graphite Blue" },
+  { value: "#406f88", label: "Harbor Blue" },
+  { value: "#2f6fb4", label: "Cobalt" },
+  { value: "#5f7d63", label: "Sage" },
+  { value: "#4f7c86", label: "Mist Teal" },
+  { value: "#6f6d69", label: "Slate Grey" },
+  { value: "#b67823", label: "Amber" },
+] as const;

@@ -44,3 +44,4 @@ next-env.d.ts
 content/.webbook/indexes/
 content/.webbook/revisions/
 content/.webbook/uploads/
+content/.webbook/users.json

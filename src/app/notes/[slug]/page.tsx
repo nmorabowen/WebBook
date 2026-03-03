@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PublicRenderContent } from "@/components/public-render-content";
+import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
@@ -41,12 +42,14 @@ export default async function NotePage({
       generalSettings={generalSettings}
       readingWidth={note.meta.typography?.contentWidth}
       rightPanel={
-        <TocPanel
-          toc={toc}
-          backlinks={backlinks}
-          updatedAt={note.meta.updatedAt}
-          revisions={revisions}
-        />
+        <div className="grid gap-8">
+          <TocPanel toc={toc} />
+          <ReadingMetaPanel
+            backlinks={backlinks}
+            updatedAt={note.meta.updatedAt}
+            revisions={revisions}
+          />
+        </div>
       }
     >
       <PublicRenderContent
@@ -61,6 +64,7 @@ export default async function NotePage({
         fontPreset={note.meta.fontPreset ?? "source-serif"}
         typography={note.meta.typography}
         generalSettings={generalSettings}
+        currentRoute={`/notes/${note.meta.slug}`}
       />
     </PublicShell>
   );

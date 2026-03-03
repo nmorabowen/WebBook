@@ -23,13 +23,6 @@ export async function POST(request: Request) {
   }
 
   if (requester === "public") {
-    if (
-      (content.kind === "note" || content.kind === "book") &&
-      "visibility" in content.meta &&
-      content.meta.visibility !== "public"
-    ) {
-      return NextResponse.json({ error: "This page is not public." }, { status: 403 });
-    }
     if (content.kind === "note" && !content.meta.allowExecution) {
       return NextResponse.json(
         { error: "Execution is disabled for this note." },

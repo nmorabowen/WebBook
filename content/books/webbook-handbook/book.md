@@ -2,12 +2,14 @@
 title: WebBook Handbook
 slug: webbook-handbook
 createdAt: '2026-03-02T00:05:12.254Z'
-updatedAt: '2026-03-02T04:13:40.080Z'
+updatedAt: '2026-03-03T05:13:28.127Z'
 publishedAt: '2026-03-02T00:05:12.254Z'
 kind: book
 description: 'An example book blending math, prose, and live code.'
+order: 4
 status: published
-visibility: public
+featured: false
+coverColor: '#4f6678'
 theme: paper
 fontPreset: source-serif
 typography:
