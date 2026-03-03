@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WEBBOOK_ROOT="${WEBBOOK_ROOT:-/opt/webbook}"
+WEBBOOK_REPO_DIR="${WEBBOOK_REPO_DIR:-$WEBBOOK_ROOT/repo}"
+WEBBOOK_ENV_FILE="${WEBBOOK_ENV_FILE:-$WEBBOOK_ROOT/.env.production}"
+WEBBOOK_COMPOSE_FILE="${WEBBOOK_COMPOSE_FILE:-$WEBBOOK_REPO_DIR/docker-compose.production.yml}"
+WEBBOOK_STATE_DIR="${WEBBOOK_STATE_DIR:-$WEBBOOK_ROOT/deploy/state}"
+
+COMMON_SCRIPT="$WEBBOOK_REPO_DIR/deploy/common.sh"
+INSTALL_SCRIPT="$WEBBOOK_REPO_DIR/deploy/install.sh"
+DEPLOY_SCRIPT="$WEBBOOK_REPO_DIR/deploy/deploy.sh"
+BACKUP_SCRIPT="$WEBBOOK_REPO_DIR/deploy/backup.sh"
+RESTORE_SCRIPT="$WEBBOOK_REPO_DIR/deploy/restore.sh"
+RENDER_CADDYFILE_SCRIPT="$WEBBOOK_REPO_DIR/deploy/render-caddyfile.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  webbookctl install
+  webbookctl deploy <sha-or-tag>
+  webbookctl status
+  webbookctl logs [service]
+  webbookctl backup
+  webbookctl restore <backup-id>
+  webbookctl rollback
+  webbookctl update-config
+  webbookctl doctor
+EOF
+}
+
+require_repo() {
+  if [[ ! -f "$COMMON_SCRIPT" ]]; then
+    echo "WebBook repo not found at $WEBBOOK_REPO_DIR" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC1090
+  . "$COMMON_SCRIPT"
+}
+
+install_command() {
+  if [[ -f "$INSTALL_SCRIPT" ]]; then
+    exec "$INSTALL_SCRIPT" "$@"
+  fi
+
+  echo "Install script not found at $INSTALL_SCRIPT" >&2
+  exit 1
+}
+
+status_command() {
+  require_repo
+  load_env
+
+  echo "Domain: ${DOMAIN:-unset}"
+  echo "Root: $WEBBOOK_ROOT"
+  echo "Compose file: $WEBBOOK_COMPOSE_FILE"
+  echo "Current web image: ${WEB_IMAGE:-unset}"
+  echo "Current python image: ${PYTHON_IMAGE:-unset}"
+  echo
+  compose ps
+  echo
+  if curl -fsS http://127.0.0.1:3000/api/healthz > /dev/null 2>&1; then
+    echo "Web health: healthy"
+  else
+    echo "Web health: unhealthy"
+  fi
+}
+
+logs_command() {
+  require_repo
+  local service="${1:-}"
+  if [[ -n "$service" ]]; then
+    exec compose logs --tail 200 -f "$service"
+  fi
+  exec compose logs --tail 200 -f
+}
+
+deploy_command() {
+  local target="${1:-}"
+  if [[ -z "$target" ]]; then
+    usage
+    exit 1
+  fi
+
+  require_repo
+  sync_repo_checkout main
+  exec "$DEPLOY_SCRIPT" deploy "$target"
+}
+
+rollback_command() {
+  require_repo
+  exec "$DEPLOY_SCRIPT" rollback
+}
+
+backup_command() {
+  require_repo
+  exec "$BACKUP_SCRIPT"
+}
+
+restore_command() {
+  local backup_id="${1:-}"
+  if [[ -z "$backup_id" ]]; then
+    usage
+    exit 1
+  fi
+
+  require_repo
+  exec "$RESTORE_SCRIPT" "$backup_id"
+}
+
+update_config_command() {
+  require_repo
+  local caddy_file="/etc/caddy/Caddyfile.d/webbook.conf"
+
+  mkdir -p /etc/caddy/Caddyfile.d
+  "$RENDER_CADDYFILE_SCRIPT" > "$caddy_file"
+
+  if [[ ! -f /etc/caddy/Caddyfile ]]; then
+    cat > /etc/caddy/Caddyfile <<'EOF'
+import /etc/caddy/Caddyfile.d/*
+EOF
+  elif ! grep -q '^import /etc/caddy/Caddyfile.d/\*$' /etc/caddy/Caddyfile; then
+    printf '\nimport /etc/caddy/Caddyfile.d/*\n' >> /etc/caddy/Caddyfile
+  fi
+
+  systemctl reload caddy || systemctl restart caddy
+  echo "Caddy configuration updated."
+}
+
+doctor_command() {
+  require_repo
+
+  local failures=0
+  local required_commands=(docker git caddy curl jq restic)
+  local command_name
+
+  for command_name in "${required_commands[@]}"; do
+    if command -v "$command_name" > /dev/null 2>&1; then
+      echo "[ok] $command_name"
+    else
+      echo "[missing] $command_name"
+      failures=1
+    fi
+  done
+
+  for path in "$WEBBOOK_ENV_FILE" "$WEBBOOK_COMPOSE_FILE"; do
+    if [[ -f "$path" ]]; then
+      echo "[ok] $path"
+    else
+      echo "[missing] $path"
+      failures=1
+    fi
+  done
+
+  if (( failures != 0 )); then
+    exit 1
+  fi
+
+  compose config > /dev/null
+  echo "[ok] docker compose configuration"
+}
+
+main() {
+  local command="${1:-}"
+  shift || true
+
+  case "$command" in
+    install)
+      install_command "$@"
+      ;;
+    deploy)
+      deploy_command "$@"
+      ;;
+    status)
+      status_command
+      ;;
+    logs)
+      logs_command "$@"
+      ;;
+    backup)
+      backup_command
+      ;;
+    restore)
+      restore_command "$@"
+      ;;
+    rollback)
+      rollback_command
+      ;;
+    update-config)
+      update_config_command
+      ;;
+    doctor)
+      doctor_command
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

@@ -100,3 +100,8 @@ async def run_worker(payload: ExecutePythonRequest) -> ExecutePythonResponse:
 @app.post("/execute", response_model=ExecutePythonResponse)
 async def execute(payload: ExecutePythonRequest) -> ExecutePythonResponse:
     return await run_worker(payload)
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"ok": True, "service": "webbook-python-runner"}

@@ -60,6 +60,29 @@ This starts:
 - Redis on `:6379`
 - the Python runner on `:8001`
 
+## Production deployment
+
+WebBook includes an ONCE-style deployment flow for a Debian Bookworm VPS with:
+
+- host-level Caddy for HTTPS
+- Docker Compose runtime
+- GitHub Actions deploys over SSH
+- daily local and remote backups
+
+Primary files:
+
+- [`.env.production.example`](/c:/Users/nmb/Desktop/WebBook/.env.production.example)
+- [`docker-compose.production.yml`](/c:/Users/nmb/Desktop/WebBook/docker-compose.production.yml)
+- [`deploy/install.sh`](/c:/Users/nmb/Desktop/WebBook/deploy/install.sh)
+- [`deploy/webbookctl`](/c:/Users/nmb/Desktop/WebBook/deploy/webbookctl)
+- [`docs/deployment.md`](/c:/Users/nmb/Desktop/WebBook/docs/deployment.md)
+
+Bootstrap command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmorabowen/WebBook/main/deploy/install.sh | sudo bash
+```
+
 ## Useful commands
 
 ```bash
