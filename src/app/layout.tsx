@@ -8,6 +8,7 @@ import {
 } from "next/font/google";
 import { AnalyticsRoot } from "@/components/analytics-root";
 import { MathHydrator } from "@/components/markdown/math-hydrator";
+import { env } from "@/lib/env";
 import "./globals.css";
 
 const uiFont = IBM_Plex_Sans({
@@ -119,9 +120,11 @@ const barlowCondensedFont = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(env.siteUrl),
   title: "WebBook",
   description:
     "Markdown-first books and notes with MathJax, publishing, and runnable Python.",
+  applicationName: "WebBook",
 };
 
 export default function RootLayout({

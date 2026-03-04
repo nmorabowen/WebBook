@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, BookOpenText, GripVertical, Search } from "lucide-react";
+import { ContentSearchLauncher } from "@/components/content-search-launcher";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -147,6 +148,13 @@ export function PublicShell({
                   <h1 className="font-serif text-3xl">Reading room</h1>
                 </div>
               </div>
+              <ContentSearchLauncher
+                scope="public"
+                buttonLabel="Search library"
+                dialogTitle="Search the library"
+                dialogDescription="Search published books, chapters, and notes by title, summary, or indexed body text."
+                buttonClassName="justify-center"
+              />
             </div>
 
             {activeBook ? (

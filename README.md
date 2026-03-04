@@ -43,6 +43,7 @@ Default local admin credentials:
 - Password: `webbook-admin`
 
 Change `SESSION_SECRET` and `ADMIN_PASSWORD_HASH` before using this outside local development.
+Set `SITE_URL` so generated canonical URLs, sitemap entries, and robots metadata match your public domain.
 
 ## Analytics
 

@@ -16,6 +16,7 @@ import {
   type MediaReference,
   type NoteMeta,
   type NoteRecord,
+  type ContentSearchResult,
   noteMetaSchema,
   reorderBooksSchema,
   reorderChaptersSchema,
@@ -112,10 +113,55 @@ function ensureSafeSlugOrThrow(slug: string) {
 function buildSearch(documents: SearchDocument[]) {
   const miniSearch = new MiniSearch<SearchDocument>({
     fields: ["title", "summary", "body"],
-    storeFields: ["id", "title", "kind", "route", "summary"],
+    storeFields: [
+      "id",
+      "title",
+      "kind",
+      "slug",
+      "bookSlug",
+      "status",
+      "summary",
+      "publicRoute",
+      "workspaceRoute",
+    ],
   });
   miniSearch.addAll(documents);
   return miniSearch.toJSON();
+}
+
+function mapSearchResults(
+  results: Array<
+    Partial<
+      Pick<
+        SearchDocument,
+        | "title"
+        | "kind"
+        | "slug"
+        | "bookSlug"
+        | "status"
+        | "summary"
+        | "publicRoute"
+        | "workspaceRoute"
+      >
+    > & { id: string | number }
+  >,
+  routeScope: "public" | "workspace",
+): ContentSearchResult[] {
+  return results.map((result) => ({
+    id: String(result.id),
+    title: result.title ?? "Untitled",
+    kind: result.kind ?? "note",
+    slug: result.slug ?? "",
+    bookSlug: result.bookSlug,
+    status: result.status ?? "draft",
+    summary: result.summary ?? "",
+    route:
+      routeScope === "workspace"
+        ? result.workspaceRoute ?? result.publicRoute ?? "#"
+        : result.publicRoute ?? result.workspaceRoute ?? "#",
+    publicRoute: result.publicRoute ?? "#",
+    workspaceRoute: result.workspaceRoute ?? "#",
+  }));
 }
 
 async function readDirectoryEntries(directoryPath: string) {
@@ -478,9 +524,12 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
       id: book.id,
       title: book.meta.title,
       kind: "book",
-      route: book.route,
+      slug: book.meta.slug,
+      status: book.meta.status,
       summary: book.meta.description ?? "",
       body: stripMarkdown(book.body),
+      publicRoute: book.route,
+      workspaceRoute: `/app/books/${book.meta.slug}`,
     });
     buildAliases(bookEntry).forEach((alias) => aliasLookup.set(alias, bookEntry));
 
@@ -503,9 +552,13 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
         id: chapter.id,
         title: chapter.meta.title,
         kind: "chapter",
-        route: chapter.route,
+        slug: chapter.meta.slug,
+        bookSlug: chapter.meta.bookSlug,
+        status: chapter.meta.status,
         summary: chapter.meta.summary ?? "",
         body: stripMarkdown(chapter.body),
+        publicRoute: chapter.route,
+        workspaceRoute: `/app/books/${chapter.meta.bookSlug}/chapters/${chapter.meta.slug}`,
       });
       buildAliases(chapterEntry).forEach((alias) =>
         aliasLookup.set(alias, chapterEntry),
@@ -531,9 +584,12 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
       id: note.id,
       title: note.meta.title,
       kind: "note",
-      route: note.route,
+      slug: note.meta.slug,
+      status: note.meta.status,
       summary: note.meta.summary ?? "",
       body: stripMarkdown(note.body),
+      publicRoute: note.route,
+      workspaceRoute: `/app/notes/${note.meta.slug}`,
     });
     buildAliases(noteEntry).forEach((alias) => aliasLookup.set(alias, noteEntry));
   }
@@ -871,13 +927,26 @@ export async function searchContent(query: string) {
   const { search } = await loadIndexes();
   const miniSearch = MiniSearch.loadJSON<SearchDocument>(search, {
     fields: ["title", "summary", "body"],
-    storeFields: ["id", "title", "kind", "route", "summary"],
+    storeFields: [
+      "id",
+      "title",
+      "kind",
+      "slug",
+      "bookSlug",
+      "status",
+      "summary",
+      "publicRoute",
+      "workspaceRoute",
+    ],
   });
-  return miniSearch.search(query, {
-    combineWith: "AND",
-    prefix: true,
-    fuzzy: 0.2,
-  });
+  return mapSearchResults(
+    miniSearch.search(query, {
+      combineWith: "AND",
+      prefix: true,
+      fuzzy: 0.2,
+    }),
+    "workspace",
+  );
 }
 
 export async function getBacklinks(id: string) {
@@ -895,14 +964,29 @@ export async function searchPublicContent(query: string) {
   const publicIds = new Set(filterPublishedManifestEntries(manifest).map((entry) => entry.id));
   const miniSearch = MiniSearch.loadJSON<SearchDocument>(search, {
     fields: ["title", "summary", "body"],
-    storeFields: ["id", "title", "kind", "route", "summary"],
+    storeFields: [
+      "id",
+      "title",
+      "kind",
+      "slug",
+      "bookSlug",
+      "status",
+      "summary",
+      "publicRoute",
+      "workspaceRoute",
+    ],
   });
 
-  return miniSearch.search(query, {
-    combineWith: "AND",
-    prefix: true,
-    fuzzy: 0.2,
-  }).filter((result) => publicIds.has(String(result.id)));
+  return mapSearchResults(
+    miniSearch
+      .search(query, {
+        combineWith: "AND",
+        prefix: true,
+        fuzzy: 0.2,
+      })
+      .filter((result) => publicIds.has(String(result.id))),
+    "public",
+  );
 }
 
 export async function getPublicBacklinks(id: string) {

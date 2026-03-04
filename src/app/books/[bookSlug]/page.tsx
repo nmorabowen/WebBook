@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { PublicRenderContent } from "@/components/public-render-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
@@ -11,6 +12,35 @@ import {
   getPublicContentTree,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
+import { buildPublicMetadata } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ bookSlug: string }>;
+}): Promise<Metadata> {
+  const { bookSlug } = await params;
+  const book = await getPublicBook(bookSlug);
+
+  if (!book) {
+    return buildPublicMetadata({
+      title: "Book Not Found | WebBook",
+      description: "The requested book is not published.",
+      path: `/books/${bookSlug}`,
+      noIndex: true,
+    });
+  }
+
+  return buildPublicMetadata({
+    title: `${book.meta.title} | WebBook`,
+    description:
+      book.meta.description ?? `Read ${book.meta.title} on WebBook.`,
+    path: `/books/${book.meta.slug}`,
+    type: "article",
+    publishedTime: book.meta.publishedAt,
+    modifiedTime: book.meta.updatedAt,
+  });
+}
 
 export default async function BookPage({
   params,

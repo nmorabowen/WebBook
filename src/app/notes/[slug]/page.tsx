@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { PublicRenderContent } from "@/components/public-render-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
@@ -11,6 +12,35 @@ import {
   getPublicNote,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
+import { buildPublicMetadata } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const note = await getPublicNote(slug);
+
+  if (!note) {
+    return buildPublicMetadata({
+      title: "Note Not Found | WebBook",
+      description: "The requested note is not published.",
+      path: `/notes/${slug}`,
+      noIndex: true,
+    });
+  }
+
+  return buildPublicMetadata({
+    title: `${note.meta.title} | WebBook`,
+    description:
+      note.meta.summary ?? `Read ${note.meta.title} on WebBook.`,
+    path: `/notes/${note.meta.slug}`,
+    type: "article",
+    publishedTime: note.meta.publishedAt,
+    modifiedTime: note.meta.updatedAt,
+  });
+}
 
 export default async function NotePage({
   params,

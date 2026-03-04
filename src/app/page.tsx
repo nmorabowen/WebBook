@@ -2,11 +2,19 @@ import Link from "next/link";
 import { ArrowUpRight, BookOpen, NotebookPen } from "lucide-react";
 import type { CSSProperties } from "react";
 import { getSession } from "@/lib/auth";
+import { ContentSearchLauncher } from "@/components/content-search-launcher";
 import { LandingBackground } from "@/components/landing-background";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import { getGeneralSettings, getPublicContentTree } from "@/lib/content/service";
+import { buildPublicMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata = buildPublicMetadata({
+  title: "WebBook Library",
+  description:
+    "Published books and notes arranged in a warm, markdown-first reading desk.",
+  path: "/",
+});
 
 export default async function HomePage() {
   const [tree, session, generalSettings] = await Promise.all([
@@ -34,13 +42,21 @@ export default async function HomePage() {
             <div className="flex items-center gap-3">
               <span className="paper-badge">WebBook</span>
             </div>
-            <Link
-              href={session ? "/app" : "/login"}
-              className="library-editor-button"
-            >
-              <NotebookPen className="h-4 w-4" />
-              {session ? "Open editor" : "Editor access"}
-            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <ContentSearchLauncher
+                scope="public"
+                buttonLabel="Search"
+                dialogTitle="Search the library"
+                dialogDescription="Search published books, chapters, and notes from anywhere in the reading desk."
+              />
+              <Link
+                href={session ? "/app" : "/login"}
+                className="library-editor-button"
+              >
+                <NotebookPen className="h-4 w-4" />
+                {session ? "Open editor" : "Editor access"}
+              </Link>
+            </div>
           </header>
 
           <section className="library-hero animate-rise">

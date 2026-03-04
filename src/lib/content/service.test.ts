@@ -39,6 +39,8 @@ describe("content service", () => {
 
     const searchResults = await service.searchContent("Computational");
     expect(searchResults[0]?.title).toContain("Computational");
+    expect(searchResults[0]?.route).toBe("/app/books/webbook-handbook/chapters/computational-chapter");
+    expect(searchResults[0]?.publicRoute).toBe("/books/webbook-handbook/computational-chapter");
   });
 
   it("exports a persisted user store with the workspace archive", async () => {
@@ -274,11 +276,14 @@ describe("content service", () => {
     const publicManifest = await service.getPublicManifest();
     const publicBacklinks = await service.getPublicBacklinks("note:published-anchor");
     const publicResults = await service.searchPublicContent("Draft");
+    const workspaceResults = await service.searchContent("Draft");
 
     expect(publicManifest.map((entry) => entry.slug)).toContain("published-anchor");
     expect(publicManifest.map((entry) => entry.slug)).not.toContain("draft-referrer");
     expect(publicBacklinks.map((entry) => entry.slug)).toEqual(["published-referrer"]);
     expect(publicResults).toEqual([]);
+    expect(workspaceResults[0]?.route).toBe("/app/notes/draft-referrer");
+    expect(workspaceResults[0]?.publicRoute).toBe("/notes/draft-referrer");
   });
 
   it("duplicates and deletes chapters while keeping chapter order contiguous", async () => {
@@ -334,6 +339,73 @@ describe("content service", () => {
     ]);
     expect(book.chapters.map((chapter) => chapter.meta.order)).toEqual([1, 2]);
     expect(book.chapters[0]?.meta.fontPreset).toBe("oswald");
+  });
+
+  it("deletes books and notes while keeping collection order contiguous", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Alpha Book",
+      slug: "alpha-book",
+      description: "Delete me",
+      body: "# Alpha Book",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createBook({
+      title: "Beta Book",
+      slug: "beta-book",
+      description: "Keep me",
+      body: "# Beta Book",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createNote({
+      title: "Alpha Note",
+      slug: "alpha-note",
+      summary: "Delete me",
+      body: "# Alpha Note",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await service.createNote({
+      title: "Beta Note",
+      slug: "beta-note",
+      summary: "Keep me",
+      body: "# Beta Note",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await service.deleteBook("alpha-book");
+    await service.deleteNote("alpha-note");
+
+    const tree = await service.getContentTree();
+
+    expect(tree.books.some((book) => book.meta.slug === "alpha-book")).toBe(false);
+    expect(tree.books.some((book) => book.meta.slug === "beta-book")).toBe(true);
+    expect(tree.books.map((book) => book.meta.order)).toEqual(
+      tree.books.map((_, index) => index + 1),
+    );
+
+    expect(tree.notes.some((note) => note.meta.slug === "alpha-note")).toBe(false);
+    expect(tree.notes.some((note) => note.meta.slug === "beta-note")).toBe(true);
+    expect(tree.notes.map((note) => note.meta.order)).toEqual(
+      tree.notes.map((_, index) => index + 1),
+    );
+
+    await expect(service.getBook("alpha-book")).rejects.toThrow();
+    await expect(service.getNote("alpha-note")).resolves.toBeNull();
+    await expect(
+      fs.access(path.join(process.cwd(), tempRoot, "books", "alpha-book")),
+    ).rejects.toThrow();
+    await expect(
+      fs.access(path.join(process.cwd(), tempRoot, "notes", "alpha-note.md")),
+    ).rejects.toThrow();
   });
 
   it("reorders books and notes persistently", async () => {

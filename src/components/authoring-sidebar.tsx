@@ -20,6 +20,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
+import { ContentSearchLauncher } from "@/components/content-search-launcher";
 import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
 import { cn } from "@/lib/utils";
 
@@ -750,6 +751,14 @@ export function AuthoringSidebar({
           <Home className="h-4 w-4" />
         </Link>
       </div>
+
+      <ContentSearchLauncher
+        scope="workspace"
+        buttonLabel="Search workspace"
+        dialogTitle="Search the workspace"
+        dialogDescription="Search books, chapters, notes, and drafts from the indexed authoring workspace."
+        buttonClassName="justify-center"
+      />
 
       <div className="grid gap-2">
         <NavLink href="/app" label="Dashboard" active={currentPath === "/app"} />

@@ -147,9 +147,26 @@ export type SearchDocument = {
   id: string;
   title: string;
   kind: "book" | "chapter" | "note";
-  route: string;
+  slug: string;
+  bookSlug?: string;
+  status: "draft" | "published";
   summary: string;
   body: string;
+  publicRoute: string;
+  workspaceRoute: string;
+};
+
+export type ContentSearchResult = {
+  id: string;
+  title: string;
+  kind: "book" | "chapter" | "note";
+  slug: string;
+  bookSlug?: string;
+  status: "draft" | "published";
+  summary: string;
+  route: string;
+  publicRoute: string;
+  workspaceRoute: string;
 };
 
 export type ManifestHeading = {

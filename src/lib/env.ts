@@ -1,9 +1,17 @@
 import path from "path";
 
 const configuredContentRoot = process.env.CONTENT_ROOT ?? "content";
+const configuredSiteUrl =
+  process.env.SITE_URL ??
+  (process.env.DOMAIN ? `https://${process.env.DOMAIN}` : "http://localhost:3000");
+
+function normalizeSiteUrl(value: string) {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
 
 export const env = {
   contentRoot: configuredContentRoot,
+  siteUrl: normalizeSiteUrl(configuredSiteUrl),
   authDisabled: process.env.AUTH_DISABLED === "true",
   sessionSecret:
     process.env.SESSION_SECRET ?? "webbook-dev-session-secret-change-me",

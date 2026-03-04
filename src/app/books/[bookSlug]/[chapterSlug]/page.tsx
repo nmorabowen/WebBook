@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { PublicRenderContent } from "@/components/public-render-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
@@ -11,6 +12,38 @@ import {
   getPublicContentTree,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
+import { buildPublicMetadata } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ bookSlug: string; chapterSlug: string }>;
+}): Promise<Metadata> {
+  const { bookSlug, chapterSlug } = await params;
+  const result = await getPublicChapter(bookSlug, chapterSlug);
+
+  if (!result) {
+    return buildPublicMetadata({
+      title: "Chapter Not Found | WebBook",
+      description: "The requested chapter is not published.",
+      path: `/books/${bookSlug}/${chapterSlug}`,
+      noIndex: true,
+    });
+  }
+
+  const { book, chapter } = result;
+
+  return buildPublicMetadata({
+    title: `${chapter.meta.title} | ${book.meta.title} | WebBook`,
+    description:
+      chapter.meta.summary ??
+      `Read ${chapter.meta.title} from ${book.meta.title} on WebBook.`,
+    path: `/books/${book.meta.slug}/${chapter.meta.slug}`,
+    type: "article",
+    publishedTime: chapter.meta.publishedAt,
+    modifiedTime: chapter.meta.updatedAt,
+  });
+}
 
 export default async function ChapterPage({
   params,

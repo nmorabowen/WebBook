@@ -1,6 +1,14 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { getSession } from "@/lib/auth";
+import { buildPublicMetadata } from "@/lib/seo";
+
+export const metadata = buildPublicMetadata({
+  title: "Login | WebBook",
+  description: "Sign in to the WebBook authoring workspace.",
+  path: "/login",
+  noIndex: true,
+});
 
 export default async function LoginPage() {
   const session = await getSession();
