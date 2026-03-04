@@ -84,6 +84,18 @@ function chapterFilePath(bookSlug: string, chapterSlug: string, order: number) {
   );
 }
 
+function parseOrderedMarkdownFileName(fileName: string) {
+  const match = /^(\d+)-(.+)\.md$/i.exec(fileName);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    order: Number.parseInt(match[1], 10),
+    slug: match[2],
+  };
+}
+
 function noteFilePath(slug: string) {
   return path.join(notesRoot, `${slug}.md`);
 }
@@ -342,6 +354,25 @@ function toDisplayPath(filePath: string) {
 function wrapContentFileError(filePath: string, error: unknown) {
   const message = error instanceof Error ? error.message : "Unknown content file error";
   return new Error(`Invalid content file ${toDisplayPath(filePath)}: ${message}`);
+}
+
+function rewriteFrontMatterScalar(raw: string, key: string, value: string | number) {
+  const frontMatterMatch = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(raw);
+  if (!frontMatterMatch) {
+    throw new Error("Missing front matter block");
+  }
+
+  const frontMatter = frontMatterMatch[1];
+  const pattern = new RegExp(`(^${key}:\\s*).*$`, "m");
+  if (!pattern.test(frontMatter)) {
+    throw new Error(`Missing front matter field: ${key}`);
+  }
+
+  const serializedValue =
+    typeof value === "number" ? String(value) : `'${value.replace(/'/g, "''")}'`;
+  const nextFrontMatter = frontMatter.replace(pattern, `$1${serializedValue}`);
+
+  return `${raw.slice(0, frontMatterMatch.index)}---\n${nextFrontMatter}\n---${frontMatterMatch[2]}${raw.slice(frontMatterMatch.index + frontMatterMatch[0].length)}`;
 }
 
 function extractWikiTargets(markdown: string) {
@@ -1718,38 +1749,66 @@ export async function deleteBook(bookSlug: string) {
 }
 
 export async function deleteChapter(bookSlug: string, chapterSlug: string) {
-  const book = await getBook(bookSlug);
-  const existing = book.chapters.find((chapter) => chapter.meta.slug === chapterSlug);
-  if (!existing) {
+  ensureSafeSlugOrThrow(bookSlug);
+  ensureSafeSlugOrThrow(chapterSlug);
+
+  const currentChaptersPath = path.join(bookDirectory(bookSlug), "chapters");
+  const chapterEntries = (await readDirectoryEntries(currentChaptersPath))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => {
+      const parsed = parseOrderedMarkdownFileName(entry.name);
+      return parsed
+        ? {
+            fileName: entry.name,
+            filePath: path.join(currentChaptersPath, entry.name),
+            order: parsed.order,
+            slug: parsed.slug,
+          }
+        : null;
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        fileName: string;
+        filePath: string;
+        order: number;
+        slug: string;
+      } => entry !== null,
+    )
+    .sort((left, right) => left.order - right.order || left.slug.localeCompare(right.slug));
+
+  const existing = chapterEntries.find((chapter) => chapter.slug === chapterSlug);
+  if (!existing?.filePath) {
     throw new Error("Chapter not found");
   }
 
-  const remainingChapters = book.chapters.filter(
-    (chapter) => chapter.meta.slug !== chapterSlug,
-  );
+  const remainingChapters = chapterEntries.filter((chapter) => chapter.slug !== chapterSlug);
   const bookPath = bookDirectory(bookSlug);
-  const currentChaptersPath = path.join(bookPath, "chapters");
   const stagingPath = path.join(bookPath, `.chapters-delete-${Date.now()}`);
   const backupPath = path.join(bookPath, `.chapters-backup-${Date.now()}`);
   const now = new Date().toISOString();
 
-  await createRevision(existing.id, existing.raw);
+  await createRevision(
+    chapterId(bookSlug, chapterSlug),
+    await fs.readFile(existing.filePath, "utf8"),
+  );
   await ensureDirectory(stagingPath);
 
   for (const [index, chapter] of remainingChapters.entries()) {
+    const nextPath = path.join(
+      stagingPath,
+      `${String(index + 1).padStart(3, "0")}-${chapter.slug}.md`,
+    );
+    const raw = await fs.readFile(chapter.filePath, "utf8");
+    const nextRaw = rewriteFrontMatterScalar(
+      rewriteFrontMatterScalar(raw, "order", index + 1),
+      "updatedAt",
+      now,
+    );
     await fs.writeFile(
-      path.join(
-        stagingPath,
-        `${String(index + 1).padStart(3, "0")}-${chapter.meta.slug}.md`,
-      ),
-      renderMatter(
-        {
-          ...chapter.meta,
-          order: index + 1,
-          updatedAt: now,
-        } satisfies ChapterMeta,
-        chapter.body,
-      ),
+      nextPath,
+      nextRaw,
       "utf8",
     );
   }

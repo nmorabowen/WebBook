@@ -459,7 +459,7 @@ describe("content service", () => {
     expect(book.chapters[0]?.meta.fontPreset).toBe("oswald");
   });
 
-  it("surfaces the file path when chapter deletion hits invalid front matter", async () => {
+  it("surfaces the file path when reading a book hits invalid chapter front matter", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
 
@@ -508,11 +508,86 @@ describe("content service", () => {
       "utf8",
     );
 
-    await expect(
-      service.deleteChapter("broken-delete-book", "broken-chapter"),
-    ).rejects.toThrow(
+    await expect(service.getBook("broken-delete-book")).rejects.toThrow(
       "Invalid content file .tmp-content-test/books/broken-delete-book/chapters/001-broken-chapter.md",
     );
+  });
+
+  it("deletes a malformed chapter file and renumbers the remaining chapters", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Delete Broken Chapter",
+      slug: "delete-broken-chapter",
+      description: "Testing deletion by numbered filename",
+      body: "# Delete Broken Chapter",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("delete-broken-chapter", {
+      title: "Broken Chapter",
+      slug: "broken-chapter",
+      summary: "",
+      body: "# Broken",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("delete-broken-chapter", {
+      title: "Healthy Chapter",
+      slug: "healthy-chapter",
+      summary: "",
+      body: "# Healthy",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    const brokenChapterPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "delete-broken-chapter",
+      "chapters",
+      "001-broken-chapter.md",
+    );
+
+    await fs.writeFile(
+      brokenChapterPath,
+      [
+        "---",
+        "kind: chapter",
+        "bookSlug: delete-broken-chapter",
+        "title: Broken Chapter",
+        "slug: broken-chapter",
+        "order: 1",
+        "summary: bad:",
+        "oops",
+        "status: draft",
+        "allowExecution: true",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "---",
+        "# Broken",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(
+      service.deleteChapter("delete-broken-chapter", "broken-chapter"),
+    ).resolves.toBeUndefined();
+
+    const book = await service.getBook("delete-broken-chapter");
+    expect(book.chapters.map((chapter) => chapter.meta.slug)).toEqual(["healthy-chapter"]);
+    expect(book.chapters[0]?.meta.order).toBe(1);
+
+    const chapterFiles = await fs.readdir(
+      path.join(process.cwd(), tempRoot, "books", "delete-broken-chapter", "chapters"),
+    );
+    expect(chapterFiles).toEqual(["001-healthy-chapter.md"]);
   });
 
   it("deletes books and notes while keeping collection order contiguous", async () => {
