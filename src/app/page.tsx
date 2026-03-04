@@ -149,13 +149,15 @@ export default async function HomePage() {
                     <span className="moleskine-stack-shadow" />
                     <div className="moleskine-stack-body">
                       <span className="moleskine-stack-spine moleskine-stack-spine-note">
-                        <span className="notepad-glyph" aria-hidden="true">
-                          <span className="notepad-glyph-binding" />
-                          <span className="notepad-glyph-page">
-                            <span className="notepad-glyph-line" />
-                            <span className="notepad-glyph-line" />
-                            <span className="notepad-glyph-line notepad-glyph-line-short" />
+                        <span className="notebook-glyph" aria-hidden="true">
+                          <span className="notebook-glyph-rings">
+                            <span className="notebook-glyph-ring" />
+                            <span className="notebook-glyph-ring" />
+                            <span className="notebook-glyph-ring" />
+                            <span className="notebook-glyph-ring" />
+                            <span className="notebook-glyph-ring" />
                           </span>
+                          <span className="notebook-glyph-page" />
                         </span>
                       </span>
                       <div className="moleskine-stack-content">
