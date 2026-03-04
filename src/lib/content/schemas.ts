@@ -74,7 +74,7 @@ export const bookMetaSchema = baseMetaSchema.extend({
 export const chapterMetaSchema = baseMetaSchema.extend({
   kind: z.literal("chapter"),
   bookSlug: z.string().min(1),
-  order: z.number().int().nonnegative(),
+  order: z.number().int().positive(),
   summary: z.string().optional(),
   status: statusSchema,
   allowExecution: z.boolean(),
@@ -233,7 +233,7 @@ export const saveChapterSchema = z.object({
   status: statusSchema.default("draft"),
   allowExecution: z.boolean().default(true),
   fontPreset: fontPresetSchema.default("source-serif"),
-  order: z.number().int().nonnegative(),
+  order: z.number().int().positive(),
   createRevision: z.boolean().optional(),
 });
 

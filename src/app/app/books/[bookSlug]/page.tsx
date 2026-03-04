@@ -33,6 +33,11 @@ export default async function AppBookPage({
     listMediaForPage(loaded.content.id),
   ]);
   const toc = extractToc(loaded.content.body);
+  const nextChapterOrder =
+    loaded.content.chapters.reduce(
+      (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
+      0,
+    ) + 1;
 
   return (
     <AppShell
@@ -69,7 +74,7 @@ export default async function AppBookPage({
         extraActions={
           <CreateChapterPanel
             bookSlug={loaded.content.meta.slug}
-            nextOrder={loaded.content.chapters.length + 1}
+            nextOrder={nextChapterOrder}
           />
         }
       />

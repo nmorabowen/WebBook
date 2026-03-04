@@ -1185,32 +1185,83 @@ export async function updateChapter(
   ) {
     throw new Error("A chapter with that slug already exists in this book");
   }
-  if (
-    book.chapters.some(
-      (chapter) =>
-        chapter.meta.order === data.order && chapter.meta.slug !== existing.meta.slug,
-    )
-  ) {
-    throw new Error(`A chapter already uses order ${data.order}`);
+  if (data.order > book.chapters.length) {
+    throw new Error(`Chapter order must be between 1 and ${book.chapters.length}`);
   }
-  const raw = renderMatter(
-    {
-      ...existing.meta,
-      title: data.title,
-      slug: nextSlug,
-      order: data.order,
-      summary: data.summary,
-      status: data.status,
-      allowExecution: data.allowExecution,
-      fontPreset: data.fontPreset,
-      updatedAt: now,
-      publishedAt:
-        data.status === "published"
-          ? existing.meta.publishedAt ?? now
-          : undefined,
-    } satisfies ChapterMeta,
-    data.body,
-  );
+  const nextMeta = {
+    ...existing.meta,
+    title: data.title,
+    slug: nextSlug,
+    order: data.order,
+    summary: data.summary,
+    status: data.status,
+    allowExecution: data.allowExecution,
+    fontPreset: data.fontPreset,
+    updatedAt: now,
+    publishedAt:
+      data.status === "published"
+        ? existing.meta.publishedAt ?? now
+        : undefined,
+  } satisfies ChapterMeta;
+  const raw = renderMatter(nextMeta, data.body);
+  const requiresReorder = data.order !== existing.meta.order;
+
+  if (requiresReorder) {
+    const reorderedChapters = book.chapters.filter(
+      (chapter) => chapter.meta.slug !== existing.meta.slug,
+    );
+
+    reorderedChapters.splice(data.order - 1, 0, {
+      ...existing,
+      meta: nextMeta,
+      body: data.body,
+      raw,
+    });
+
+    const bookPath = bookDirectory(bookSlug);
+    const currentChaptersPath = path.join(bookPath, "chapters");
+    const stagingPath = path.join(bookPath, `.chapters-update-${Date.now()}`);
+    const backupPath = path.join(bookPath, `.chapters-backup-${Date.now()}`);
+
+    await ensureDirectory(stagingPath);
+
+    for (const chapter of book.chapters) {
+      await createRevision(chapter.id, chapter.raw);
+    }
+
+    for (const [index, chapter] of reorderedChapters.entries()) {
+      const isUpdatedChapter = chapter.id === existing.id;
+      const chapterMeta = {
+        ...(isUpdatedChapter ? nextMeta : chapter.meta),
+        order: index + 1,
+        updatedAt: now,
+      } satisfies ChapterMeta;
+
+      await fs.writeFile(
+        path.join(
+          stagingPath,
+          `${String(index + 1).padStart(3, "0")}-${chapterMeta.slug}.md`,
+        ),
+        renderMatter(chapterMeta, isUpdatedChapter ? data.body : chapter.body),
+        "utf8",
+      );
+    }
+
+    await fs.rename(currentChaptersPath, backupPath);
+
+    try {
+      await fs.rename(stagingPath, currentChaptersPath);
+    } catch (error) {
+      await fs.rename(backupPath, currentChaptersPath).catch(() => undefined);
+      await fs.rm(stagingPath, { recursive: true, force: true });
+      throw error;
+    }
+
+    await fs.rm(backupPath, { recursive: true, force: true });
+    await rebuildIndexes();
+    return getChapter(existing.meta.bookSlug, nextSlug);
+  }
+
   if (data.createRevision) {
     await createRevision(existing.id, existing.raw);
   }

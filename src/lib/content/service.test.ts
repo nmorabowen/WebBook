@@ -187,6 +187,80 @@ describe("content service", () => {
     ]);
   });
 
+  it("moves a chapter when its order changes and keeps numbering contiguous", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Moveable Chapters",
+      slug: "moveable-chapters",
+      description: "Testing chapter moves",
+      body: "# Moveable Chapters",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("moveable-chapters", {
+      title: "First Chapter",
+      slug: "first-chapter",
+      summary: "",
+      body: "# First",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("moveable-chapters", {
+      title: "Second Chapter",
+      slug: "second-chapter",
+      summary: "",
+      body: "# Second",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    await service.createChapter("moveable-chapters", {
+      title: "Third Chapter",
+      slug: "third-chapter",
+      summary: "",
+      body: "# Third",
+      status: "draft",
+      allowExecution: true,
+      order: 3,
+    });
+
+    const moved = await service.updateChapter("moveable-chapters", "third-chapter", {
+      title: "Third Chapter",
+      slug: "third-chapter",
+      summary: "",
+      body: "# Third",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    expect(moved?.meta.order).toBe(1);
+
+    const book = await service.getBook("moveable-chapters");
+    expect(book.chapters.map((chapter) => chapter.meta.slug)).toEqual([
+      "third-chapter",
+      "first-chapter",
+      "second-chapter",
+    ]);
+    expect(book.chapters.map((chapter) => chapter.meta.order)).toEqual([1, 2, 3]);
+
+    const chapterFiles = await fs.readdir(
+      path.join(process.cwd(), tempRoot, "books", "moveable-chapters", "chapters"),
+    );
+
+    expect(chapterFiles).toEqual([
+      "001-third-chapter.md",
+      "002-first-chapter.md",
+      "003-second-chapter.md",
+    ]);
+  });
+
   it("filters the public tree and duplicates a draft book", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
@@ -660,6 +734,18 @@ describe("content service", () => {
       allowExecution: true,
       order: 1,
     });
+
+    await expect(
+      service.createChapter("unique-book", {
+        title: "Zero Order",
+        slug: "zero-order",
+        summary: "",
+        body: "# Zero Order",
+        status: "draft",
+        allowExecution: true,
+        order: 0,
+      }),
+    ).rejects.toThrow();
 
     await expect(
       service.createChapter("unique-book", {

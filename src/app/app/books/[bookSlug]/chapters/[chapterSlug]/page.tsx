@@ -35,6 +35,11 @@ export default async function AppChapterPage({
     listMediaForPage(loaded.content.id),
   ]);
   const toc = extractToc(loaded.content.body);
+  const nextChapterOrder =
+    book.chapters.reduce(
+      (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
+      0,
+    ) + 1;
 
   return (
     <AppShell
@@ -71,10 +76,11 @@ export default async function AppChapterPage({
         mediaAssets={mediaAssets}
         updateEndpoint={`/api/books/${bookSlug}/chapters/${loaded.content.meta.slug}`}
         shortcutScopeKey={session.username}
+        chapterCount={book.chapters.length}
         extraActions={
           <CreateChapterPanel
             bookSlug={book.meta.slug}
-            nextOrder={book.chapters.length + 1}
+            nextOrder={nextChapterOrder}
           />
         }
       />

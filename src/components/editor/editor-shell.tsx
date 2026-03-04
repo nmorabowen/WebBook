@@ -14,6 +14,7 @@ import {
 import JSZip from "jszip";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlignCenter,
   AlignLeft,
@@ -104,6 +105,7 @@ type EditorShellProps = {
   updateEndpoint: string;
   extraActions?: React.ReactNode;
   shortcutScopeKey?: string;
+  chapterCount?: number;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -454,7 +456,9 @@ export function EditorShell({
   updateEndpoint,
   extraActions,
   shortcutScopeKey = "workspace",
+  chapterCount,
 }: EditorShellProps) {
+  const router = useRouter();
   const workspacePanelStyle = {
     borderRadius: "var(--workspace-corner-radius, 28px)",
   } as CSSProperties;
@@ -503,6 +507,7 @@ export function EditorShell({
   const [isPending, startTransition] = useTransition();
   const uploadBasePath = useMemo(() => defaultUploadTargetPath(pageId), [pageId]);
   const contentTypographyStyle = bookTypographyStyle(typography);
+  const maxChapterOrder = Math.max(1, chapterCount ?? initialValues.order ?? 1);
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const mathAutocompletePanelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -885,6 +890,9 @@ export function EditorShell({
         setSaveState("saved");
         setSaveMessage("Autosaved");
         setPreviewVersion((current) => current + 1);
+        if (mode === "chapter" && payload.order !== initialValues.order) {
+          router.refresh();
+        }
       } catch {
         setSaveState("error");
         setSaveMessage("Autosave failed");
@@ -892,7 +900,7 @@ export function EditorShell({
     }, 1400);
 
     return () => clearTimeout(timer);
-  }, [payload, updateEndpoint]);
+  }, [initialValues.order, mode, payload, router, updateEndpoint]);
 
   useLayoutEffect(() => {
     const textarea = sourceRef.current;
@@ -2002,9 +2010,17 @@ export function EditorShell({
                 id={`${pageId}-order`}
                 className="paper-input"
                 type="number"
-                min={0}
+                min={1}
+                max={maxChapterOrder}
                 value={order}
-                onChange={(event) => setOrder(Number(event.target.value) || 0)}
+                onChange={(event) =>
+                  setOrder(
+                    Math.min(
+                      maxChapterOrder,
+                      Math.max(1, Number(event.target.value) || 1),
+                    ),
+                  )
+                }
               />
             </div>
           ) : null}
