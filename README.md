@@ -44,6 +44,14 @@ Default local admin credentials:
 
 Change `SESSION_SECRET` and `ADMIN_PASSWORD_HASH` before using this outside local development.
 
+## Analytics
+
+WebBook supports optional Google Analytics 4 pageview tracking for public reading
+routes and the authenticated workspace: `/`, `/books/*`, `/notes/*`, and `/app/*`.
+
+Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` in your environment to enable it. Leave the
+variable empty to keep analytics disabled.
+
 ## Python execution
 
 The web app proxies Python execution requests to the service in [`services/python-runner`](/c:/Users/nmb/Desktop/WebBook/services/python-runner).

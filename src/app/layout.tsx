@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Suspense } from "react";
 import {
   IBM_Plex_Sans,
   JetBrains_Mono,
   Source_Serif_4,
 } from "next/font/google";
+import { Analytics } from "@/components/analytics";
 import { MathHydrator } from "@/components/markdown/math-hydrator";
 import "./globals.css";
 
@@ -141,6 +143,9 @@ export default function RootLayout({
           barlowCondensedFont.variable,
         ].join(" ")}
       >
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
         <MathHydrator />
         {children}
       </body>
