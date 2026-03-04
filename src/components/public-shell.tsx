@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, BookOpenText, GripVertical, Search } from "lucide-react";
 import { ContentSearchLauncher } from "@/components/content-search-launcher";
+import { PublicCredit } from "@/components/public-credit";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -114,156 +115,159 @@ export function PublicShell({
   return (
     <WorkspaceStyleFrame generalSettings={generalSettings}>
       <div className="paper-shell" data-font-preset={fontPreset}>
-        <div
-          ref={containerRef}
-          className={cn("paper-grid public-shell-layout", dragTarget && "public-shell-layout-dragging")}
-          style={{
-            ...layoutStyle,
-            gap: "var(--workspace-tile-spacing)",
-          }}
-        >
-          <aside
-            className={cn(
-              "paper-panel paper-panel-strong public-shell-panel flex flex-col gap-5 p-6",
-              isLeftCollapsed && "is-collapsed",
-            )}
-            style={{ borderRadius: "var(--workspace-corner-radius)" }}
+        <div className="paper-grid gap-5">
+          <div
+            ref={containerRef}
+            className={cn("paper-grid public-shell-layout", dragTarget && "public-shell-layout-dragging")}
+            style={{
+              ...layoutStyle,
+              gap: "var(--workspace-tile-spacing)",
+            }}
           >
-            <div className="grid gap-3">
-              <Link
-                href="/"
-                className="inline-flex items-center gap-2 text-sm font-medium text-[var(--paper-muted)]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to library
-              </Link>
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-[var(--paper-accent-soft)] p-3 text-[var(--paper-accent)]">
-                  <BookOpenText className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--paper-muted)]">
-                    WebBook
-                  </p>
-                  <h1 className="font-serif text-3xl">Reading room</h1>
-                </div>
-              </div>
-              <ContentSearchLauncher
-                scope="public"
-                buttonLabel="Search library"
-                dialogTitle="Search the library"
-                dialogDescription="Search published books, chapters, and notes by title, summary, or indexed body text."
-                buttonClassName="justify-center"
-              />
-            </div>
-
-            {activeBook ? (
-              <div className="grid gap-2">
+            <aside
+              className={cn(
+                "paper-panel paper-panel-strong public-shell-panel flex flex-col gap-5 p-6",
+                isLeftCollapsed && "is-collapsed",
+              )}
+              style={{ borderRadius: "var(--workspace-corner-radius)" }}
+            >
+              <div className="grid gap-3">
                 <Link
-                  href={`/books/${activeBook.meta.slug}`}
-                  className={cn(
-                    "paper-nav-link",
-                    currentPath === `/books/${activeBook.meta.slug}` &&
-                      "paper-nav-link-active",
-                  )}
+                  href="/"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-[var(--paper-muted)]"
                 >
-                  {activeBook.meta.title}
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to library
                 </Link>
-                {activeBook.chapters.map((chapter) => (
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-[var(--paper-accent-soft)] p-3 text-[var(--paper-accent)]">
+                    <BookOpenText className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--paper-muted)]">
+                      WebBook
+                    </p>
+                    <h1 className="font-serif text-3xl">Reading room</h1>
+                  </div>
+                </div>
+                <ContentSearchLauncher
+                  scope="public"
+                  buttonLabel="Search library"
+                  dialogTitle="Search the library"
+                  dialogDescription="Search published books, chapters, and notes by title, summary, or indexed body text."
+                  buttonClassName="justify-center"
+                />
+              </div>
+
+              {activeBook ? (
+                <div className="grid gap-2">
                   <Link
-                    key={`${activeBook.meta.slug}/${chapter.meta.slug}`}
-                    href={`/books/${activeBook.meta.slug}/${chapter.meta.slug}`}
+                    href={`/books/${activeBook.meta.slug}`}
                     className={cn(
-                      "paper-nav-link ml-4",
-                      currentPath ===
-                        `/books/${activeBook.meta.slug}/${chapter.meta.slug}` &&
+                      "paper-nav-link",
+                      currentPath === `/books/${activeBook.meta.slug}` &&
                         "paper-nav-link-active",
                     )}
                   >
-                    <span>{chapter.meta.title}</span>
-                    <span className="text-xs">{chapter.meta.order}</span>
+                    {activeBook.meta.title}
                   </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {tree.books.map((book) => (
-                  <Link key={book.meta.slug} href={`/books/${book.meta.slug}`} className="paper-nav-link">
-                    {book.meta.title}
-                  </Link>
-                ))}
-                {tree.notes.map((note) => (
-                  <Link key={note.meta.slug} href={`/notes/${note.meta.slug}`} className="paper-nav-link">
-                    {note.meta.title}
-                  </Link>
-                ))}
-              </div>
-            )}
+                  {activeBook.chapters.map((chapter) => (
+                    <Link
+                      key={`${activeBook.meta.slug}/${chapter.meta.slug}`}
+                      href={`/books/${activeBook.meta.slug}/${chapter.meta.slug}`}
+                      className={cn(
+                        "paper-nav-link ml-4",
+                        currentPath ===
+                          `/books/${activeBook.meta.slug}/${chapter.meta.slug}` &&
+                          "paper-nav-link-active",
+                      )}
+                    >
+                      <span>{chapter.meta.title}</span>
+                      <span className="text-xs">{chapter.meta.order}</span>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {tree.books.map((book) => (
+                    <Link key={book.meta.slug} href={`/books/${book.meta.slug}`} className="paper-nav-link">
+                      {book.meta.title}
+                    </Link>
+                  ))}
+                  {tree.notes.map((note) => (
+                    <Link key={note.meta.slug} href={`/notes/${note.meta.slug}`} className="paper-nav-link">
+                      {note.meta.title}
+                    </Link>
+                  ))}
+                </div>
+              )}
 
-            <div
-              className="mt-auto border border-[var(--paper-border)] bg-[rgba(255,255,255,0.55)] p-4"
-              style={{ borderRadius: "var(--workspace-radius-lg)" }}
+              <div
+                className="mt-auto border border-[var(--paper-border)] bg-[rgba(255,255,255,0.55)] p-4"
+                style={{ borderRadius: "var(--workspace-radius-lg)" }}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Search className="h-4 w-4 text-[var(--paper-accent)]" />
+                  Linked thinking
+                </div>
+                <p className="mt-2 text-sm leading-7 text-[var(--paper-muted)]">
+                  WebBook resolves wiki links, builds backlinks, and keeps notes publishable as their own HTML pages.
+                </p>
+              </div>
+            </aside>
+
+            <button
+              type="button"
+              className="public-shell-handle public-shell-handle-left"
+              aria-label="Resize left reading panel"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                setDragTarget("left");
+              }}
             >
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Search className="h-4 w-4 text-[var(--paper-accent)]" />
-                Linked thinking
-              </div>
-              <p className="mt-2 text-sm leading-7 text-[var(--paper-muted)]">
-                WebBook resolves wiki links, builds backlinks, and keeps notes publishable as their own HTML pages.
-              </p>
-            </div>
-          </aside>
+              <span className="public-shell-grip">
+                <GripVertical className="h-4 w-4" />
+              </span>
+            </button>
 
-          <button
-            type="button"
-            className="public-shell-handle public-shell-handle-left"
-            aria-label="Resize left reading panel"
-            onPointerDown={(event) => {
-              event.preventDefault();
-              setDragTarget("left");
-            }}
-          >
-            <span className="public-shell-grip">
-              <GripVertical className="h-4 w-4" />
-            </span>
-          </button>
+            <main
+              className="paper-panel paper-panel-strong public-shell-main animate-rise p-6 md:p-10"
+              style={{ borderRadius: "var(--workspace-corner-radius)" }}
+            >
+              {children}
+            </main>
 
-          <main
-            className="paper-panel paper-panel-strong public-shell-main animate-rise p-6 md:p-10"
-            style={{ borderRadius: "var(--workspace-corner-radius)" }}
-          >
-            {children}
-          </main>
+            <button
+              type="button"
+              className={cn(
+                "public-shell-handle public-shell-handle-right",
+                !hasRightPanel && "is-collapsed",
+              )}
+              aria-label="Resize right reading panel"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                if (!hasRightPanel) {
+                  return;
+                }
+                setDragTarget("right");
+              }}
+            >
+              <span className="public-shell-grip">
+                <GripVertical className="h-4 w-4" />
+              </span>
+            </button>
 
-          <button
-            type="button"
-            className={cn(
-              "public-shell-handle public-shell-handle-right",
-              !hasRightPanel && "is-collapsed",
-            )}
-            aria-label="Resize right reading panel"
-            onPointerDown={(event) => {
-              event.preventDefault();
-              if (!hasRightPanel) {
-                return;
-              }
-              setDragTarget("right");
-            }}
-          >
-            <span className="public-shell-grip">
-              <GripVertical className="h-4 w-4" />
-            </span>
-          </button>
-
-          <aside
-            className={cn(
-              "paper-panel public-shell-panel hidden p-6 xl:block",
-              (isRightCollapsed || !hasRightPanel) && "is-collapsed",
-            )}
-            style={{ borderRadius: "var(--workspace-corner-radius)" }}
-          >
-            {rightPanel}
-          </aside>
+            <aside
+              className={cn(
+                "paper-panel public-shell-panel hidden p-6 xl:block",
+                (isRightCollapsed || !hasRightPanel) && "is-collapsed",
+              )}
+              style={{ borderRadius: "var(--workspace-corner-radius)" }}
+            >
+              {rightPanel}
+            </aside>
+          </div>
+          <PublicCredit />
         </div>
       </div>
     </WorkspaceStyleFrame>

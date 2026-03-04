@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { getSession } from "@/lib/auth";
 import { ContentSearchLauncher } from "@/components/content-search-launcher";
 import { LandingBackground } from "@/components/landing-background";
+import { PublicCredit } from "@/components/public-credit";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import { getGeneralSettings, getPublicContentTree } from "@/lib/content/service";
 import { buildPublicMetadata } from "@/lib/seo";
@@ -185,6 +186,8 @@ export default async function HomePage() {
               </div>
             </section>
           </div>
+
+          <PublicCredit />
         </div>
       </div>
     </WorkspaceStyleFrame>
