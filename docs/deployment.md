@@ -98,24 +98,6 @@ WebBook content is not updated through Git. Books, notes, uploads, users, and
 workspace settings continue to live in the configured content path such as
 `/srv/webbook-data`.
 
-## Optional GitHub update setup
-
-The deploy workflow expects these repository secrets:
-
-- `DEPLOY_HOST`
-- `DEPLOY_USER`
-- `DEPLOY_SSH_KEY`
-- `DEPLOY_PORT` optional, default `22`
-
-The workflow:
-
-1. runs typecheck, tests, and build
-2. SSHes into the server
-3. runs `webbookctl update <sha>`
-
-This setup is optional. It is not required for the first install because the VPS
-builds install and update releases locally from the checked-out repo.
-
 ## Operator commands
 
 Use these on the server:
