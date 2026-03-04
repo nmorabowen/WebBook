@@ -87,6 +87,11 @@ prompt_secret() {
   printf '%s' "$response"
 }
 
+quote_env_value() {
+  local value="$1"
+  printf "'%s'" "$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
+}
+
 read_existing_value() {
   local key="$1"
   if [[ ! -f "$WEBBOOK_ENV_FILE" ]]; then
@@ -108,35 +113,35 @@ write_env_file() {
   local aws_region="${10}"
 
   cat > "$WEBBOOK_ENV_FILE" <<EOF
-DOMAIN=$domain
-WEBBOOK_ROOT=$WEBBOOK_ROOT
-WEBBOOK_CONTENT_HOST_PATH=$content_host_path
-CONTENT_ROOT=content
+DOMAIN=$(quote_env_value "$domain")
+WEBBOOK_ROOT=$(quote_env_value "$WEBBOOK_ROOT")
+WEBBOOK_CONTENT_HOST_PATH=$(quote_env_value "$content_host_path")
+CONTENT_ROOT=$(quote_env_value "content")
 
-AUTH_DISABLED=false
-COOKIE_SECURE=true
-ADMIN_USERNAME=$admin_username
-ADMIN_PASSWORD_HASH=$admin_password_hash
-SESSION_SECRET=$session_secret
+AUTH_DISABLED=$(quote_env_value "false")
+COOKIE_SECURE=$(quote_env_value "true")
+ADMIN_USERNAME=$(quote_env_value "$admin_username")
+ADMIN_PASSWORD_HASH=$(quote_env_value "$admin_password_hash")
+SESSION_SECRET=$(quote_env_value "$session_secret")
 
-REDIS_URL=redis://redis:6379
-PYTHON_RUNNER_URL=http://python-runner:8001/execute
-PYTHON_TIMEOUT_SECONDS=5
+REDIS_URL=$(quote_env_value "redis://redis:6379")
+PYTHON_RUNNER_URL=$(quote_env_value "http://python-runner:8001/execute")
+PYTHON_TIMEOUT_SECONDS=$(quote_env_value "5")
 
-EXECUTION_PER_MINUTE_LIMIT=5
-EXECUTION_PER_HOUR_LIMIT=20
+EXECUTION_PER_MINUTE_LIMIT=$(quote_env_value "5")
+EXECUTION_PER_HOUR_LIMIT=$(quote_env_value "20")
 
-WEB_IMAGE=$DEFAULT_WEB_IMAGE
-PYTHON_IMAGE=$DEFAULT_PYTHON_IMAGE
+WEB_IMAGE=$(quote_env_value "$DEFAULT_WEB_IMAGE")
+PYTHON_IMAGE=$(quote_env_value "$DEFAULT_PYTHON_IMAGE")
 
-BACKUP_LOCAL_DIR=$WEBBOOK_ROOT/backups/local
-BACKUP_RETENTION_DAYS=14
+BACKUP_LOCAL_DIR=$(quote_env_value "$WEBBOOK_ROOT/backups/local")
+BACKUP_RETENTION_DAYS=$(quote_env_value "14")
 
-RESTIC_REPOSITORY=$restic_repository
-RESTIC_PASSWORD=$restic_password
-AWS_ACCESS_KEY_ID=$aws_access_key_id
-AWS_SECRET_ACCESS_KEY=$aws_secret_access_key
-AWS_DEFAULT_REGION=$aws_region
+RESTIC_REPOSITORY=$(quote_env_value "$restic_repository")
+RESTIC_PASSWORD=$(quote_env_value "$restic_password")
+AWS_ACCESS_KEY_ID=$(quote_env_value "$aws_access_key_id")
+AWS_SECRET_ACCESS_KEY=$(quote_env_value "$aws_secret_access_key")
+AWS_DEFAULT_REGION=$(quote_env_value "$aws_region")
 EOF
 }
 

@@ -54,18 +54,23 @@ compose() {
     "$@"
 }
 
+quote_env_value() {
+  local value="$1"
+  printf "'%s'" "$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
+}
+
 set_env_value() {
   local file="$1"
   local key="$2"
   local value="$3"
   local escaped
 
-  escaped="$(printf '%s' "$value" | sed 's/[&|]/\\&/g')"
+  escaped="$(quote_env_value "$value" | sed 's/[&|]/\\&/g')"
 
   if grep -q "^${key}=" "$file"; then
     sed -i "s|^${key}=.*|${key}=${escaped}|" "$file"
   else
-    printf '%s=%s\n' "$key" "$value" >> "$file"
+    printf '%s=%s\n' "$key" "$(quote_env_value "$value")" >> "$file"
   fi
 }
 
