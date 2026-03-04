@@ -1,6 +1,9 @@
 services:
   web:
     image: ${WEB_IMAGE}
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
       - ${WEBBOOK_ROOT}/.env.production
@@ -36,6 +39,9 @@ services:
 
   python-runner:
     image: ${PYTHON_IMAGE}
+    build:
+      context: ./services/python-runner
+      dockerfile: ./services/python-runner/Dockerfile
     restart: unless-stopped
     env_file:
       - ${WEBBOOK_ROOT}/.env.production

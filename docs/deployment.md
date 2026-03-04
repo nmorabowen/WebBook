@@ -35,8 +35,9 @@ The installer will:
 4. render `/opt/webbook/.env.production`
 5. install `webbookctl`
 6. configure Caddy
-7. start the production Compose stack
-8. enable the daily backup timer
+7. build the `web` and `python-runner` images locally on the VPS
+8. start the production Compose stack
+9. enable the daily backup timer
 
 ## DNS and TLS
 
@@ -44,7 +45,7 @@ Point your DNS A or AAAA record to the VPS IP before running the installer.
 
 Caddy terminates TLS and proxies traffic to the app on `127.0.0.1:3000`.
 
-## GitHub deploy setup
+## Optional GitHub deploy setup
 
 The deploy workflow expects these repository secrets:
 
@@ -59,6 +60,9 @@ The workflow:
 2. pushes `web` and `python-runner` images to GHCR
 3. SSHes into the server
 4. runs `webbookctl deploy <sha>`
+
+This setup is optional. It is not required for the first install because the VPS
+builds the initial images locally from the checked-out repo.
 
 ## Operator commands
 
@@ -114,6 +118,7 @@ Production health checks use:
 
 - Production should use `AUTH_DISABLED=false`
 - Production content on the server is the source of truth
+- First install builds locally on the VPS and does not require GHCR access
 - Deploys update code and images, but do not overwrite the configured content path
 - To place the workspace on a separate disk, set `WEBBOOK_CONTENT_HOST_PATH` to a
   mounted path such as `/srv/webbook-data`; the container still reads it at

@@ -173,13 +173,17 @@ run_initial_deploy() {
     --project-name webbook \
     --env-file "$WEBBOOK_ENV_FILE" \
     -f "$WEBBOOK_REPO_DIR/docker-compose.production.yml" \
-    pull
+    build web python-runner
 
+  compose_cmd up -d redis python-runner web
+}
+
+compose_cmd() {
   docker compose \
     --project-name webbook \
     --env-file "$WEBBOOK_ENV_FILE" \
     -f "$WEBBOOK_REPO_DIR/docker-compose.production.yml" \
-    up -d
+    "$@"
 }
 
 write_initial_release_state() {
@@ -311,9 +315,9 @@ Useful commands:
   webbookctl logs web
   webbookctl backup
 
-Next steps for GitHub deploys:
-  1. Add DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, and optional DEPLOY_PORT to GitHub Actions secrets.
-  2. Push to main to trigger image build and deployment.
+Next steps:
+  1. Open https://$domain after DNS or tunnel routing is in place.
+  2. Optional: add DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, and optional DEPLOY_PORT to GitHub Actions secrets for remote deploys.
 EOF
 }
 

@@ -66,6 +66,7 @@ WebBook includes an ONCE-style deployment flow for a Debian Bookworm VPS with:
 
 - host-level Caddy for HTTPS
 - Docker Compose runtime
+- first install builds locally on the VPS from the checked-out repo
 - GitHub Actions deploys over SSH
 - daily local and remote backups
 
@@ -87,6 +88,9 @@ For production storage, all books, notes, uploads, revisions, users, and workspa
 settings live under the content root. Set `WEBBOOK_CONTENT_HOST_PATH` in
 [`.env.production.example`](/c:/Users/nmb/Desktop/WebBook/.env.production.example)
 to place that workspace on a different disk such as `/srv/webbook-data`.
+
+The initial install no longer depends on GHCR access or GitHub Actions secrets.
+Those are only needed if you want the optional owner deploy workflow later.
 
 ## Useful commands
 
