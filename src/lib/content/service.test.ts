@@ -261,6 +261,50 @@ describe("content service", () => {
     ]);
   });
 
+  it("creates a chapter for legacy books missing the chapters directory", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Legacy Book",
+      slug: "legacy-book",
+      description: "Testing missing chapters directory",
+      body: "# Legacy Book",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await fs.rm(path.join(process.cwd(), tempRoot, "books", "legacy-book", "chapters"), {
+      recursive: true,
+      force: true,
+    });
+
+    const chapter = await service.createChapter("legacy-book", {
+      title: "Recovered Chapter",
+      slug: "recovered-chapter",
+      summary: "",
+      body: "# Recovered",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    expect(chapter?.meta.slug).toBe("recovered-chapter");
+    await expect(
+      fs.readFile(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          "books",
+          "legacy-book",
+          "chapters",
+          "001-recovered-chapter.md",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("Recovered Chapter");
+  });
+
   it("filters the public tree and duplicates a draft book", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

@@ -1155,7 +1155,9 @@ export async function createChapter(bookSlug: string, input: unknown) {
     } satisfies ChapterMeta,
     data.body,
   );
-  await fs.writeFile(chapterFilePath(book.meta.slug, slug, data.order), raw, {
+  const filePath = chapterFilePath(book.meta.slug, slug, data.order);
+  await ensureDirectory(path.dirname(filePath));
+  await fs.writeFile(filePath, raw, {
     encoding: "utf8",
     flag: "wx",
   });
