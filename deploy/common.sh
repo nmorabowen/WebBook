@@ -106,6 +106,14 @@ wait_for_http() {
   return 1
 }
 
+dump_release_diagnostics() {
+  echo "Release diagnostics:" >&2
+  compose ps >&2 || true
+  echo >&2
+  echo "Recent container logs:" >&2
+  compose logs --no-color --tail 200 web python-runner redis >&2 || true
+}
+
 wait_for_container_health() {
   local service="$1"
   local retries="${2:-30}"
@@ -130,8 +138,17 @@ wait_for_container_health() {
 }
 
 wait_for_release_health() {
-  wait_for_http "http://127.0.0.1:3000/api/healthz" 45 2
-  wait_for_container_health "python-runner" 45 2
+  if ! wait_for_http "http://127.0.0.1:3000/api/healthz" 45 2; then
+    echo "Web health check failed: http://127.0.0.1:3000/api/healthz" >&2
+    return 1
+  fi
+
+  if ! wait_for_container_health "python-runner" 45 2; then
+    echo "Python runner health check failed." >&2
+    return 1
+  fi
+
+  return 0
 }
 
 current_repo_ref() {

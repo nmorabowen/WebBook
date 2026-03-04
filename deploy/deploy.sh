@@ -15,10 +15,16 @@ EOF
 
 rebuild_release() {
   if ! compose build web python-runner; then
+    echo "docker compose build failed." >&2
     return 1
   fi
 
-  compose up -d redis python-runner web
+  if ! compose up -d redis python-runner web; then
+    echo "docker compose up failed." >&2
+    return 1
+  fi
+
+  return 0
 }
 
 update_release() {
@@ -35,9 +41,10 @@ update_release() {
   write_release_state "$WEBBOOK_STATE_DIR/pending-release.env" "$next_ref"
 
   if ! rebuild_release; then
+    dump_release_diagnostics
     checkout_repo_ref "$current_ref"
     rebuild_release || true
-    echo "Build failed. Restored previous release." >&2
+    echo "Release startup failed. Restored previous release." >&2
     exit 1
   fi
 
@@ -49,6 +56,7 @@ update_release() {
   fi
 
   echo "Update health check failed. Rolling back." >&2
+  dump_release_diagnostics
   checkout_repo_ref "$current_ref"
   rebuild_release || true
   wait_for_release_health || true
@@ -84,6 +92,7 @@ rollback_release() {
   fi
 
   echo "Rollback failed. Restoring pre-rollback environment." >&2
+  dump_release_diagnostics
   checkout_repo_ref "$current_ref"
   rebuild_release || true
   exit 1
