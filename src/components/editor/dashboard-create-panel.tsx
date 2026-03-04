@@ -15,55 +15,79 @@ export function DashboardCreatePanel({
 }: DashboardCreatePanelProps) {
   const router = useRouter();
   const [title, setTitle] = useState(kind === "book" ? "New book" : "New note");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const create = () => {
     startTransition(async () => {
-      const response = await fetch(kind === "book" ? "/api/books" : "/api/notes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-          kind === "book"
-            ? {
-                title,
-                slug: title,
-                description: "A fresh WebBook.",
-                body: "# New book\n\nOutline the idea here.",
-                status: "draft",
-              }
-            : {
-                title,
-                slug: title,
-                summary: "A fresh standalone note.",
-                body: "# New note\n\nStart writing here.",
-                status: "draft",
-                allowExecution: true,
-                typography: {
-                  bodyFontSize: 1,
-                  bodyLineHeight: 1,
-                  headingBaseSize: 2.5,
-                  headingScale: 1.25,
-                  headingIndentStep: 0,
-                  paragraphSpacing: 1,
-                  contentWidth: 75,
+      setErrorMessage(null);
+
+      try {
+        const response = await fetch(kind === "book" ? "/api/books" : "/api/notes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(
+            kind === "book"
+              ? {
+                  title,
+                  slug: title,
+                  description: "A fresh WebBook.",
+                  body: "# New book\n\nOutline the idea here.",
+                  status: "draft",
+                }
+              : {
+                  title,
+                  slug: title,
+                  summary: "A fresh standalone note.",
+                  body: "# New note\n\nStart writing here.",
+                  status: "draft",
+                  allowExecution: true,
+                  typography: {
+                    bodyFontSize: 1,
+                    bodyLineHeight: 1,
+                    headingBaseSize: 2.5,
+                    headingScale: 1.25,
+                    headingIndentStep: 0,
+                    paragraphSpacing: 1,
+                    contentWidth: 75,
+                  },
                 },
-              },
-        ),
-      });
+          ),
+        });
 
-      const payload = (await response.json()) as { meta?: { slug: string } };
-      if (!response.ok || !payload.meta?.slug) {
-        return;
+        const payload = (await response.json().catch(() => null)) as
+          | { meta?: { slug: string }; error?: string }
+          | null;
+        const fallbackMessage =
+          kind === "book" ? "Could not create book." : "Could not create note.";
+
+        if (!response.ok) {
+          setErrorMessage(payload?.error ?? fallbackMessage);
+          return;
+        }
+
+        if (!payload?.meta?.slug) {
+          setErrorMessage(fallbackMessage);
+          return;
+        }
+
+        router.push(
+          kind === "book"
+            ? `/app/books/${payload.meta.slug}`
+            : `/app/notes/${payload.meta.slug}`,
+        );
+        router.refresh();
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : kind === "book"
+              ? "Could not create book."
+              : "Could not create note.",
+        );
       }
-
-      router.push(
-        kind === "book"
-          ? `/app/books/${payload.meta.slug}`
-          : `/app/notes/${payload.meta.slug}`,
-      );
-      router.refresh();
     });
   };
 
@@ -79,6 +103,11 @@ export function DashboardCreatePanel({
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />
+        {errorMessage ? (
+          <p className="text-sm text-[var(--paper-danger)]" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
         <button type="button" className="paper-button" onClick={create} disabled={isPending}>
           {isPending
             ? "Creating..."

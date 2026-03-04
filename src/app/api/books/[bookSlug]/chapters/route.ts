@@ -7,8 +7,17 @@ export async function POST(
   { params }: { params: Promise<{ bookSlug: string }> },
 ) {
   await requireSession();
-  const { bookSlug } = await params;
-  return NextResponse.json(await createChapter(bookSlug, await request.json()), {
-    status: 201,
-  });
+  try {
+    const { bookSlug } = await params;
+    return NextResponse.json(await createChapter(bookSlug, await request.json()), {
+      status: 201,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Chapter creation failed",
+      },
+      { status: 400 },
+    );
+  }
 }
