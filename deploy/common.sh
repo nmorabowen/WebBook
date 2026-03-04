@@ -19,10 +19,31 @@ require_file() {
 
 load_env() {
   require_file "$WEBBOOK_ENV_FILE"
-  set -a
-  # shellcheck disable=SC1090
-  . "$WEBBOOK_ENV_FILE"
-  set +a
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+
+    if [[ -z "$line" || "$line" == \#* ]]; then
+      continue
+    fi
+
+    if [[ "$line" != *=* ]]; then
+      continue
+    fi
+
+    local key="${line%%=*}"
+    local value="${line#*=}"
+
+    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      continue
+    fi
+
+    if [[ "$value" =~ ^\".*\"$ || "$value" =~ ^\'.*\'$ ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    printf -v "$key" '%s' "$value"
+    export "$key"
+  done < "$WEBBOOK_ENV_FILE"
 }
 
 compose() {
