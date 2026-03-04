@@ -71,6 +71,22 @@ type IndexState = {
 };
 
 type PublicContentTree = ContentTree;
+type OrderedChapterFile = {
+  fileName: string;
+  filePath: string;
+  order: number;
+  slug: string;
+};
+type OrderedBookFile = {
+  filePath: string;
+  order?: number;
+  slug: string;
+};
+type OrderedNoteFile = {
+  filePath: string;
+  order?: number;
+  slug: string;
+};
 
 function bookDirectory(bookSlug: string) {
   return path.join(booksRoot, bookSlug);
@@ -356,8 +372,45 @@ function wrapContentFileError(filePath: string, error: unknown) {
   return new Error(`Invalid content file ${toDisplayPath(filePath)}: ${message}`);
 }
 
+function extractFrontMatter(raw: string) {
+  return /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(raw);
+}
+
+function readFrontMatterScalar(raw: string, key: string) {
+  const frontMatterMatch = extractFrontMatter(raw);
+  if (!frontMatterMatch) {
+    return null;
+  }
+
+  const pattern = new RegExp(`^${key}:\\s*(.+)$`, "m");
+  const match = pattern.exec(frontMatterMatch[1]);
+  if (!match) {
+    return null;
+  }
+
+  const value = match[1].trim();
+  if (
+    (value.startsWith("'") && value.endsWith("'")) ||
+    (value.startsWith('"') && value.endsWith('"'))
+  ) {
+    return value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function readFrontMatterOrder(raw: string) {
+  const value = readFrontMatterScalar(raw, "order");
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function rewriteFrontMatterScalar(raw: string, key: string, value: string | number) {
-  const frontMatterMatch = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(raw);
+  const frontMatterMatch = extractFrontMatter(raw);
   if (!frontMatterMatch) {
     throw new Error("Missing front matter block");
   }
@@ -393,14 +446,70 @@ async function listOrderedChapterFiles(bookSlug: string) {
     .filter(
       (
         entry,
-      ): entry is {
-        fileName: string;
-        filePath: string;
-        order: number;
-        slug: string;
-      } => entry !== null,
+      ): entry is OrderedChapterFile => entry !== null,
     )
     .sort((left, right) => left.order - right.order || left.slug.localeCompare(right.slug));
+}
+
+async function listOrderedBookFiles() {
+  const entries = await readDirectoryEntries(booksRoot);
+  const books = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const filePath = bookFilePath(entry.name);
+        try {
+          const raw = await fs.readFile(filePath, "utf8");
+          return {
+            filePath,
+            order: readFrontMatterOrder(raw),
+            slug: entry.name,
+          } satisfies OrderedBookFile;
+        } catch {
+          return {
+            filePath,
+            order: undefined,
+            slug: entry.name,
+          } satisfies OrderedBookFile;
+        }
+      }),
+  );
+
+  return books.sort(
+    (left, right) =>
+      contentOrder(left.order) - contentOrder(right.order) || left.slug.localeCompare(right.slug),
+  );
+}
+
+async function listOrderedNoteFiles() {
+  const entries = await readDirectoryEntries(notesRoot);
+  const notes = await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map(async (entry) => {
+        const slug = entry.name.replace(/\.md$/i, "");
+        const filePath = noteFilePath(slug);
+        try {
+          const raw = await fs.readFile(filePath, "utf8");
+          return {
+            filePath,
+            order: readFrontMatterOrder(raw),
+            slug,
+          } satisfies OrderedNoteFile;
+        } catch {
+          return {
+            filePath,
+            order: undefined,
+            slug,
+          } satisfies OrderedNoteFile;
+        }
+      }),
+  );
+
+  return notes.sort(
+    (left, right) =>
+      contentOrder(left.order) - contentOrder(right.order) || left.slug.localeCompare(right.slug),
+  );
 }
 
 function extractWikiTargets(markdown: string) {
@@ -1127,15 +1236,15 @@ export async function createBook(input: unknown) {
   const data = saveBookSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
-  const existingBooks = await listBookRecords();
-  if (existingBooks.some((book) => book.meta.slug === slug)) {
+  const existingBooks = await listOrderedBookFiles();
+  if (existingBooks.some((book) => book.slug === slug)) {
     throw new Error("A book with that slug already exists");
   }
 
   const now = new Date().toISOString();
   const nextOrder =
     existingBooks.reduce(
-      (highestOrder, book) => Math.max(highestOrder, book.meta.order ?? 0),
+      (highestOrder, book) => Math.max(highestOrder, book.order ?? 0),
       0,
     ) + 1;
   const directoryPath = bookDirectory(slug);
@@ -1207,21 +1316,23 @@ export async function updateBook(bookSlug: string, input: unknown) {
 }
 
 export async function createChapter(bookSlug: string, input: unknown) {
-  const book = await getBook(bookSlug);
+  ensureSafeSlugOrThrow(bookSlug);
+  await fs.access(bookFilePath(bookSlug));
   const data = saveChapterSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
-  if (book.chapters.some((chapter) => chapter.meta.slug === slug)) {
+  const chapterEntries = await listOrderedChapterFiles(bookSlug);
+  if (chapterEntries.some((chapter) => chapter.slug === slug)) {
     throw new Error("A chapter with that slug already exists in this book");
   }
-  if (book.chapters.some((chapter) => chapter.meta.order === data.order)) {
+  if (chapterEntries.some((chapter) => chapter.order === data.order)) {
     throw new Error(`A chapter already uses order ${data.order}`);
   }
   const now = new Date().toISOString();
   const raw = renderMatter(
     {
       kind: "chapter",
-      bookSlug: book.meta.slug,
+      bookSlug,
       title: data.title,
       slug,
       order: data.order,
@@ -1235,14 +1346,14 @@ export async function createChapter(bookSlug: string, input: unknown) {
     } satisfies ChapterMeta,
     data.body,
   );
-  const filePath = chapterFilePath(book.meta.slug, slug, data.order);
+  const filePath = chapterFilePath(bookSlug, slug, data.order);
   await ensureDirectory(path.dirname(filePath));
   await fs.writeFile(filePath, raw, {
     encoding: "utf8",
     flag: "wx",
   });
   await rebuildIndexes();
-  return getChapter(book.meta.slug, slug);
+  return parseChapterFile(filePath, bookSlug);
 }
 
 export async function updateChapter(
@@ -1250,25 +1361,28 @@ export async function updateChapter(
   chapterSlug: string,
   input: unknown,
 ) {
-  const book = await getBook(bookSlug);
-  const existing = book.chapters.find((chapter) => chapter.meta.slug === chapterSlug) ?? null;
-  if (!existing) {
+  ensureSafeSlugOrThrow(bookSlug);
+  ensureSafeSlugOrThrow(chapterSlug);
+  const chapterEntries = await listOrderedChapterFiles(bookSlug);
+  const existingEntry = chapterEntries.find((chapter) => chapter.slug === chapterSlug) ?? null;
+  if (!existingEntry) {
     throw new Error("Chapter not found");
   }
+  const existing = await parseChapterFile(existingEntry.filePath, bookSlug);
   const data = saveChapterSchema.parse(input);
   const now = new Date().toISOString();
   const nextSlug = toSlug(data.slug);
   ensureSafeSlugOrThrow(nextSlug);
   if (
-    book.chapters.some(
+    chapterEntries.some(
       (chapter) =>
-        chapter.meta.slug === nextSlug && chapter.meta.slug !== existing.meta.slug,
+        chapter.slug === nextSlug && chapter.slug !== existing.meta.slug,
     )
   ) {
     throw new Error("A chapter with that slug already exists in this book");
   }
-  if (data.order > book.chapters.length) {
-    throw new Error(`Chapter order must be between 1 and ${book.chapters.length}`);
+  if (data.order > chapterEntries.length) {
+    throw new Error(`Chapter order must be between 1 and ${chapterEntries.length}`);
   }
   const nextMeta = {
     ...existing.meta,
@@ -1289,15 +1403,12 @@ export async function updateChapter(
   const requiresReorder = data.order !== existing.meta.order;
 
   if (requiresReorder) {
-    const reorderedChapters = book.chapters.filter(
-      (chapter) => chapter.meta.slug !== existing.meta.slug,
-    );
+    const reorderedChapters = chapterEntries.filter((chapter) => chapter.slug !== existing.meta.slug);
 
     reorderedChapters.splice(data.order - 1, 0, {
-      ...existing,
-      meta: nextMeta,
-      body: data.body,
-      raw,
+      ...existingEntry,
+      slug: nextSlug,
+      order: data.order,
     });
 
     const bookPath = bookDirectory(bookSlug);
@@ -1307,26 +1418,37 @@ export async function updateChapter(
 
     await ensureDirectory(stagingPath);
 
-    for (const chapter of book.chapters) {
-      await createRevision(chapter.id, chapter.raw);
+    for (const chapter of chapterEntries) {
+      await createRevision(
+        chapterId(bookSlug, chapter.slug),
+        await fs.readFile(chapter.filePath, "utf8"),
+      );
     }
 
     for (const [index, chapter] of reorderedChapters.entries()) {
-      const isUpdatedChapter = chapter.id === existing.id;
-      const chapterMeta = {
-        ...(isUpdatedChapter ? nextMeta : chapter.meta),
-        order: index + 1,
-        updatedAt: now,
-      } satisfies ChapterMeta;
-
-      await fs.writeFile(
-        path.join(
-          stagingPath,
-          `${String(index + 1).padStart(3, "0")}-${chapterMeta.slug}.md`,
-        ),
-        renderMatter(chapterMeta, isUpdatedChapter ? data.body : chapter.body),
-        "utf8",
+      const isUpdatedChapter = chapter.filePath === existingEntry.filePath;
+      const nextPath = path.join(
+        stagingPath,
+        `${String(index + 1).padStart(3, "0")}-${chapter.slug}.md`,
       );
+
+      if (isUpdatedChapter) {
+        const chapterMeta = {
+          ...nextMeta,
+          order: index + 1,
+          updatedAt: now,
+        } satisfies ChapterMeta;
+        await fs.writeFile(nextPath, renderMatter(chapterMeta, data.body), "utf8");
+        continue;
+      }
+
+      const rawChapter = await fs.readFile(chapter.filePath, "utf8");
+      const nextRaw = rewriteFrontMatterScalar(
+        rewriteFrontMatterScalar(rawChapter, "order", index + 1),
+        "updatedAt",
+        now,
+      );
+      await fs.writeFile(nextPath, nextRaw, "utf8");
     }
 
     await fs.rename(currentChaptersPath, backupPath);
@@ -1341,13 +1463,13 @@ export async function updateChapter(
 
     await fs.rm(backupPath, { recursive: true, force: true });
     await rebuildIndexes();
-    return getChapter(existing.meta.bookSlug, nextSlug);
+    return parseChapterFile(chapterFilePath(bookSlug, nextSlug, data.order), bookSlug);
   }
 
   if (data.createRevision) {
     await createRevision(existing.id, existing.raw);
   }
-  const nextPath = chapterFilePath(existing.meta.bookSlug, nextSlug, data.order);
+  const nextPath = chapterFilePath(bookSlug, nextSlug, data.order);
   if (existing.filePath === nextPath) {
     await writeFileAtomic(nextPath, raw);
   } else {
@@ -1362,7 +1484,7 @@ export async function updateChapter(
     }
   }
   await rebuildIndexes();
-  return getChapter(existing.meta.bookSlug, nextSlug);
+  return parseChapterFile(nextPath, bookSlug);
 }
 
 export async function reorderBookChapters(bookSlug: string, input: unknown) {
@@ -1443,8 +1565,8 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
 
 export async function reorderBooks(input: unknown) {
   const data = reorderBooksSchema.parse(input);
-  const books = await listBookRecords();
-  const bookMap = new Map(books.map((book) => [book.meta.slug, book] as const));
+  const books = await listOrderedBookFiles();
+  const bookMap = new Map(books.map((book) => [book.slug, book] as const));
   const uniqueSlugs = new Set(data.bookSlugs);
 
   if (data.bookSlugs.length !== books.length || uniqueSlugs.size !== books.length) {
@@ -1467,18 +1589,13 @@ export async function reorderBooks(input: unknown) {
         throw new Error(`Unknown book slug: ${slug}`);
       }
 
-      await fs.writeFile(
-        book.filePath,
-        renderMatter(
-          {
-            ...book.meta,
-            order: index + 1,
-            updatedAt: now,
-          } satisfies BookMeta,
-          book.body,
-        ),
-        "utf8",
+      const raw = await fs.readFile(book.filePath, "utf8");
+      const nextRaw = rewriteFrontMatterScalar(
+        rewriteFrontMatterScalar(raw, "order", index + 1),
+        "updatedAt",
+        now,
       );
+      await writeFileAtomic(book.filePath, nextRaw);
     }),
   );
 
@@ -1488,8 +1605,8 @@ export async function reorderBooks(input: unknown) {
 
 export async function reorderNotes(input: unknown) {
   const data = reorderNotesSchema.parse(input);
-  const notes = await listNoteRecords();
-  const noteMap = new Map(notes.map((note) => [note.meta.slug, note] as const));
+  const notes = await listOrderedNoteFiles();
+  const noteMap = new Map(notes.map((note) => [note.slug, note] as const));
   const uniqueSlugs = new Set(data.noteSlugs);
 
   if (data.noteSlugs.length !== notes.length || uniqueSlugs.size !== notes.length) {
@@ -1512,18 +1629,13 @@ export async function reorderNotes(input: unknown) {
         throw new Error(`Unknown note slug: ${slug}`);
       }
 
-      await fs.writeFile(
-        note.filePath,
-        renderMatter(
-          {
-            ...note.meta,
-            order: index + 1,
-            updatedAt: now,
-          } satisfies NoteMeta,
-          note.body,
-        ),
-        "utf8",
+      const raw = await fs.readFile(note.filePath, "utf8");
+      const nextRaw = rewriteFrontMatterScalar(
+        rewriteFrontMatterScalar(raw, "order", index + 1),
+        "updatedAt",
+        now,
       );
+      await writeFileAtomic(note.filePath, nextRaw);
     }),
   );
 
@@ -1535,15 +1647,15 @@ export async function createNote(input: unknown) {
   const data = saveNoteSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
-  const existingNotes = await listNoteRecords();
-  if (existingNotes.some((note) => note.meta.slug === slug)) {
+  const existingNotes = await listOrderedNoteFiles();
+  if (existingNotes.some((note) => note.slug === slug)) {
     throw new Error("A note with that slug already exists");
   }
 
   const now = new Date().toISOString();
   const nextOrder =
     existingNotes.reduce(
-      (highestOrder, note) => Math.max(highestOrder, note.meta.order ?? 0),
+      (highestOrder, note) => Math.max(highestOrder, note.order ?? 0),
       0,
     ) + 1;
   const raw = renderMatter(
@@ -1606,15 +1718,15 @@ export async function updateNote(slug: string, input: unknown) {
 
 export async function duplicateBook(bookSlug: string) {
   const existing = await getBook(bookSlug);
-  const allBooks = await listBookRecords();
+  const allBooks = await listOrderedBookFiles();
   const nextSlug = nextCopySlug(
     existing.meta.slug,
-    new Set(allBooks.map((book) => book.meta.slug)),
+    new Set(allBooks.map((book) => book.slug)),
   );
   const now = new Date().toISOString();
   const nextOrder =
     allBooks.reduce(
-      (highestOrder, book) => Math.max(highestOrder, book.meta.order ?? 0),
+      (highestOrder, book) => Math.max(highestOrder, book.order ?? 0),
       0,
     ) + 1;
   const directoryPath = bookDirectory(nextSlug);
@@ -1665,25 +1777,34 @@ export async function duplicateBook(bookSlug: string) {
 }
 
 export async function duplicateChapter(bookSlug: string, chapterSlug: string) {
-  const book = await getBook(bookSlug);
-  const existing = book.chapters.find((chapter) => chapter.meta.slug === chapterSlug);
-  if (!existing) {
+  ensureSafeSlugOrThrow(bookSlug);
+  ensureSafeSlugOrThrow(chapterSlug);
+  const chapterEntries = await listOrderedChapterFiles(bookSlug);
+  const existingEntry = chapterEntries.find((chapter) => chapter.slug === chapterSlug);
+  if (!existingEntry) {
     throw new Error("Chapter not found");
   }
+  const existing = await parseChapterFile(existingEntry.filePath, bookSlug);
 
   const nextSlug = nextCopySlug(
     existing.meta.slug,
-    new Set(book.chapters.map((chapter) => chapter.meta.slug)),
+    new Set(chapterEntries.map((chapter) => chapter.slug)),
   );
   const now = new Date().toISOString();
   const nextOrder =
-    book.chapters.reduce(
-      (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
+    chapterEntries.reduce(
+      (highestOrder, chapter) => Math.max(highestOrder, chapter.order),
       0,
     ) + 1;
+  const bookFontPreset =
+    (readFrontMatterScalar(await fs.readFile(bookFilePath(bookSlug), "utf8"), "fontPreset") as
+      | ChapterMeta["fontPreset"]
+      | null) ??
+    "source-serif";
 
+  const nextPath = chapterFilePath(bookSlug, nextSlug, nextOrder);
   await fs.writeFile(
-    chapterFilePath(bookSlug, nextSlug, nextOrder),
+    nextPath,
     renderMatter(
       {
         ...existing.meta,
@@ -1691,7 +1812,7 @@ export async function duplicateChapter(bookSlug: string, chapterSlug: string) {
         slug: nextSlug,
         order: nextOrder,
         status: "draft",
-        fontPreset: existing.meta.fontPreset ?? book.meta.fontPreset ?? "source-serif",
+        fontPreset: existing.meta.fontPreset ?? bookFontPreset,
         publishedAt: undefined,
         updatedAt: now,
         createdAt: now,
@@ -1702,7 +1823,7 @@ export async function duplicateChapter(bookSlug: string, chapterSlug: string) {
   );
 
   await rebuildIndexes();
-  return getChapter(bookSlug, nextSlug);
+  return parseChapterFile(nextPath, bookSlug);
 }
 
 export async function duplicateNote(slug: string) {
@@ -1711,15 +1832,15 @@ export async function duplicateNote(slug: string) {
     throw new Error("Note not found");
   }
 
-  const allNotes = await listNoteRecords();
+  const allNotes = await listOrderedNoteFiles();
   const nextSlug = nextCopySlug(
     existing.meta.slug,
-    new Set(allNotes.map((note) => note.meta.slug)),
+    new Set(allNotes.map((note) => note.slug)),
   );
   const now = new Date().toISOString();
   const nextOrder =
     allNotes.reduce(
-      (highestOrder, note) => Math.max(highestOrder, note.meta.order ?? 0),
+      (highestOrder, note) => Math.max(highestOrder, note.order ?? 0),
       0,
     ) + 1;
 
@@ -1747,31 +1868,34 @@ export async function duplicateNote(slug: string) {
 }
 
 export async function deleteBook(bookSlug: string) {
-  const book = await getBook(bookSlug);
-  const books = await listBookRecords();
-  await createRevision(book.id, book.raw);
-  for (const chapter of book.chapters) {
-    await createRevision(chapter.id, chapter.raw);
+  ensureSafeSlugOrThrow(bookSlug);
+  const books = await listOrderedBookFiles();
+  const targetBook = books.find((book) => book.slug === bookSlug);
+  if (!targetBook) {
+    throw new Error("Book not found");
+  }
+
+  await createRevision(bookId(bookSlug), await fs.readFile(targetBook.filePath, "utf8"));
+  for (const chapter of await listOrderedChapterFiles(bookSlug)) {
+    await createRevision(
+      chapterId(bookSlug, chapter.slug),
+      await fs.readFile(chapter.filePath, "utf8"),
+    );
   }
   await fs.rm(bookDirectory(bookSlug), { recursive: true, force: true });
   const now = new Date().toISOString();
   await Promise.all(
     books
-      .filter((entry) => entry.meta.slug !== bookSlug)
-      .sort(
-        (left, right) =>
-          contentOrder(left.meta.order) - contentOrder(right.meta.order),
-      )
+      .filter((entry) => entry.slug !== bookSlug)
       .map((entry, index) =>
-        writeFileAtomic(
-          entry.filePath,
-          renderMatter(
-            {
-              ...entry.meta,
-              order: index + 1,
-              updatedAt: now,
-            } satisfies BookMeta,
-            entry.body,
+        fs.readFile(entry.filePath, "utf8").then((raw) =>
+          writeFileAtomic(
+            entry.filePath,
+            rewriteFrontMatterScalar(
+              rewriteFrontMatterScalar(raw, "order", index + 1),
+              "updatedAt",
+              now,
+            ),
           ),
         ),
       ),
@@ -1836,32 +1960,28 @@ export async function deleteChapter(bookSlug: string, chapterSlug: string) {
 }
 
 export async function deleteNote(slug: string) {
-  const note = await getNote(slug);
-  const notes = await listNoteRecords();
+  ensureSafeSlugOrThrow(slug);
+  const notes = await listOrderedNoteFiles();
+  const note = notes.find((entry) => entry.slug === slug);
   if (!note) {
     throw new Error("Note not found");
   }
 
-  await createRevision(note.id, note.raw);
+  await createRevision(noteId(slug), await fs.readFile(note.filePath, "utf8"));
   await fs.rm(note.filePath, { force: true });
   const now = new Date().toISOString();
   await Promise.all(
     notes
-      .filter((entry) => entry.meta.slug !== slug)
-      .sort(
-        (left, right) =>
-          contentOrder(left.meta.order) - contentOrder(right.meta.order),
-      )
+      .filter((entry) => entry.slug !== slug)
       .map((entry, index) =>
-        writeFileAtomic(
-          entry.filePath,
-          renderMatter(
-            {
-              ...entry.meta,
-              order: index + 1,
-              updatedAt: now,
-            } satisfies NoteMeta,
-            entry.body,
+        fs.readFile(entry.filePath, "utf8").then((raw) =>
+          writeFileAtomic(
+            entry.filePath,
+            rewriteFrontMatterScalar(
+              rewriteFrontMatterScalar(raw, "order", index + 1),
+              "updatedAt",
+              now,
+            ),
           ),
         ),
       ),

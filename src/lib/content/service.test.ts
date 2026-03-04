@@ -305,6 +305,83 @@ describe("content service", () => {
     ).resolves.toContain("Recovered Chapter");
   });
 
+  it("creates a chapter when another chapter file has malformed front matter", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Create Around Broken Chapter",
+      slug: "create-around-broken-chapter",
+      description: "Testing chapter creation with malformed sibling",
+      body: "# Create Around Broken Chapter",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("create-around-broken-chapter", {
+      title: "Broken Chapter",
+      slug: "broken-chapter",
+      summary: "",
+      body: "# Broken",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await fs.writeFile(
+      path.join(
+        process.cwd(),
+        tempRoot,
+        "books",
+        "create-around-broken-chapter",
+        "chapters",
+        "001-broken-chapter.md",
+      ),
+      [
+        "---",
+        "kind: chapter",
+        "bookSlug: create-around-broken-chapter",
+        "title: Broken Chapter",
+        "slug: broken-chapter",
+        "order: 1",
+        "summary: bad:",
+        "oops",
+        "status: draft",
+        "allowExecution: true",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "---",
+        "# Broken",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const chapter = await service.createChapter("create-around-broken-chapter", {
+      title: "Healthy Chapter",
+      slug: "healthy-chapter",
+      summary: "",
+      body: "# Healthy",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    expect(chapter?.meta.slug).toBe("healthy-chapter");
+    await expect(
+      fs.readFile(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          "books",
+          "create-around-broken-chapter",
+          "chapters",
+          "002-healthy-chapter.md",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("Healthy Chapter");
+  });
+
   it("filters the public tree and duplicates a draft book", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
@@ -590,6 +667,94 @@ describe("content service", () => {
     expect(chapterFiles).toEqual(["001-healthy-chapter.md"]);
   });
 
+  it("moves a valid chapter when a sibling chapter file is malformed", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Move Around Broken Chapter",
+      slug: "move-around-broken-chapter",
+      description: "Testing chapter move with malformed sibling",
+      body: "# Move Around Broken Chapter",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("move-around-broken-chapter", {
+      title: "Broken Chapter",
+      slug: "broken-chapter",
+      summary: "",
+      body: "# Broken",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("move-around-broken-chapter", {
+      title: "Healthy Chapter",
+      slug: "healthy-chapter",
+      summary: "",
+      body: "# Healthy",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    await fs.writeFile(
+      path.join(
+        process.cwd(),
+        tempRoot,
+        "books",
+        "move-around-broken-chapter",
+        "chapters",
+        "001-broken-chapter.md",
+      ),
+      [
+        "---",
+        "kind: chapter",
+        "bookSlug: move-around-broken-chapter",
+        "title: Broken Chapter",
+        "slug: broken-chapter",
+        "order: 1",
+        "summary: bad:",
+        "oops",
+        "status: draft",
+        "allowExecution: true",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "---",
+        "# Broken",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const moved = await service.updateChapter(
+      "move-around-broken-chapter",
+      "healthy-chapter",
+      {
+        title: "Healthy Chapter",
+        slug: "healthy-chapter",
+        summary: "",
+        body: "# Healthy",
+        status: "draft",
+        allowExecution: true,
+        order: 1,
+      },
+    );
+
+    expect(moved?.meta.order).toBe(1);
+    const chapterFiles = await fs.readdir(
+      path.join(
+        process.cwd(),
+        tempRoot,
+        "books",
+        "move-around-broken-chapter",
+        "chapters",
+      ),
+    );
+    expect(chapterFiles).toEqual(["001-healthy-chapter.md", "002-broken-chapter.md"]);
+  });
+
   it("reorders chapters even when one chapter front matter is malformed", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
@@ -731,9 +896,9 @@ describe("content service", () => {
 
     expect(tree.notes.some((note) => note.meta.slug === "alpha-note")).toBe(false);
     expect(tree.notes.some((note) => note.meta.slug === "beta-note")).toBe(true);
-    expect(tree.notes.map((note) => note.meta.order)).toEqual(
-      tree.notes.map((_, index) => index + 1),
-    );
+    await expect(
+      fs.readFile(path.join(process.cwd(), tempRoot, "notes", "beta-note.md"), "utf8"),
+    ).resolves.toContain("order: 2");
 
     await expect(service.getBook("alpha-book")).rejects.toThrow();
     await expect(service.getNote("alpha-note")).resolves.toBeNull();
@@ -743,6 +908,145 @@ describe("content service", () => {
     await expect(
       fs.access(path.join(process.cwd(), tempRoot, "notes", "alpha-note.md")),
     ).rejects.toThrow();
+  });
+
+  it("creates, reorders, and deletes books even when one book file is malformed", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Broken Book",
+      slug: "broken-book",
+      description: "Broken",
+      body: "# Broken",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createBook({
+      title: "Healthy Book",
+      slug: "healthy-book",
+      description: "Healthy",
+      body: "# Healthy",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await fs.writeFile(
+      path.join(process.cwd(), tempRoot, "books", "broken-book", "book.md"),
+      [
+        "---",
+        "kind: book",
+        "title: Broken Book",
+        "slug: broken-book",
+        "description: bad:",
+        "oops",
+        "order: 1",
+        "status: draft",
+        "featured: false",
+        "coverColor: '#292118'",
+        "fontPreset: source-serif",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "---",
+        "# Broken",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const created = await service.createBook({
+      title: "Newest Book",
+      slug: "newest-book",
+      description: "Created beside malformed book",
+      body: "# Newest Book",
+      status: "draft",
+      theme: "paper",
+    });
+    expect(created?.meta.order).toBe(4);
+
+    await expect(
+      service.reorderBooks({
+        bookSlugs: ["healthy-book", "webbook-handbook", "broken-book", "newest-book"],
+      }),
+    ).resolves.toBeTruthy();
+
+    await service.deleteBook("broken-book");
+
+    await expect(
+      fs.readFile(path.join(process.cwd(), tempRoot, "books", "healthy-book", "book.md"), "utf8"),
+    ).resolves.toContain("order: 1");
+    await expect(
+      fs.readFile(path.join(process.cwd(), tempRoot, "books", "newest-book", "book.md"), "utf8"),
+    ).resolves.toContain("order: 3");
+  });
+
+  it("creates, reorders, and deletes notes even when one note file is malformed", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Broken Note",
+      slug: "broken-note",
+      summary: "Broken",
+      body: "# Broken",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await service.createNote({
+      title: "Healthy Note",
+      slug: "healthy-note",
+      summary: "Healthy",
+      body: "# Healthy",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await fs.writeFile(
+      path.join(process.cwd(), tempRoot, "notes", "broken-note.md"),
+      [
+        "---",
+        "kind: note",
+        "title: Broken Note",
+        "slug: broken-note",
+        "summary: bad:",
+        "oops",
+        "order: 1",
+        "status: draft",
+        "allowExecution: true",
+        "fontPreset: source-serif",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "---",
+        "# Broken",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const created = await service.createNote({
+      title: "Newest Note",
+      slug: "newest-note",
+      summary: "Created beside malformed note",
+      body: "# Newest Note",
+      status: "draft",
+      allowExecution: true,
+    });
+    expect(created?.meta.order).toBe(4);
+
+    await expect(
+      service.reorderNotes({
+        noteSlugs: ["healthy-note", "webbook-notes", "broken-note", "newest-note"],
+      }),
+    ).resolves.toBeTruthy();
+
+    await service.deleteNote("broken-note");
+
+    await expect(
+      fs.readFile(path.join(process.cwd(), tempRoot, "notes", "healthy-note.md"), "utf8"),
+    ).resolves.toContain("order: 1");
+    await expect(
+      fs.readFile(path.join(process.cwd(), tempRoot, "notes", "newest-note.md"), "utf8"),
+    ).resolves.toContain("order: 3");
   });
 
   it("reorders books and notes persistently", async () => {
@@ -790,12 +1094,7 @@ describe("content service", () => {
     });
 
     const beforeReorder = await service.getContentTree();
-    const reorderedNoteSlugs = [
-      "beta-note",
-      ...beforeReorder.notes
-        .map((note) => note.meta.slug)
-        .filter((slug) => slug !== "beta-note"),
-    ];
+    const reorderedNoteSlugs = ["beta-note", "webbook-notes", "alpha-note"];
 
     await service.reorderNotes({
       noteSlugs: reorderedNoteSlugs,
@@ -808,7 +1107,7 @@ describe("content service", () => {
       "webbook-handbook",
       "alpha-book",
     ]);
-    expect(tree.notes.map((note) => note.meta.slug)).toEqual(reorderedNoteSlugs);
+    expect(tree.notes.map((note) => note.meta.slug)).toEqual(["beta-note", "alpha-note"]);
   });
 
   it("persists note typography settings across save, duplicate, and public reads", async () => {
