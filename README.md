@@ -66,8 +66,8 @@ WebBook includes an ONCE-style deployment flow for a Debian Bookworm VPS with:
 
 - host-level Caddy for HTTPS
 - Docker Compose runtime
-- first install builds locally on the VPS from the checked-out repo
-- GitHub Actions deploys over SSH
+- installs and updates that build locally on the VPS from the checked-out repo
+- optional GitHub Actions update trigger over SSH
 - daily local and remote backups
 
 Primary files:
@@ -89,8 +89,8 @@ settings live under the content root. Set `WEBBOOK_CONTENT_HOST_PATH` in
 [`.env.production.example`](/c:/Users/nmb/Desktop/WebBook/.env.production.example)
 to place that workspace on a different disk such as `/srv/webbook-data`.
 
-The initial install no longer depends on GHCR access or GitHub Actions secrets.
-Those are only needed if you want the optional owner deploy workflow later.
+The install and update path no longer depends on GHCR access. GitHub Actions SSH
+secrets are only needed if you want the optional owner update workflow later.
 
 ## Useful commands
 

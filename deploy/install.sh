@@ -7,6 +7,8 @@ WEBBOOK_REPO_DIR="${WEBBOOK_REPO_DIR:-$WEBBOOK_ROOT/repo}"
 WEBBOOK_ENV_FILE="${WEBBOOK_ENV_FILE:-$WEBBOOK_ROOT/.env.production}"
 WEBBOOK_CONTENT_HOST_PATH="${WEBBOOK_CONTENT_HOST_PATH:-$WEBBOOK_ROOT/content}"
 DEPLOY_USER="${SUDO_USER:-$(id -un)}"
+DEFAULT_WEB_IMAGE="${DEFAULT_WEB_IMAGE:-webbook-web:local}"
+DEFAULT_PYTHON_IMAGE="${DEFAULT_PYTHON_IMAGE:-webbook-python-runner:local}"
 
 require_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
@@ -124,8 +126,8 @@ PYTHON_TIMEOUT_SECONDS=5
 EXECUTION_PER_MINUTE_LIMIT=5
 EXECUTION_PER_HOUR_LIMIT=20
 
-WEB_IMAGE=ghcr.io/nmorabowen/webbook-web:main
-PYTHON_IMAGE=ghcr.io/nmorabowen/webbook-python-runner:main
+WEB_IMAGE=$DEFAULT_WEB_IMAGE
+PYTHON_IMAGE=$DEFAULT_PYTHON_IMAGE
 
 BACKUP_LOCAL_DIR=$WEBBOOK_ROOT/backups/local
 BACKUP_RETENTION_DAYS=14
@@ -187,16 +189,12 @@ compose_cmd() {
 }
 
 write_initial_release_state() {
-  local web_image
-  local python_image
-
-  web_image="$(read_existing_value WEB_IMAGE)"
-  python_image="$(read_existing_value PYTHON_IMAGE)"
+  local release_ref
+  release_ref="$(git -C "$WEBBOOK_REPO_DIR" rev-parse HEAD)"
 
   cat > "$WEBBOOK_ROOT/deploy/state/current-release.env" <<EOF
 RELEASED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-WEB_IMAGE=$web_image
-PYTHON_IMAGE=$python_image
+RELEASE_REF=$release_ref
 EOF
 }
 
@@ -317,7 +315,7 @@ Useful commands:
 
 Next steps:
   1. Open https://$domain after DNS or tunnel routing is in place.
-  2. Optional: add DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, and optional DEPLOY_PORT to GitHub Actions secrets for remote deploys.
+  2. Update later with: webbookctl update
 EOF
 }
 

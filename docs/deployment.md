@@ -45,7 +45,25 @@ Point your DNS A or AAAA record to the VPS IP before running the installer.
 
 Caddy terminates TLS and proxies traffic to the app on `127.0.0.1:3000`.
 
-## Optional GitHub deploy setup
+## Updates
+
+To update a running server manually:
+
+```bash
+webbookctl update
+```
+
+To deploy a specific commit or tag:
+
+```bash
+webbookctl update <ref>
+```
+
+`webbookctl update` fetches the repo, checks out the requested ref, rebuilds the
+`web` and `python-runner` images locally on the VPS, restarts the stack, and then
+waits for health checks to pass.
+
+## Optional GitHub update setup
 
 The deploy workflow expects these repository secrets:
 
@@ -57,12 +75,11 @@ The deploy workflow expects these repository secrets:
 The workflow:
 
 1. runs typecheck, tests, and build
-2. pushes `web` and `python-runner` images to GHCR
-3. SSHes into the server
-4. runs `webbookctl deploy <sha>`
+2. SSHes into the server
+3. runs `webbookctl update <sha>`
 
 This setup is optional. It is not required for the first install because the VPS
-builds the initial images locally from the checked-out repo.
+builds install and update releases locally from the checked-out repo.
 
 ## Operator commands
 
@@ -93,11 +110,11 @@ If Restic is configured, each backup run also pushes an encrypted snapshot to th
 
 ## Rollback
 
-`webbookctl deploy` stores the previous release image tags before switching to a new release.
+`webbookctl update` stores the previous release git ref before switching to a new release.
 
 If the new release fails health checks:
 
-- the deploy script restores the previous image tags
+- the deploy script checks out the previous release ref
 - the stack is restarted on the previous release
 - the deploy exits non-zero
 
@@ -118,8 +135,8 @@ Production health checks use:
 
 - Production should use `AUTH_DISABLED=false`
 - Production content on the server is the source of truth
-- First install builds locally on the VPS and does not require GHCR access
-- Deploys update code and images, but do not overwrite the configured content path
+- Installs and updates build locally on the VPS and do not require GHCR access
+- Updates do not overwrite the configured content path
 - To place the workspace on a separate disk, set `WEBBOOK_CONTENT_HOST_PATH` to a
   mounted path such as `/srv/webbook-data`; the container still reads it at
   `/app/content`

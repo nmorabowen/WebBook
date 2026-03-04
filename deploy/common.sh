@@ -77,12 +77,10 @@ get_env_value() {
 
 write_release_state() {
   local file="$1"
-  local web_image="$2"
-  local python_image="$3"
+  local release_ref="$2"
   cat > "$file" <<EOF
 RELEASED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-WEB_IMAGE=$web_image
-PYTHON_IMAGE=$python_image
+RELEASE_REF=$release_ref
 EOF
 }
 
@@ -131,10 +129,27 @@ wait_for_release_health() {
   wait_for_container_health "python-runner" 45 2
 }
 
-sync_repo_checkout() {
-  local branch="${1:-main}"
+current_repo_ref() {
+  git -C "$WEBBOOK_REPO_DIR" rev-parse HEAD
+}
+
+checkout_repo_ref() {
+  local target="${1:-main}"
+
   require_file "$WEBBOOK_REPO_DIR/.git/HEAD"
-  git -C "$WEBBOOK_REPO_DIR" fetch --depth 1 origin "$branch"
-  git -C "$WEBBOOK_REPO_DIR" checkout -f "$branch"
-  git -C "$WEBBOOK_REPO_DIR" reset --hard "origin/$branch"
+  git -C "$WEBBOOK_REPO_DIR" fetch --tags origin
+  git -C "$WEBBOOK_REPO_DIR" fetch origin main
+
+  if git -C "$WEBBOOK_REPO_DIR" rev-parse --verify "origin/$target^{commit}" > /dev/null 2>&1; then
+    git -C "$WEBBOOK_REPO_DIR" checkout -f --detach "origin/$target"
+    return
+  fi
+
+  if git -C "$WEBBOOK_REPO_DIR" rev-parse --verify "$target^{commit}" > /dev/null 2>&1; then
+    git -C "$WEBBOOK_REPO_DIR" checkout -f --detach "$target"
+    return
+  fi
+
+  echo "Unknown release ref: $target" >&2
+  exit 1
 }
