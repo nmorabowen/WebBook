@@ -459,6 +459,62 @@ describe("content service", () => {
     expect(book.chapters[0]?.meta.fontPreset).toBe("oswald");
   });
 
+  it("surfaces the file path when chapter deletion hits invalid front matter", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Broken Delete Book",
+      slug: "broken-delete-book",
+      description: "Testing delete parse failures",
+      body: "# Broken Delete Book",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("broken-delete-book", {
+      title: "Broken Chapter",
+      slug: "broken-chapter",
+      summary: "",
+      body: "# Broken",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    const chapterPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "broken-delete-book",
+      "chapters",
+      "001-broken-chapter.md",
+    );
+
+    await fs.writeFile(
+      chapterPath,
+      [
+        "---",
+        "title: Broken Chapter",
+        "slug: broken-chapter",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "kind: chapter",
+        "summary: bad:",
+        "oops",
+        "---",
+        "# Broken",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(
+      service.deleteChapter("broken-delete-book", "broken-chapter"),
+    ).rejects.toThrow(
+      "Invalid content file .tmp-content-test/books/broken-delete-book/chapters/001-broken-chapter.md",
+    );
+  });
+
   it("deletes books and notes while keeping collection order contiguous", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

@@ -335,6 +335,15 @@ function renderMatter(data: object, body: string) {
   });
 }
 
+function toDisplayPath(filePath: string) {
+  return path.relative(process.cwd(), filePath).replace(/\\/g, "/");
+}
+
+function wrapContentFileError(filePath: string, error: unknown) {
+  const message = error instanceof Error ? error.message : "Unknown content file error";
+  return new Error(`Invalid content file ${toDisplayPath(filePath)}: ${message}`);
+}
+
 function extractWikiTargets(markdown: string) {
   return Array.from(markdown.matchAll(/\[\[([^[\]]+)\]\]/g)).map((match) =>
     match[1].trim(),
@@ -351,64 +360,76 @@ function buildAliases(entry: ManifestEntry) {
 }
 
 async function parseBookFile(filePath: string) {
-  const raw = await fs.readFile(filePath, "utf8");
-  const parsed = matter(raw);
-  const meta = bookMetaSchema.parse(parsed.data);
-  const chaptersDir = path.join(path.dirname(filePath), "chapters");
-  const chapterEntries = await readDirectoryEntries(chaptersDir);
-  const chapters = (
-    await Promise.all(
-      chapterEntries
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-        .map(async (entry) =>
-          parseChapterFile(path.join(chaptersDir, entry.name), meta.slug),
-        ),
-    )
-  ).sort((left, right) => left.meta.order - right.meta.order);
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = matter(raw);
+    const meta = bookMetaSchema.parse(parsed.data);
+    const chaptersDir = path.join(path.dirname(filePath), "chapters");
+    const chapterEntries = await readDirectoryEntries(chaptersDir);
+    const chapters = (
+      await Promise.all(
+        chapterEntries
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+          .map(async (entry) =>
+            parseChapterFile(path.join(chaptersDir, entry.name), meta.slug),
+          ),
+      )
+    ).sort((left, right) => left.meta.order - right.meta.order);
 
-  return {
-    id: bookId(meta.slug),
-    kind: "book" as const,
-    filePath,
-    meta,
-    body: parsed.content.trim(),
-    raw,
-    route: `/books/${meta.slug}`,
-    chapters,
-  };
+    return {
+      id: bookId(meta.slug),
+      kind: "book" as const,
+      filePath,
+      meta,
+      body: parsed.content.trim(),
+      raw,
+      route: `/books/${meta.slug}`,
+      chapters,
+    };
+  } catch (error) {
+    throw wrapContentFileError(filePath, error);
+  }
 }
 
 async function parseChapterFile(filePath: string, bookSlug: string) {
-  const raw = await fs.readFile(filePath, "utf8");
-  const parsed = matter(raw);
-  const meta = chapterMetaSchema.parse({
-    ...parsed.data,
-    bookSlug,
-  });
-  return {
-    id: chapterId(meta.bookSlug, meta.slug),
-    kind: "chapter" as const,
-    filePath,
-    meta,
-    body: parsed.content.trim(),
-    raw,
-    route: `/books/${meta.bookSlug}/${meta.slug}`,
-  };
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = matter(raw);
+    const meta = chapterMetaSchema.parse({
+      ...parsed.data,
+      bookSlug,
+    });
+    return {
+      id: chapterId(meta.bookSlug, meta.slug),
+      kind: "chapter" as const,
+      filePath,
+      meta,
+      body: parsed.content.trim(),
+      raw,
+      route: `/books/${meta.bookSlug}/${meta.slug}`,
+    };
+  } catch (error) {
+    throw wrapContentFileError(filePath, error);
+  }
 }
 
 async function parseNoteFile(filePath: string) {
-  const raw = await fs.readFile(filePath, "utf8");
-  const parsed = matter(raw);
-  const meta = noteMetaSchema.parse(parsed.data);
-  return {
-    id: noteId(meta.slug),
-    kind: "note" as const,
-    filePath,
-    meta,
-    body: parsed.content.trim(),
-    raw,
-    route: `/notes/${meta.slug}`,
-  };
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = matter(raw);
+    const meta = noteMetaSchema.parse(parsed.data);
+    return {
+      id: noteId(meta.slug),
+      kind: "note" as const,
+      filePath,
+      meta,
+      body: parsed.content.trim(),
+      raw,
+      route: `/notes/${meta.slug}`,
+    };
+  } catch (error) {
+    throw wrapContentFileError(filePath, error);
+  }
 }
 
 async function listBookRecords() {
@@ -1680,7 +1701,7 @@ export async function deleteBook(bookSlug: string) {
           contentOrder(left.meta.order) - contentOrder(right.meta.order),
       )
       .map((entry, index) =>
-        fs.writeFile(
+        writeFileAtomic(
           entry.filePath,
           renderMatter(
             {
@@ -1766,7 +1787,7 @@ export async function deleteNote(slug: string) {
           contentOrder(left.meta.order) - contentOrder(right.meta.order),
       )
       .map((entry, index) =>
-        fs.writeFile(
+        writeFileAtomic(
           entry.filePath,
           renderMatter(
             {
