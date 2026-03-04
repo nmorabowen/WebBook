@@ -17,6 +17,11 @@ export function normalizeGeneralSettings(
       /^$|^G-[A-Za-z0-9]+$/.test(input.analyticsMeasurementId.trim())
         ? input.analyticsMeasurementId.trim()
         : DEFAULT_GENERAL_SETTINGS.analyticsMeasurementId,
+    analyticsGtmContainerId:
+      typeof input?.analyticsGtmContainerId === "string" &&
+      /^$|^GTM-[A-Z0-9]+$/.test(input.analyticsGtmContainerId.trim())
+        ? input.analyticsGtmContainerId.trim()
+        : DEFAULT_GENERAL_SETTINGS.analyticsGtmContainerId,
     colorTheme:
       typeof input?.colorTheme === "string" &&
       colorThemeValues.includes(input.colorTheme as (typeof colorThemeValues)[number])
@@ -165,6 +170,7 @@ export function isDefaultGeneralSettings(
   const normalized = normalizeGeneralSettings(input);
   return (
     normalized.analyticsMeasurementId === DEFAULT_GENERAL_SETTINGS.analyticsMeasurementId &&
+    normalized.analyticsGtmContainerId === DEFAULT_GENERAL_SETTINGS.analyticsGtmContainerId &&
     normalized.colorTheme === DEFAULT_GENERAL_SETTINGS.colorTheme &&
     normalized.cornerRadius === DEFAULT_GENERAL_SETTINGS.cornerRadius &&
     normalized.tileSpacing === DEFAULT_GENERAL_SETTINGS.tileSpacing &&

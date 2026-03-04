@@ -190,6 +190,7 @@ export function GeneralSettingsPanel({
     startTransition(async () => {
       const nextSettings = {
         analyticsMeasurementId: initialSettings.analyticsMeasurementId,
+        analyticsGtmContainerId: initialSettings.analyticsGtmContainerId,
         colorTheme,
         cornerRadius,
         tileSpacing,

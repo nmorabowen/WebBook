@@ -1,15 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAnalyticsPagePath,
+  getAnalyticsProvider,
+  isGaMeasurementId,
   isAnalyticsEnabled,
+  isGtmContainerId,
   shouldTrackAnalyticsPath,
 } from "./analytics";
 
 describe("analytics helpers", () => {
-  it("enables analytics only when a measurement id is configured", () => {
-    expect(isAnalyticsEnabled("G-ABCD1234")).toBe(true);
-    expect(isAnalyticsEnabled("   ")).toBe(false);
-    expect(isAnalyticsEnabled(undefined)).toBe(false);
+  it("validates supported analytics ids", () => {
+    expect(isGaMeasurementId("G-ABCD1234")).toBe(true);
+    expect(isGaMeasurementId("GTM-MRNSLL2K")).toBe(false);
+    expect(isGtmContainerId("GTM-MRNSLL2K")).toBe(true);
+    expect(isGtmContainerId("G-ABCD1234")).toBe(false);
+  });
+
+  it("enables analytics when ga4 or gtm is configured and prefers gtm", () => {
+    expect(isAnalyticsEnabled({ measurementId: "G-ABCD1234" })).toBe(true);
+    expect(isAnalyticsEnabled({ gtmContainerId: "GTM-MRNSLL2K" })).toBe(true);
+    expect(isAnalyticsEnabled({ measurementId: "   " })).toBe(false);
+    expect(isAnalyticsEnabled({})).toBe(false);
+    expect(
+      getAnalyticsProvider({
+        measurementId: "G-ABCD1234",
+        gtmContainerId: "GTM-MRNSLL2K",
+      }),
+    ).toBe("gtm");
+    expect(getAnalyticsProvider({ measurementId: "G-ABCD1234" })).toBe("ga4");
   });
 
   it("tracks public reading routes and the authenticated workspace", () => {

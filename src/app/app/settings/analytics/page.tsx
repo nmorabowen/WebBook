@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { AnalyticsSettingsPanel } from "@/components/editor/analytics-settings-panel";
 import { requireSession } from "@/lib/auth";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
-import { isAnalyticsEnabled } from "@/lib/analytics";
+import { getAnalyticsProvider, isAnalyticsEnabled } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +27,15 @@ export default async function AnalyticsSettingsPage() {
     getGeneralSettings(),
   ]);
   const measurementId = generalSettings.analyticsMeasurementId;
-  const analyticsEnabled = isAnalyticsEnabled(measurementId);
+  const gtmContainerId = generalSettings.analyticsGtmContainerId;
+  const analyticsEnabled = isAnalyticsEnabled({
+    measurementId,
+    gtmContainerId,
+  });
+  const provider = getAnalyticsProvider({
+    measurementId,
+    gtmContainerId,
+  });
 
   return (
     <AppShell
@@ -44,7 +52,7 @@ export default async function AnalyticsSettingsPage() {
             <div>
               <p className="paper-label">Reporting flow</p>
               <p className="text-sm leading-7 text-[var(--paper-muted)]">
-                WebBook sends pageview events to Google Analytics 4 from the client. Reports are reviewed in Google Analytics, not stored inside this workspace.
+                WebBook can load either Google Tag Manager or direct GA4 pageview tracking from the client. Reports are reviewed in Google Analytics or Tag Manager, not stored inside this workspace.
               </p>
             </div>
           </div>
@@ -56,8 +64,8 @@ export default async function AnalyticsSettingsPage() {
             </div>
             <p className="mt-2 text-sm leading-7 text-[var(--paper-muted)]">
               All signed-in users can verify tracking status here. {session.role === "admin"
-                ? "Admins still need to manage the measurement ID through deployment environment variables."
-                : "Only admins can change deployment environment variables."}
+                ? "Admins can set the GTM or GA4 identifier directly from this page."
+                : "Only admins can change analytics identifiers."}
             </p>
           </div>
 
@@ -84,6 +92,7 @@ export default async function AnalyticsSettingsPage() {
 
         <AnalyticsSettingsPanel
           initialMeasurementId={measurementId}
+          initialGtmContainerId={gtmContainerId}
           canEdit={session.role === "admin"}
         />
 
@@ -105,14 +114,34 @@ export default async function AnalyticsSettingsPage() {
             </div>
             <p className="mt-4 text-sm leading-7 text-[var(--paper-muted)]">
               {analyticsEnabled
-                ? "GA4 is configured and the client script loads for tracked routes."
-                : "No GA4 measurement ID is configured, so WebBook does not send analytics events."}
+                ? provider === "gtm"
+                  ? "A Google Tag Manager container is configured and loads for tracked routes."
+                  : "A GA4 measurement ID is configured and the client script loads for tracked routes."
+                : "No GTM or GA4 identifier is configured, so WebBook does not send analytics events."}
             </p>
-            <div className="mt-4 rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,252,247,0.86)] px-4 py-3">
-              <p className="paper-label mb-1">Measurement ID</p>
-              <p className="font-mono text-sm text-[var(--paper-ink)]">
-                {measurementId?.trim() || "Not configured"}
-              </p>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,252,247,0.86)] px-4 py-3">
+                <p className="paper-label mb-1">Active provider</p>
+                <p className="text-sm font-semibold text-[var(--paper-ink)]">
+                  {provider === "gtm"
+                    ? "Google Tag Manager"
+                    : provider === "ga4"
+                      ? "Google Analytics 4"
+                      : "Not configured"}
+                </p>
+              </div>
+              <div className="rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,252,247,0.86)] px-4 py-3">
+                <p className="paper-label mb-1">GTM container</p>
+                <p className="font-mono text-sm text-[var(--paper-ink)]">
+                  {gtmContainerId?.trim() || "Not configured"}
+                </p>
+              </div>
+              <div className="rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,252,247,0.86)] px-4 py-3">
+                <p className="paper-label mb-1">GA4 measurement ID</p>
+                <p className="font-mono text-sm text-[var(--paper-ink)]">
+                  {measurementId?.trim() || "Not configured"}
+                </p>
+              </div>
             </div>
           </section>
 
@@ -164,19 +193,19 @@ export default async function AnalyticsSettingsPage() {
             <div className="rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,252,247,0.86)] px-4 py-3">
               <p className="paper-label mb-1">1. Configure</p>
               <p className="text-sm leading-7 text-[var(--paper-muted)]">
-                Set <span className="font-mono text-[var(--paper-ink)]">NEXT_PUBLIC_GA_MEASUREMENT_ID</span> in the deployment environment.
+                Save a <span className="font-mono text-[var(--paper-ink)]">GTM-...</span> container ID or <span className="font-mono text-[var(--paper-ink)]">G-...</span> measurement ID in this page.
               </p>
             </div>
             <div className="rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,252,247,0.86)] px-4 py-3">
               <p className="paper-label mb-1">2. Deploy</p>
               <p className="text-sm leading-7 text-[var(--paper-muted)]">
-                Rebuild and restart the app so the client bundle includes the measurement ID.
+                No redeploy is required. Saved identifiers are loaded from workspace settings.
               </p>
             </div>
             <div className="rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,252,247,0.86)] px-4 py-3">
               <p className="paper-label mb-1">3. Confirm</p>
               <p className="text-sm leading-7 text-[var(--paper-muted)]">
-                Check Google Analytics Realtime and Page reports while navigating WebBook.
+                Check Google Analytics or Tag Manager preview while navigating WebBook.
               </p>
             </div>
           </div>

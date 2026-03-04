@@ -14,6 +14,10 @@ export const analyticsMeasurementIdSchema = z
   .string()
   .trim()
   .regex(/^$|^G-[A-Za-z0-9]+$/);
+export const analyticsGtmContainerIdSchema = z
+  .string()
+  .trim()
+  .regex(/^$|^GTM-[A-Z0-9]+$/);
 export const bookTypographySchema = z.object({
   bodyFontSize: z
     .number()
@@ -236,6 +240,7 @@ export const reorderNotesSchema = z.object({
 export const generalSettingsSchema = z.object({
   colorTheme: colorThemeSchema,
   analyticsMeasurementId: analyticsMeasurementIdSchema,
+  analyticsGtmContainerId: analyticsGtmContainerIdSchema,
   cornerRadius: z
     .number()
     .min(GENERAL_SETTINGS_LIMITS.cornerRadius.min)

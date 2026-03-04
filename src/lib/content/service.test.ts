@@ -119,11 +119,13 @@ describe("content service", () => {
     const initialSettings = await service.getGeneralSettings();
     await service.updateGeneralSettings({
       analyticsMeasurementId: "G-TEST12345",
+      analyticsGtmContainerId: "GTM-MRNSLL2K",
     });
 
     const updatedSettings = await service.getGeneralSettings();
 
     expect(updatedSettings.analyticsMeasurementId).toBe("G-TEST12345");
+    expect(updatedSettings.analyticsGtmContainerId).toBe("GTM-MRNSLL2K");
     expect(updatedSettings.colorTheme).toBe(initialSettings.colorTheme);
     expect(updatedSettings.workspaceTransferLimitMb).toBe(
       initialSettings.workspaceTransferLimitMb,

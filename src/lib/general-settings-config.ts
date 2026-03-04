@@ -21,6 +21,7 @@ export const GENERAL_SETTINGS_LIMITS = {
 export const DEFAULT_GENERAL_SETTINGS = {
   colorTheme: "paper" as ColorThemePreset,
   analyticsMeasurementId: (process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "").trim(),
+  analyticsGtmContainerId: "",
   cornerRadius: 0,
   tileSpacing: 0.75,
   dividerSpacing: 10,
