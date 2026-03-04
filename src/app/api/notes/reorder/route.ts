@@ -4,6 +4,15 @@ import { reorderNotes } from "@/lib/content/service";
 
 export async function POST(request: Request) {
   await requireSession();
-  const tree = await reorderNotes(await request.json());
-  return NextResponse.json(tree);
+  try {
+    const tree = await reorderNotes(await request.json());
+    return NextResponse.json(tree);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Note reorder failed",
+      },
+      { status: 400 },
+    );
+  }
 }

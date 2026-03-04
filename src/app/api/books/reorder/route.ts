@@ -4,6 +4,15 @@ import { reorderBooks } from "@/lib/content/service";
 
 export async function POST(request: Request) {
   await requireSession();
-  const tree = await reorderBooks(await request.json());
-  return NextResponse.json(tree);
+  try {
+    const tree = await reorderBooks(await request.json());
+    return NextResponse.json(tree);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Book reorder failed",
+      },
+      { status: 400 },
+    );
+  }
 }

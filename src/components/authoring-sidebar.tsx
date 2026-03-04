@@ -148,6 +148,11 @@ function getReorderedSlugs(
   return nextSlugs;
 }
 
+function getVerticalDropPosition(event: React.DragEvent<HTMLDivElement>) {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  return event.clientY - bounds.top > bounds.height / 2 ? "after" : "before";
+}
+
 function applyBookOrder(tree: ContentTree, bookSlugs: string[]): ContentTree {
   const bookMap = new Map(tree.books.map((book) => [book.meta.slug, book] as const));
   return {
@@ -627,6 +632,7 @@ export function AuthoringSidebar({
     const nextTree = applyChapterOrder(localTree, bookSlug, nextChapterSlugs);
     setLocalTree(nextTree);
     setPendingBookSlug(bookSlug);
+    setActionError(null);
 
     startTransition(async () => {
       try {
@@ -639,12 +645,18 @@ export function AuthoringSidebar({
         });
 
         if (!response.ok) {
-          throw new Error("Chapter reorder failed");
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(payload?.error ?? "Chapter reorder failed");
         }
 
         router.refresh();
-      } catch {
+      } catch (error) {
         setLocalTree(previousTree);
+        setActionError(
+          error instanceof Error ? error.message : "Chapter reorder failed",
+        );
       } finally {
         setPendingBookSlug(null);
       }
@@ -673,6 +685,7 @@ export function AuthoringSidebar({
 
     const previousTree = localTree;
     setLocalTree(applyBookOrder(localTree, nextBookSlugs));
+    setActionError(null);
 
     startTransition(async () => {
       try {
@@ -685,12 +698,16 @@ export function AuthoringSidebar({
         });
 
         if (!response.ok) {
-          throw new Error("Book reorder failed");
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(payload?.error ?? "Book reorder failed");
         }
 
         router.refresh();
-      } catch {
+      } catch (error) {
         setLocalTree(previousTree);
+        setActionError(error instanceof Error ? error.message : "Book reorder failed");
       }
     });
   };
@@ -717,6 +734,7 @@ export function AuthoringSidebar({
 
     const previousTree = localTree;
     setLocalTree(applyNoteOrder(localTree, nextNoteSlugs));
+    setActionError(null);
 
     startTransition(async () => {
       try {
@@ -729,12 +747,16 @@ export function AuthoringSidebar({
         });
 
         if (!response.ok) {
-          throw new Error("Note reorder failed");
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(payload?.error ?? "Note reorder failed");
         }
 
         router.refresh();
-      } catch {
+      } catch (error) {
         setLocalTree(previousTree);
+        setActionError(error instanceof Error ? error.message : "Note reorder failed");
       }
     });
   };
@@ -899,11 +921,8 @@ export function AuthoringSidebar({
                       }
 
                       event.preventDefault();
-                      const bounds = event.currentTarget.getBoundingClientRect();
-                      const position =
-                        event.clientY - bounds.top > bounds.height / 2
-                          ? "after"
-                          : "before";
+                      event.dataTransfer.dropEffect = "move";
+                      const position = getVerticalDropPosition(event);
 
                       setBookDropIndicator({
                         slug: book.meta.slug,
@@ -912,11 +931,10 @@ export function AuthoringSidebar({
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
+                      const position = getVerticalDropPosition(event);
                       handleBookDrop(
                         book.meta.slug,
-                        bookDropIndicator?.slug === book.meta.slug
-                          ? bookDropIndicator.position
-                          : "before",
+                        position,
                       );
                     }}
                   />
@@ -1020,11 +1038,8 @@ export function AuthoringSidebar({
                           }
 
                           event.preventDefault();
-                          const bounds = event.currentTarget.getBoundingClientRect();
-                          const position =
-                            event.clientY - bounds.top > bounds.height / 2
-                              ? "after"
-                              : "before";
+                          event.dataTransfer.dropEffect = "move";
+                          const position = getVerticalDropPosition(event);
 
                           setDropIndicator({
                             bookSlug: book.meta.slug,
@@ -1034,13 +1049,11 @@ export function AuthoringSidebar({
                         }}
                         onDrop={(event) => {
                           event.preventDefault();
+                          const position = getVerticalDropPosition(event);
                           handleDrop(
                             book.meta.slug,
                             chapter.meta.slug,
-                            dropIndicator?.bookSlug === book.meta.slug &&
-                              dropIndicator.chapterSlug === chapter.meta.slug
-                              ? dropIndicator.position
-                              : "before",
+                            position,
                           );
                         }}
                       />
@@ -1088,33 +1101,29 @@ export function AuthoringSidebar({
                     setDraggedNoteSlug(null);
                     setNoteDropIndicator(null);
                   }}
-                  onDragOver={(event) => {
-                    if (!draggedNoteSlug || draggedNoteSlug === note.meta.slug) {
-                      return;
-                    }
+                    onDragOver={(event) => {
+                      if (!draggedNoteSlug || draggedNoteSlug === note.meta.slug) {
+                        return;
+                      }
 
-                    event.preventDefault();
-                    const bounds = event.currentTarget.getBoundingClientRect();
-                    const position =
-                      event.clientY - bounds.top > bounds.height / 2
-                        ? "after"
-                        : "before";
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      const position = getVerticalDropPosition(event);
 
-                    setNoteDropIndicator({
-                      slug: note.meta.slug,
-                      position,
+                      setNoteDropIndicator({
+                        slug: note.meta.slug,
+                        position,
                     });
                   }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    handleNoteDrop(
-                      note.meta.slug,
-                      noteDropIndicator?.slug === note.meta.slug
-                        ? noteDropIndicator.position
-                        : "before",
-                    );
-                  }}
-                />
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const position = getVerticalDropPosition(event);
+                      handleNoteDrop(
+                        note.meta.slug,
+                        position,
+                      );
+                    }}
+                  />
                   );
                 })()}
               </div>

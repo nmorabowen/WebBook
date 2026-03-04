@@ -7,8 +7,17 @@ export async function POST(
   { params }: { params: Promise<{ bookSlug: string }> },
 ) {
   await requireSession();
-  const { bookSlug } = await params;
-  return NextResponse.json(
-    await reorderBookChapters(bookSlug, await request.json()),
-  );
+  try {
+    const { bookSlug } = await params;
+    return NextResponse.json(
+      await reorderBookChapters(bookSlug, await request.json()),
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Chapter reorder failed",
+      },
+      { status: 400 },
+    );
+  }
 }
