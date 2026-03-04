@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { WorkspaceDebugRecorder } from "@/components/workspace-debug-recorder";
 
 export const metadata: Metadata = {
   robots: {
@@ -12,5 +13,10 @@ export default function WorkspaceLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return children;
+  return (
+    <>
+      <WorkspaceDebugRecorder />
+      {children}
+    </>
+  );
 }

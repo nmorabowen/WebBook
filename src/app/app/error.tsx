@@ -4,8 +4,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCcw, ScrollText } from "lucide-react";
 import { ErrorLogFeed } from "@/components/error-log-feed";
+import { WorkspaceDebugFeed } from "@/components/workspace-debug-feed";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import type { ErrorLogEntry } from "@/lib/error-log";
+import {
+  readWorkspaceDebugTrail,
+  recordWorkspaceDebugEvent,
+  type WorkspaceDebugEvent,
+} from "@/lib/workspace-debug";
 
 type ErrorLogsResponse = {
   entries: ErrorLogEntry[];
@@ -29,6 +35,7 @@ export default function WorkspaceError({
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
   const [recentLogs, setRecentLogs] = useState<ErrorLogEntry[]>([]);
   const [logLoadError, setLogLoadError] = useState<string | null>(null);
+  const [debugTrail, setDebugTrail] = useState<WorkspaceDebugEvent[]>([]);
 
   useEffect(() => {
     if (hasLoggedRef.current) {
@@ -39,6 +46,15 @@ export default function WorkspaceError({
     let cancelled = false;
 
     async function captureError() {
+      recordWorkspaceDebugEvent({
+        level: "error",
+        category: "runtime",
+        message: error.message || "Unknown workspace error",
+        detail: error.stack ?? pathname,
+      });
+      const currentTrail = readWorkspaceDebugTrail().slice(-40);
+      setDebugTrail(currentTrail);
+
       try {
         const response = await fetch("/api/error-logs", {
           method: "POST",
@@ -51,6 +67,7 @@ export default function WorkspaceError({
             stack: error.stack ?? null,
             pathname,
             source: "workspace-error-boundary",
+            debugTrail: currentTrail,
           }),
         });
 
@@ -118,6 +135,14 @@ export default function WorkspaceError({
   }, [error.digest, error.message, error.stack, pathname]);
 
   const isAdmin = canViewLogs === true;
+  const handleReset = () => {
+    recordWorkspaceDebugEvent({
+      category: "action",
+      message: "Error page: try again",
+      detail: pathname,
+    });
+    reset();
+  };
 
   return (
     <WorkspaceStyleFrame>
@@ -131,41 +156,51 @@ export default function WorkspaceError({
 
               <div className="grid gap-4">
                 <div className="grid gap-3">
-                  <span className="paper-badge">Workspace error</span>
+                  <span className="paper-badge">Workspace debug stage</span>
                   <h1 className="font-serif text-4xl leading-none md:text-5xl">
                     The authoring desk hit an unexpected failure.
                   </h1>
                   <p className="max-w-3xl text-lg leading-8 text-[var(--paper-muted)]">
-                    {isAdmin
-                      ? "This failure was recorded and the newest log entries are shown below."
-                      : "Try the action again. If the problem continues, ask an admin to review the error logs."}
+                    This page keeps the last recorded actions, requests, and runtime errors from this tab so you can see what happened before the crash.
                   </p>
+                </div>
+
+                <div className="grid gap-3 rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.52)] p-4">
+                  <div>
+                    <p className="paper-label">Message</p>
+                    <p className="text-sm leading-7 text-[var(--paper-ink)]">
+                      {error.message || "Unknown workspace error"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="paper-label">Path</p>
+                    <code className="block break-all text-sm text-[var(--paper-ink)]">
+                      {pathname}
+                    </code>
+                  </div>
+                  {error.digest ? (
+                    <div>
+                      <p className="paper-label">Digest</p>
+                      <code className="block break-all text-sm text-[var(--paper-ink)]">
+                        {error.digest}
+                      </code>
+                    </div>
+                  ) : null}
+                  {logFilePath ? (
+                    <div>
+                      <p className="paper-label">Log file</p>
+                      <code className="block break-all text-sm text-[var(--paper-ink)]">
+                        {logFilePath}
+                      </code>
+                    </div>
+                  ) : null}
                 </div>
 
                 {isAdmin ? (
                   <div className="grid gap-3 rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.52)] p-4">
-                    <div>
-                      <p className="paper-label">Message</p>
-                      <p className="text-sm leading-7 text-[var(--paper-ink)]">
-                        {error.message || "Unknown workspace error"}
-                      </p>
-                    </div>
-                    {error.digest ? (
-                      <div>
-                        <p className="paper-label">Digest</p>
-                        <code className="block break-all text-sm text-[var(--paper-ink)]">
-                          {error.digest}
-                        </code>
-                      </div>
-                    ) : null}
-                    {logFilePath ? (
-                      <div>
-                        <p className="paper-label">Log file</p>
-                        <code className="block break-all text-sm text-[var(--paper-ink)]">
-                          {logFilePath}
-                        </code>
-                      </div>
-                    ) : null}
+                    <p className="text-sm leading-7 text-[var(--paper-muted)]">
+                      This incident was recorded on disk. The newest persisted entries are shown below for comparison.
+                    </p>
                   </div>
                 ) : null}
 
@@ -173,7 +208,7 @@ export default function WorkspaceError({
                   <button
                     type="button"
                     className="paper-button flex items-center gap-2"
-                    onClick={reset}
+                    onClick={handleReset}
                   >
                     <RefreshCcw className="h-4 w-4" />
                     Try again
@@ -181,6 +216,13 @@ export default function WorkspaceError({
                   <a
                     href="/app"
                     className="paper-button paper-button-secondary"
+                    onClick={() =>
+                      recordWorkspaceDebugEvent({
+                        category: "action",
+                        message: "Error page: back to dashboard",
+                        detail: pathname,
+                      })
+                    }
                   >
                     Back to dashboard
                   </a>
@@ -188,6 +230,13 @@ export default function WorkspaceError({
                     <a
                       href="/app/settings/errors"
                       className="paper-button paper-button-secondary inline-flex items-center gap-2"
+                      onClick={() =>
+                        recordWorkspaceDebugEvent({
+                          category: "action",
+                          message: "Error page: open full logs",
+                          detail: pathname,
+                        })
+                      }
                     >
                       <ScrollText className="h-4 w-4" />
                       Open full logs
@@ -196,6 +245,19 @@ export default function WorkspaceError({
                 </div>
               </div>
             </div>
+          </section>
+
+          <section className="grid gap-4">
+            <div className="grid gap-2">
+              <p className="paper-label">Session timeline</p>
+              <p className="text-sm leading-7 text-[var(--paper-muted)]">
+                Ordered from oldest to newest so the final entries show the lead-up to this failure.
+              </p>
+            </div>
+            <WorkspaceDebugFeed
+              entries={debugTrail}
+              emptyLabel="No actions were recorded before this workspace error."
+            />
           </section>
 
           {isAdmin ? (

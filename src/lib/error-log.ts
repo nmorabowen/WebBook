@@ -3,6 +3,10 @@ import { promises as fs } from "fs";
 import path from "path";
 import { z } from "zod";
 import { getWorkspaceStorageLayout } from "@/lib/env";
+import {
+  workspaceDebugTrailSchema,
+  type WorkspaceDebugEvent,
+} from "@/lib/workspace-debug";
 
 const ERROR_LOG_FILE_NAME = "errors.jsonl";
 const DEFAULT_ERROR_SOURCE = "workspace-error-boundary";
@@ -24,6 +28,7 @@ export const errorLogEntrySchema = z.object({
   digest: z.string().nullable(),
   stack: z.string().nullable(),
   userAgent: z.string().nullable(),
+  debugTrail: workspaceDebugTrailSchema.default([]),
 });
 
 export type ErrorLogEntry = z.infer<typeof errorLogEntrySchema>;
@@ -37,6 +42,7 @@ type AppendErrorLogInput = {
   stack?: string | null;
   userAgent?: string | null;
   source?: string | null;
+  debugTrail?: WorkspaceDebugEvent[];
 };
 
 function normalizeOptionalText(
@@ -88,6 +94,7 @@ export async function appendErrorLog(input: AppendErrorLogInput) {
     digest: normalizeOptionalText(input.digest, MAX_DIGEST_LENGTH),
     stack: normalizeOptionalText(input.stack, MAX_STACK_LENGTH),
     userAgent: normalizeOptionalText(input.userAgent, MAX_USER_AGENT_LENGTH),
+    debugTrail: workspaceDebugTrailSchema.parse(input.debugTrail ?? []),
   });
 
   const filePath = getErrorLogFilePath();

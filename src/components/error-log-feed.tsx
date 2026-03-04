@@ -1,4 +1,5 @@
 import type { ErrorLogEntry } from "@/lib/error-log";
+import { WorkspaceDebugFeed } from "@/components/workspace-debug-feed";
 
 type ErrorLogFeedProps = {
   entries: ErrorLogEntry[];
@@ -82,6 +83,13 @@ export function ErrorLogFeed({
                 <pre className="max-h-[24rem] overflow-auto rounded-[18px] border border-[var(--paper-border)] bg-[rgba(26,23,20,0.96)] p-4 text-xs leading-6 whitespace-pre-wrap break-words text-[var(--paper-code-text)]">
                   {entry.stack}
                 </pre>
+              </div>
+            ) : null}
+
+            {entry.debugTrail.length ? (
+              <div>
+                <p className="paper-label">Debug trail</p>
+                <WorkspaceDebugFeed entries={entry.debugTrail} />
               </div>
             ) : null}
           </div>

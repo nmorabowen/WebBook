@@ -6,6 +6,7 @@ import {
   getErrorLogFilePath,
   listErrorLogs,
 } from "@/lib/error-log";
+import { workspaceDebugTrailSchema } from "@/lib/workspace-debug";
 
 const createErrorLogSchema = z.object({
   message: z.string().trim().max(4_000),
@@ -13,6 +14,7 @@ const createErrorLogSchema = z.object({
   stack: z.string().max(20_000).nullish(),
   pathname: z.string().trim().max(1_000).nullish(),
   source: z.string().trim().max(200).nullish(),
+  debugTrail: workspaceDebugTrailSchema.optional(),
 });
 
 export async function GET(request: Request) {
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
       pathname: payload.pathname ?? null,
       source: payload.source ?? null,
       userAgent: request.headers.get("user-agent"),
+      debugTrail: payload.debugTrail ?? [],
     });
 
     return NextResponse.json({

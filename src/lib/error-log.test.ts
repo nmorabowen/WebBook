@@ -28,6 +28,16 @@ describe("error log", () => {
       message: "First failure",
       pathname: "/app/settings/general",
       source: "test-suite",
+      debugTrail: [
+        {
+          id: "evt-1",
+          createdAt: "2026-03-04T04:00:00.000Z",
+          level: "info",
+          category: "action",
+          message: "Clicked save",
+          detail: "Button: Save settings",
+        },
+      ],
     });
 
     await errorLog.appendErrorLog({
@@ -43,6 +53,7 @@ describe("error log", () => {
     expect(entries[0]?.message).toBe("Second failure");
     expect(entries[1]?.message).toBe("First failure");
     expect(entries[0]?.digest).toBe("digest-2");
+    expect(entries[1]?.debugTrail).toHaveLength(1);
 
     await expect(fs.readFile(errorLog.getErrorLogFilePath(), "utf8")).resolves.toContain(
       "First failure",
@@ -54,7 +65,22 @@ describe("error log", () => {
     const filePath = errorLog.getErrorLogFilePath();
 
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, "{\"broken\":true}\nnot-json\n", "utf8");
+    await fs.writeFile(
+      filePath,
+      `${JSON.stringify({
+        id: "legacy-entry",
+        createdAt: "2026-03-04T04:00:00.000Z",
+        username: "admin",
+        role: "admin",
+        source: "legacy",
+        pathname: "/app/legacy",
+        message: "Legacy failure",
+        digest: null,
+        stack: null,
+        userAgent: null,
+      })}\n{"broken":true}\nnot-json\n`,
+      "utf8",
+    );
 
     await errorLog.appendErrorLog({
       username: "admin",
@@ -66,9 +92,12 @@ describe("error log", () => {
 
     const entries = await errorLog.listErrorLogs(10);
 
-    expect(entries).toHaveLength(1);
+    expect(entries).toHaveLength(2);
     expect(entries[0]?.message.length).toBeLessThanOrEqual(1_200);
     expect(entries[0]?.source).toBe("workspace-error-boundary");
     expect(entries[0]?.pathname).toBe("/app");
+    expect(entries[0]?.debugTrail).toEqual([]);
+    expect(entries[1]?.message).toBe("Legacy failure");
+    expect(entries[1]?.debugTrail).toEqual([]);
   });
 });
