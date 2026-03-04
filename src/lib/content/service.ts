@@ -1711,7 +1711,6 @@ export async function deleteBook(bookSlug: string) {
             } satisfies BookMeta,
             entry.body,
           ),
-          "utf8",
         ),
       ),
   );
@@ -1797,7 +1796,6 @@ export async function deleteNote(slug: string) {
             } satisfies NoteMeta,
             entry.body,
           ),
-          "utf8",
         ),
       ),
   );
