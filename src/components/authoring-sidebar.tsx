@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  BarChart3,
   BookMarked,
   ChevronDown,
   ChevronRight,
@@ -769,6 +770,11 @@ export function AuthoringSidebar({
           label="Shortcuts"
           active={currentPath === "/app/settings/shortcuts"}
         />
+        <NavLink
+          href="/app/settings/analytics"
+          label="Analytics"
+          active={currentPath === "/app/settings/analytics"}
+        />
       </div>
 
       <section className="grid gap-3">
@@ -1100,6 +1106,10 @@ export function AuthoringSidebar({
             <p className="text-sm text-[var(--paper-muted)]">{session.role}</p>
           </div>
         ) : null}
+        <div className="mt-4 flex items-center gap-2 text-sm text-[var(--paper-muted)]">
+          <BarChart3 className="h-4 w-4" />
+          Analytics status lives in Settings.
+        </div>
       </div>
     </>
   );

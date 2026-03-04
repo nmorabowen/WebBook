@@ -49,6 +49,9 @@ Change `SESSION_SECRET` and `ADMIN_PASSWORD_HASH` before using this outside loca
 WebBook supports optional Google Analytics 4 pageview tracking for public reading
 routes and the authenticated workspace: `/`, `/books/*`, `/notes/*`, and `/app/*`.
 
+Signed-in users can review the current analytics status from the workspace at
+`/app/settings/analytics`.
+
 Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` in your environment to enable it. Leave the
 variable empty to keep analytics disabled.
 
