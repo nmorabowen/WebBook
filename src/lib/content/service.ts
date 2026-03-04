@@ -375,6 +375,34 @@ function rewriteFrontMatterScalar(raw: string, key: string, value: string | numb
   return `${raw.slice(0, frontMatterMatch.index)}---\n${nextFrontMatter}\n---${frontMatterMatch[2]}${raw.slice(frontMatterMatch.index + frontMatterMatch[0].length)}`;
 }
 
+async function listOrderedChapterFiles(bookSlug: string) {
+  const chaptersPath = path.join(bookDirectory(bookSlug), "chapters");
+  return (await readDirectoryEntries(chaptersPath))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => {
+      const parsed = parseOrderedMarkdownFileName(entry.name);
+      return parsed
+        ? {
+            fileName: entry.name,
+            filePath: path.join(chaptersPath, entry.name),
+            order: parsed.order,
+            slug: parsed.slug,
+          }
+        : null;
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        fileName: string;
+        filePath: string;
+        order: number;
+        slug: string;
+      } => entry !== null,
+    )
+    .sort((left, right) => left.order - right.order || left.slug.localeCompare(right.slug));
+}
+
 function extractWikiTargets(markdown: string) {
   return Array.from(markdown.matchAll(/\[\[([^[\]]+)\]\]/g)).map((match) =>
     match[1].trim(),
@@ -1340,15 +1368,13 @@ export async function updateChapter(
 export async function reorderBookChapters(bookSlug: string, input: unknown) {
   ensureSafeSlugOrThrow(bookSlug);
   const data = reorderChaptersSchema.parse(input);
-  const book = await getBook(bookSlug);
-  const chapterMap = new Map(
-    book.chapters.map((chapter) => [chapter.meta.slug, chapter] as const),
-  );
+  const chapterEntries = await listOrderedChapterFiles(bookSlug);
+  const chapterMap = new Map(chapterEntries.map((chapter) => [chapter.slug, chapter] as const));
   const uniqueSlugs = new Set(data.chapterSlugs);
 
   if (
-    data.chapterSlugs.length !== book.chapters.length ||
-    uniqueSlugs.size !== book.chapters.length
+    data.chapterSlugs.length !== chapterEntries.length ||
+    uniqueSlugs.size !== chapterEntries.length
   ) {
     throw new Error("Chapter reorder payload does not match the current book");
   }
@@ -1368,8 +1394,11 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
 
   await ensureDirectory(stagingPath);
 
-  for (const chapter of book.chapters) {
-    await createRevision(chapter.id, chapter.raw);
+  for (const chapter of chapterEntries) {
+    await createRevision(
+      chapterId(bookSlug, chapter.slug),
+      await fs.readFile(chapter.filePath, "utf8"),
+    );
   }
 
   for (const [index, slug] of data.chapterSlugs.entries()) {
@@ -1379,18 +1408,16 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
     }
 
     const nextOrder = index + 1;
-    const raw = renderMatter(
-      {
-        ...chapter.meta,
-        order: nextOrder,
-        updatedAt: now,
-      } satisfies ChapterMeta,
-      chapter.body,
+    const raw = await fs.readFile(chapter.filePath, "utf8");
+    const nextRaw = rewriteFrontMatterScalar(
+      rewriteFrontMatterScalar(raw, "order", nextOrder),
+      "updatedAt",
+      now,
     );
 
     await fs.writeFile(
       path.join(stagingPath, `${String(nextOrder).padStart(3, "0")}-${slug}.md`),
-      raw,
+      nextRaw,
       "utf8",
     );
   }
@@ -1407,7 +1434,11 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
 
   await fs.rm(backupPath, { recursive: true, force: true });
   await rebuildIndexes();
-  return getBook(bookSlug);
+  try {
+    return await getBook(bookSlug);
+  } catch {
+    return null;
+  }
 }
 
 export async function reorderBooks(input: unknown) {
@@ -1753,30 +1784,7 @@ export async function deleteChapter(bookSlug: string, chapterSlug: string) {
   ensureSafeSlugOrThrow(chapterSlug);
 
   const currentChaptersPath = path.join(bookDirectory(bookSlug), "chapters");
-  const chapterEntries = (await readDirectoryEntries(currentChaptersPath))
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => {
-      const parsed = parseOrderedMarkdownFileName(entry.name);
-      return parsed
-        ? {
-            fileName: entry.name,
-            filePath: path.join(currentChaptersPath, entry.name),
-            order: parsed.order,
-            slug: parsed.slug,
-          }
-        : null;
-    })
-    .filter(
-      (
-        entry,
-      ): entry is {
-        fileName: string;
-        filePath: string;
-        order: number;
-        slug: string;
-      } => entry !== null,
-    )
-    .sort((left, right) => left.order - right.order || left.slug.localeCompare(right.slug));
+  const chapterEntries = await listOrderedChapterFiles(bookSlug);
 
   const existing = chapterEntries.find((chapter) => chapter.slug === chapterSlug);
   if (!existing?.filePath) {

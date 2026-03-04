@@ -590,6 +590,94 @@ describe("content service", () => {
     expect(chapterFiles).toEqual(["001-healthy-chapter.md"]);
   });
 
+  it("reorders chapters even when one chapter front matter is malformed", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Reorder Broken Chapter",
+      slug: "reorder-broken-chapter",
+      description: "Testing drag and drop with malformed front matter",
+      body: "# Reorder Broken Chapter",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("reorder-broken-chapter", {
+      title: "Broken Chapter",
+      slug: "broken-chapter",
+      summary: "",
+      body: "# Broken",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("reorder-broken-chapter", {
+      title: "Healthy Chapter",
+      slug: "healthy-chapter",
+      summary: "",
+      body: "# Healthy",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    const brokenChapterPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "reorder-broken-chapter",
+      "chapters",
+      "001-broken-chapter.md",
+    );
+
+    await fs.writeFile(
+      brokenChapterPath,
+      [
+        "---",
+        "kind: chapter",
+        "bookSlug: reorder-broken-chapter",
+        "title: Broken Chapter",
+        "slug: broken-chapter",
+        "order: 1",
+        "summary: bad:",
+        "oops",
+        "status: draft",
+        "allowExecution: true",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "---",
+        "# Broken",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(
+      service.reorderBookChapters("reorder-broken-chapter", {
+        chapterSlugs: ["healthy-chapter", "broken-chapter"],
+      }),
+    ).resolves.toBeNull();
+
+    const chapterFiles = await fs.readdir(
+      path.join(process.cwd(), tempRoot, "books", "reorder-broken-chapter", "chapters"),
+    );
+    expect(chapterFiles).toEqual(["001-healthy-chapter.md", "002-broken-chapter.md"]);
+    await expect(
+      fs.readFile(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          "books",
+          "reorder-broken-chapter",
+          "chapters",
+          "002-broken-chapter.md",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("order: 2");
+  });
+
   it("deletes books and notes while keeping collection order contiguous", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
