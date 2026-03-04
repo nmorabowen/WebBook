@@ -160,7 +160,7 @@ checkout_repo_ref() {
 
   require_file "$WEBBOOK_REPO_DIR/.git/HEAD"
   git -C "$WEBBOOK_REPO_DIR" fetch --tags origin
-  git -C "$WEBBOOK_REPO_DIR" fetch origin "$target" || git -C "$WEBBOOK_REPO_DIR" fetch origin main
+  git -C "$WEBBOOK_REPO_DIR" fetch origin '+refs/heads/*:refs/remotes/origin/*'
 
   if git -C "$WEBBOOK_REPO_DIR" rev-parse --verify "origin/$target^{commit}" > /dev/null 2>&1; then
     git -C "$WEBBOOK_REPO_DIR" checkout -f --detach "origin/$target"
