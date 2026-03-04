@@ -14,7 +14,7 @@ fontPreset: source-serif
 ---
 # Developer Update Flow
 
-This chapter describes how WebBook should be updated from the development side.
+This chapter describes how code changes move from the developer machine to the VPS.
 
 ## Local development cycle
 
@@ -32,29 +32,49 @@ npm test
 npm run build
 ```
 
-## GitHub Actions deploy path
+## How code reaches production
 
-Production deploys are driven by pushes to `main`.
+The simplest production path is:
+
+1. change code locally
+2. validate locally
+3. push to GitHub
+4. log into the VPS
+5. run:
+
+```bash
+webbookctl update
+```
+
+That command:
+
+- fetches the latest repo state on the VPS
+- checks out the requested ref or `main`
+- rebuilds the `web` and `python-runner` images locally on the server
+- restarts the stack
+- keeps the content path unchanged
+- rolls back automatically if health checks fail
+
+## Optional GitHub Actions update path
+
+Automatic updates can still be driven by pushes to `main`, but that flow is optional.
 
 ### Workflow
 
 1. GitHub Actions runs CI.
-2. The workflow builds the `web` and `python-runner` images.
-3. Both images are pushed to GitHub Container Registry.
-4. The workflow SSHes into the server.
-5. The server runs:
+2. The workflow SSHes into the server.
+3. The server runs:
 
 ```bash
-webbookctl deploy <sha>
+webbookctl update <sha>
 ```
 
-## What `webbookctl deploy` does
+## What `webbookctl update` does
 
-The deploy command:
+The update command:
 
 - updates the server-side repo checkout
-- changes the image tags in `.env.production`
-- pulls the new images
+- rebuilds the local images on the server
 - restarts the production stack
 - checks health for the web app and the Python runner
 - rolls back automatically if the health checks fail
@@ -70,6 +90,6 @@ The deploy workflow expects:
 
 ## What not to do
 
-Do not rely on editing production code directly on the server. The intended source of truth for code is GitHub, while the intended source of truth for live content is the production `content/` directory.
+Do not rely on editing production code directly on the server. The intended source of truth for code is GitHub, while the intended source of truth for live content is the configured production content directory.
 
 For content and operator-side updates after deployment, continue with [[webbook-handbook/user-update-flow]].

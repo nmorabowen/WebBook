@@ -63,6 +63,41 @@ webbookctl update <ref>
 `web` and `python-runner` images locally on the VPS, restarts the stack, and then
 waits for health checks to pass.
 
+## How code reaches the VPS
+
+The normal flow is:
+
+1. make and test changes locally
+2. push them to GitHub
+3. SSH to the server
+4. run `webbookctl update`
+
+Typical local validation:
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
+
+Typical VPS update:
+
+```bash
+ssh root@your-vps
+webbookctl update
+```
+
+If you want to pin a specific release:
+
+```bash
+webbookctl update <commit-or-tag>
+```
+
+WebBook code is updated through the server-side Git checkout in `/opt/webbook/repo`.
+WebBook content is not updated through Git. Books, notes, uploads, users, and
+workspace settings continue to live in the configured content path such as
+`/srv/webbook-data`.
+
 ## Optional GitHub update setup
 
 The deploy workflow expects these repository secrets:
@@ -87,6 +122,7 @@ Use these on the server:
 
 ```bash
 webbookctl status
+webbookctl update
 webbookctl logs web
 webbookctl logs python-runner
 webbookctl backup
@@ -136,6 +172,7 @@ Production health checks use:
 - Production should use `AUTH_DISABLED=false`
 - Production content on the server is the source of truth
 - Installs and updates build locally on the VPS and do not require GHCR access
+- Code reaches production through Git plus `webbookctl update`
 - Updates do not overwrite the configured content path
 - To place the workspace on a separate disk, set `WEBBOOK_CONTENT_HOST_PATH` to a
   mounted path such as `/srv/webbook-data`; the container still reads it at

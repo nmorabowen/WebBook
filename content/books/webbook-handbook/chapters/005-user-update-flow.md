@@ -28,7 +28,7 @@ Most day-to-day updates do not require a server shell. They happen directly insi
 - manage general settings
 - export or import a workspace zip
 
-In production, the server-side `content/` directory is the live source of truth for these changes.
+In production, the configured server-side content directory is the live source of truth for these changes. That will often be `content/` inside the container and a host path such as `/srv/webbook-data` on the VPS.
 
 ## Administrative updates
 

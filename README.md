@@ -92,6 +92,41 @@ to place that workspace on a different disk such as `/srv/webbook-data`.
 The install and update path no longer depends on GHCR access. GitHub Actions SSH
 secrets are only needed if you want the optional owner update workflow later.
 
+### Updating a live VPS
+
+The intended code flow is:
+
+1. make changes locally
+2. run validation
+3. push to GitHub
+4. update the VPS from its checked-out repo
+
+Local validation:
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
+
+On the VPS:
+
+```bash
+webbookctl update
+```
+
+To deploy a specific commit or tag:
+
+```bash
+webbookctl update <ref>
+```
+
+This keeps the update path simple:
+
+- code moves to the VPS through Git
+- the VPS rebuilds the images locally
+- the configured content path such as `/srv/webbook-data` is left untouched
+
 ## Useful commands
 
 ```bash

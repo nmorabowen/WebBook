@@ -7,7 +7,7 @@ publishedAt: '2026-03-03T03:05:00.000Z'
 kind: chapter
 bookSlug: webbook-handbook
 order: 3
-summary: 'How to install WebBook locally and on a Debian Bookworm VPS.'
+summary: 'How to install WebBook locally and on a Debian VPS and prepare the server for later updates.'
 status: published
 allowExecution: false
 fontPreset: source-serif
@@ -54,26 +54,38 @@ The installer:
 
 1. installs Docker, Caddy, Restic, and support packages
 2. clones the repository into `/opt/webbook/repo`
-3. creates the content and deployment directories
-4. prompts for the domain, admin username, admin password, and backup settings
+3. creates the deployment directories
+4. prompts for the domain, admin username, admin password, content path, and backup settings
 5. generates `/opt/webbook/.env.production`
 6. configures Caddy for HTTPS
-7. pulls the production images and starts the stack
-8. installs `webbookctl`
-9. enables the daily backup timer
+7. builds the production images locally on the VPS
+8. starts the stack
+9. installs `webbookctl`
+10. enables the daily backup timer
+
+### Recommended storage layout
+
+For a VPS with fast system storage and a larger content disk:
+
+- keep `/opt/webbook` on the fast system disk
+- set the content path to a mounted data disk such as `/srv/webbook-data`
+
+That keeps the application runtime on faster storage while leaving books, notes,
+uploads, revisions, users, and workspace settings on the larger content volume.
 
 ## Required production assumptions
 
 Before running the installer, make sure:
 
 - DNS points the chosen domain to the VPS IP
-- the server can reach GitHub and GHCR
+- the server can reach GitHub
 - ports `80` and `443` are open
 
 ## Useful production commands
 
 ```bash
 webbookctl status
+webbookctl update
 webbookctl logs web
 webbookctl backup
 webbookctl rollback
