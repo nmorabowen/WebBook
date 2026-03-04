@@ -60,7 +60,8 @@ const usersFilePath = path.join(
 );
 
 function sanitizeUser(user: StoredUser): PublicUserRecord {
-  const { passwordHash: _passwordHash, ...publicUser } = user;
+  const { passwordHash, ...publicUser } = user;
+  void passwordHash;
   return publicUser;
 }
 
@@ -126,6 +127,23 @@ async function ensureWritableUserStore() {
   const nextStore = { users: [adminUser] };
   await writeUserStore(nextStore.users);
   return nextStore;
+}
+
+export async function ensureUserStoreFile() {
+  await ensureWritableUserStore();
+}
+
+export async function validateUserStoreFile(filePath: string) {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    userStoreSchema.parse(JSON.parse(raw) as unknown);
+  } catch (error) {
+    const fileError = error as NodeJS.ErrnoException;
+    if (fileError.code === "ENOENT") {
+      return;
+    }
+    throw new Error("Imported workspace users are invalid");
+  }
 }
 
 export async function listUsers(): Promise<PublicUserRecord[]> {

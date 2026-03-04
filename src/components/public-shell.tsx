@@ -49,21 +49,15 @@ export function PublicShell({
     generalSettings ?? DEFAULT_GENERAL_SETTINGS,
   );
   const activeBook = tree.books.find((item) => item.meta.slug === bookSlug);
-  const [leftWidth, setLeftWidth] = useState(normalizedSettings.publicLeftPanelWidth);
-  const [rightWidth, setRightWidth] = useState(normalizedSettings.publicRightPanelWidth);
+  const [leftWidthOverride, setLeftWidthOverride] = useState<number | null>(null);
+  const [rightWidthOverride, setRightWidthOverride] = useState<number | null>(null);
   const [dragTarget, setDragTarget] = useState<"left" | "right" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hasRightPanel = Boolean(rightPanel);
+  const leftWidth = leftWidthOverride ?? normalizedSettings.publicLeftPanelWidth;
+  const rightWidth = rightWidthOverride ?? normalizedSettings.publicRightPanelWidth;
   const isLeftCollapsed = leftWidth === 0;
   const isRightCollapsed = !hasRightPanel || rightWidth === 0;
-
-  useEffect(() => {
-    setLeftWidth(normalizedSettings.publicLeftPanelWidth);
-    setRightWidth(normalizedSettings.publicRightPanelWidth);
-  }, [
-    normalizedSettings.publicLeftPanelWidth,
-    normalizedSettings.publicRightPanelWidth,
-  ]);
 
   useEffect(() => {
     if (!dragTarget) {
@@ -78,11 +72,11 @@ export function PublicShell({
 
       const bounds = container.getBoundingClientRect();
       if (dragTarget === "left") {
-        setLeftWidth(clampPanelWidth(clientX - bounds.left));
+        setLeftWidthOverride(clampPanelWidth(clientX - bounds.left));
         return;
       }
 
-      setRightWidth(clampPanelWidth(bounds.right - clientX));
+      setRightWidthOverride(clampPanelWidth(bounds.right - clientX));
     };
 
     const handlePointerMove = (event: PointerEvent) => {

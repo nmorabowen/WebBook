@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  useDeferredValue,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -23,7 +23,6 @@ import {
   Copy,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
   Code2,
   CloudUpload,
   ExternalLink,
@@ -65,7 +64,7 @@ import {
   type EditorShortcutMap,
   type ShortcutActionId,
 } from "@/lib/editor-shortcuts";
-import { extractToc, headingId, splitWikiTarget, type TocItem } from "@/lib/markdown/shared";
+import { extractToc, splitWikiTarget, type TocItem } from "@/lib/markdown/shared";
 import { buildInlineTextStyleHref, cn, normalizeYouTubeEmbedInput } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/utils";
 
@@ -538,7 +537,6 @@ export function EditorShell({
     scrollTop: number;
     scrollLeft: number;
   } | null>(null);
-  const deferredBody = useDeferredValue(body);
   const isSourceCollapsed = editorSplitRatio <= 4;
   const isPreviewCollapsed = editorSplitRatio >= 96;
   const editorSplitStyle = {
@@ -1215,7 +1213,7 @@ export function EditorShell({
     return line;
   };
 
-  const focusSourceLine = (line: number) => {
+  const focusSourceLine = useEffectEvent((line: number) => {
     const textarea = sourceRef.current;
     if (!textarea) {
       return;
@@ -1231,7 +1229,7 @@ export function EditorShell({
     textarea.scrollTop = scrollTop;
     textarea.scrollLeft = 0;
     rememberSourceViewport(textarea);
-  };
+  });
 
   const togglePreviewPanel = () => {
     if (isPreviewCollapsed) {

@@ -66,7 +66,11 @@ export function PublicRenderContent({
 
   if (mode === "chapter") {
     return (
-      <div className="reading-column grid" style={layoutStyle}>
+      <div
+        className="reading-column grid"
+        style={layoutStyle}
+        data-font-preset={fontPreset}
+      >
         <div className="reading-width-frame grid gap-3">
           <span className="paper-badge">
             Chapter {chapterOrder ?? 1} of {bookTitle ?? "Untitled book"}
@@ -94,7 +98,11 @@ export function PublicRenderContent({
 
   if (mode === "book") {
     return (
-      <div className="reading-column grid" style={layoutStyle}>
+      <div
+        className="reading-column grid"
+        style={layoutStyle}
+        data-font-preset={fontPreset}
+      >
         <div className="reading-width-frame grid gap-3">
           <span className="paper-badge">{chapters.length} chapters</span>
           <h1 className="book-hero-title">{title}</h1>
@@ -153,7 +161,11 @@ export function PublicRenderContent({
   }
 
   return (
-    <div className="reading-column grid" style={layoutStyle}>
+    <div
+      className="reading-column grid"
+      style={layoutStyle}
+      data-font-preset={fontPreset}
+    >
       <div className="reading-width-frame grid gap-3">
         <span className="paper-badge">Standalone note</span>
         <h1 className="book-hero-title">{title}</h1>

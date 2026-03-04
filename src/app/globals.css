@@ -627,6 +627,7 @@ button {
   margin-left: auto;
   margin-right: auto;
   justify-items: stretch;
+  font-family: var(--font-reading-current), serif;
 }
 
 .reading-width-frame {
@@ -637,7 +638,7 @@ button {
 
 .book-prose {
   color: var(--paper-ink);
-  font-family: var(--font-reading), serif;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-body-size, 1.08rem);
   line-height: var(--book-body-line-height, 1.9);
   width: 100%;
@@ -721,7 +722,7 @@ button {
 .book-prose h4 {
   margin-top: 2.35rem;
   margin-bottom: 0.95rem;
-  font-family: var(--font-reading), serif;
+  font-family: var(--font-reading-current), serif;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.15;
@@ -1190,7 +1191,7 @@ button {
 }
 
 .chapter-hero-title {
-  font-family: var(--font-reading), serif;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-h1-size, 3.7rem);
   line-height: 0.95;
   letter-spacing: -0.04em;
@@ -1200,6 +1201,7 @@ button {
 .chapter-hero-summary {
   width: 100%;
   max-width: 100%;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-body-size, 1.08rem);
   line-height: var(--book-body-line-height, 1.9);
   color: var(--paper-muted);
@@ -1207,7 +1209,7 @@ button {
 }
 
 .book-hero-title {
-  font-family: var(--font-reading), serif;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-h1-size, 3.7rem);
   line-height: 0.95;
   letter-spacing: -0.04em;
@@ -1217,6 +1219,7 @@ button {
 .book-hero-summary {
   width: 100%;
   max-width: 100%;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-body-size, 1.08rem);
   line-height: var(--book-body-line-height, 1.9);
   color: var(--paper-muted);
@@ -1225,7 +1228,7 @@ button {
 
 .book-section-title {
   margin: 0;
-  font-family: var(--font-reading), serif;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-h2-size, 2.2rem);
   line-height: 1.05;
   letter-spacing: -0.03em;
@@ -1233,7 +1236,7 @@ button {
 
 .book-chapter-card-title {
   margin: 0;
-  font-family: var(--font-reading), serif;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-h3-size, 1.55rem);
   line-height: 1.15;
   font-weight: 600;
@@ -1241,6 +1244,7 @@ button {
 
 .book-chapter-card-summary {
   margin-bottom: 0;
+  font-family: var(--font-reading-current), serif;
   font-size: var(--book-body-size, 1.08rem);
   line-height: var(--book-body-line-height, 1.9);
   color: var(--paper-muted);

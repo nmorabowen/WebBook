@@ -23,11 +23,11 @@ function shortcutDisplay(shortcut: string) {
 export function ShortcutsSettingsPanel({
   scopeKey,
 }: ShortcutsSettingsPanelProps) {
-  const [shortcutMap, setShortcutMap] = useState<EditorShortcutMap>(
-    defaultEditorShortcuts,
+  const [shortcutMap, setShortcutMap] = useState<EditorShortcutMap>(() =>
+    loadEditorShortcuts(scopeKey),
   );
-  const [savedShortcutMap, setSavedShortcutMap] = useState<EditorShortcutMap>(
-    defaultEditorShortcuts,
+  const [savedShortcutMap, setSavedShortcutMap] = useState<EditorShortcutMap>(() =>
+    loadEditorShortcuts(scopeKey),
   );
   const [recordingAction, setRecordingAction] = useState<ShortcutActionId | null>(
     null,
@@ -35,12 +35,6 @@ export function ShortcutsSettingsPanel({
   const [message, setMessage] = useState(
     "These shortcuts apply to the markdown source editor.",
   );
-
-  useEffect(() => {
-    const nextMap = loadEditorShortcuts(scopeKey);
-    setShortcutMap(nextMap);
-    setSavedShortcutMap(nextMap);
-  }, [scopeKey]);
 
   useEffect(() => {
     if (!recordingAction) {

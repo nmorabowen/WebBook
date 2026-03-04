@@ -44,8 +44,13 @@ import {
 import { extractToc, headingId, splitWikiTarget } from "@/lib/markdown/shared";
 import { isSafeSlug, safeJsonParse, stripMarkdown, toSlug } from "@/lib/utils";
 import {
+  ensureUserStoreFile,
+  validateUserStoreFile,
+} from "@/lib/user-store";
+import {
   buildWorkspaceArchive,
   restoreWorkspaceArchive,
+  workspaceTransferLimitMbToBytes,
 } from "@/lib/workspace-transfer";
 
 const contentRoot = path.join(process.cwd(), env.contentRoot);
@@ -86,6 +91,10 @@ function contentOrder(order?: number) {
   return order ?? Number.MAX_SAFE_INTEGER;
 }
 
+function filterPublishedManifestEntries(entries: ManifestEntry[]) {
+  return entries.filter((entry) => entry.status === "published");
+}
+
 function bookFilePath(bookSlug: string) {
   return path.join(bookDirectory(bookSlug), "book.md");
 }
@@ -119,6 +128,63 @@ async function readDirectoryEntries(directoryPath: string) {
 
 async function ensureDirectory(directoryPath: string) {
   await fs.mkdir(directoryPath, { recursive: true });
+}
+
+async function validateImportedGeneralSettings(contentPath: string) {
+  const importedSettingsPath = path.join(contentPath, ".webbook", "settings.json");
+
+  try {
+    const raw = await fs.readFile(importedSettingsPath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    saveGeneralSettingsSchema.parse(
+      normalizeGeneralSettings({
+        ...DEFAULT_GENERAL_SETTINGS,
+        ...parsed,
+      }),
+    );
+  } catch (error) {
+    const fileError = error as NodeJS.ErrnoException;
+    if (fileError.code === "ENOENT") {
+      return;
+    }
+    throw new Error("Imported workspace settings are invalid");
+  }
+}
+
+async function validateImportedWorkspace(contentPath: string) {
+  const importedBooksRoot = path.join(contentPath, "books");
+  const importedNotesRoot = path.join(contentPath, "notes");
+  const bookEntries = await readDirectoryEntries(importedBooksRoot);
+  const noteEntries = await readDirectoryEntries(importedNotesRoot);
+
+  for (const entry of bookEntries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const filePath = path.join(importedBooksRoot, entry.name, "book.md");
+    try {
+      await parseBookFile(filePath);
+    } catch {
+      throw new Error(`Imported workspace contains an invalid book: books/${entry.name}/book.md`);
+    }
+  }
+
+  for (const entry of noteEntries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) {
+      continue;
+    }
+
+    const filePath = path.join(importedNotesRoot, entry.name);
+    try {
+      await parseNoteFile(filePath);
+    } catch {
+      throw new Error(`Imported workspace contains an invalid note: notes/${entry.name}`);
+    }
+  }
+
+  await validateImportedGeneralSettings(contentPath);
+  await validateUserStoreFile(path.join(contentPath, ".webbook", "users.json"));
 }
 
 async function writeFileAtomic(filePath: string, content: string) {
@@ -654,11 +720,23 @@ export async function updateGeneralSettings(input: unknown) {
 
 export async function exportWorkspaceArchive() {
   await ensureContentScaffold();
-  return buildWorkspaceArchive(contentRoot);
+  await ensureUserStoreFile();
+  const settings = await getGeneralSettings();
+  return buildWorkspaceArchive(contentRoot, {
+    maxWorkspaceBytes: workspaceTransferLimitMbToBytes(
+      settings.workspaceTransferLimitMb,
+    ),
+  });
 }
 
 export async function importWorkspaceArchive(archiveBuffer: Buffer) {
-  await restoreWorkspaceArchive(archiveBuffer, contentRoot);
+  const settings = await getGeneralSettings();
+  await restoreWorkspaceArchive(archiveBuffer, contentRoot, {
+    maxArchiveBytes: workspaceTransferLimitMbToBytes(
+      settings.workspaceTransferLimitMb,
+    ),
+    validateContentRoot: validateImportedWorkspace,
+  });
   await ensureContentScaffold();
   await rebuildIndexes();
   return {
@@ -808,6 +886,31 @@ export async function getManifest() {
   return manifest;
 }
 
+export async function searchPublicContent(query: string) {
+  const { manifest, search } = await loadIndexes();
+  const publicIds = new Set(filterPublishedManifestEntries(manifest).map((entry) => entry.id));
+  const miniSearch = MiniSearch.loadJSON<SearchDocument>(search, {
+    fields: ["title", "summary", "body"],
+    storeFields: ["id", "title", "kind", "route", "summary"],
+  });
+
+  return miniSearch.search(query, {
+    combineWith: "AND",
+    prefix: true,
+    fuzzy: 0.2,
+  }).filter((result) => publicIds.has(String(result.id)));
+}
+
+export async function getPublicBacklinks(id: string) {
+  const { backlinks } = await loadIndexes();
+  return filterPublishedManifestEntries(backlinks[id] ?? []);
+}
+
+export async function getPublicManifest() {
+  const { manifest } = await loadIndexes();
+  return filterPublishedManifestEntries(manifest);
+}
+
 export async function unresolvedWikiLinks(markdown: string) {
   const manifest = await getManifest();
   const aliasLookup = new Map<string, ManifestEntry>();
@@ -856,8 +959,12 @@ export async function createBook(input: unknown) {
   const data = saveBookSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
-  const now = new Date().toISOString();
   const existingBooks = await listBookRecords();
+  if (existingBooks.some((book) => book.meta.slug === slug)) {
+    throw new Error("A book with that slug already exists");
+  }
+
+  const now = new Date().toISOString();
   const nextOrder =
     existingBooks.reduce(
       (highestOrder, book) => Math.max(highestOrder, book.meta.order ?? 0),
@@ -884,7 +991,7 @@ export async function createBook(input: unknown) {
     } satisfies BookMeta,
     data.body,
   );
-  await fs.writeFile(bookFilePath(slug), raw, "utf8");
+  await fs.writeFile(bookFilePath(slug), raw, { encoding: "utf8", flag: "wx" });
   if (data.featured) {
     await enforceFeaturedBookLimit();
   }
@@ -923,7 +1030,7 @@ export async function updateBook(bookSlug: string, input: unknown) {
   if (data.createRevision) {
     await createRevision(existing.id, existing.raw);
   }
-  await fs.writeFile(existing.filePath, raw, "utf8");
+  await writeFileAtomic(existing.filePath, raw);
   if (data.featured) {
     await enforceFeaturedBookLimit();
   }
@@ -936,6 +1043,12 @@ export async function createChapter(bookSlug: string, input: unknown) {
   const data = saveChapterSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
+  if (book.chapters.some((chapter) => chapter.meta.slug === slug)) {
+    throw new Error("A chapter with that slug already exists in this book");
+  }
+  if (book.chapters.some((chapter) => chapter.meta.order === data.order)) {
+    throw new Error(`A chapter already uses order ${data.order}`);
+  }
   const now = new Date().toISOString();
   const raw = renderMatter(
     {
@@ -954,7 +1067,10 @@ export async function createChapter(bookSlug: string, input: unknown) {
     } satisfies ChapterMeta,
     data.body,
   );
-  await fs.writeFile(chapterFilePath(book.meta.slug, slug, data.order), raw, "utf8");
+  await fs.writeFile(chapterFilePath(book.meta.slug, slug, data.order), raw, {
+    encoding: "utf8",
+    flag: "wx",
+  });
   await rebuildIndexes();
   return getChapter(book.meta.slug, slug);
 }
@@ -964,7 +1080,8 @@ export async function updateChapter(
   chapterSlug: string,
   input: unknown,
 ) {
-  const existing = await getChapter(bookSlug, chapterSlug);
+  const book = await getBook(bookSlug);
+  const existing = book.chapters.find((chapter) => chapter.meta.slug === chapterSlug) ?? null;
   if (!existing) {
     throw new Error("Chapter not found");
   }
@@ -972,6 +1089,22 @@ export async function updateChapter(
   const now = new Date().toISOString();
   const nextSlug = toSlug(data.slug);
   ensureSafeSlugOrThrow(nextSlug);
+  if (
+    book.chapters.some(
+      (chapter) =>
+        chapter.meta.slug === nextSlug && chapter.meta.slug !== existing.meta.slug,
+    )
+  ) {
+    throw new Error("A chapter with that slug already exists in this book");
+  }
+  if (
+    book.chapters.some(
+      (chapter) =>
+        chapter.meta.order === data.order && chapter.meta.slug !== existing.meta.slug,
+    )
+  ) {
+    throw new Error(`A chapter already uses order ${data.order}`);
+  }
   const raw = renderMatter(
     {
       ...existing.meta,
@@ -994,10 +1127,19 @@ export async function updateChapter(
     await createRevision(existing.id, existing.raw);
   }
   const nextPath = chapterFilePath(existing.meta.bookSlug, nextSlug, data.order);
-  if (existing.filePath !== nextPath) {
-    await fs.rm(existing.filePath);
+  if (existing.filePath === nextPath) {
+    await writeFileAtomic(nextPath, raw);
+  } else {
+    const backupPath = `${existing.filePath}.rename-${process.pid}-${Date.now()}`;
+    await fs.rename(existing.filePath, backupPath);
+    try {
+      await writeFileAtomic(nextPath, raw);
+      await fs.rm(backupPath, { force: true });
+    } catch (error) {
+      await fs.rename(backupPath, existing.filePath).catch(() => undefined);
+      throw error;
+    }
   }
-  await fs.writeFile(nextPath, raw, "utf8");
   await rebuildIndexes();
   return getChapter(existing.meta.bookSlug, nextSlug);
 }
@@ -1169,8 +1311,12 @@ export async function createNote(input: unknown) {
   const data = saveNoteSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
-  const now = new Date().toISOString();
   const existingNotes = await listNoteRecords();
+  if (existingNotes.some((note) => note.meta.slug === slug)) {
+    throw new Error("A note with that slug already exists");
+  }
+
+  const now = new Date().toISOString();
   const nextOrder =
     existingNotes.reduce(
       (highestOrder, note) => Math.max(highestOrder, note.meta.order ?? 0),
@@ -1193,7 +1339,7 @@ export async function createNote(input: unknown) {
     } satisfies NoteMeta,
     data.body,
   );
-  await fs.writeFile(noteFilePath(slug), raw, "utf8");
+  await fs.writeFile(noteFilePath(slug), raw, { encoding: "utf8", flag: "wx" });
   await rebuildIndexes();
   return getNote(slug);
 }
@@ -1229,7 +1375,7 @@ export async function updateNote(slug: string, input: unknown) {
   if (data.createRevision) {
     await createRevision(existing.id, existing.raw);
   }
-  await fs.writeFile(existing.filePath, raw, "utf8");
+  await writeFileAtomic(existing.filePath, raw);
   await rebuildIndexes();
   return getNote(existing.meta.slug);
 }
@@ -1572,11 +1718,15 @@ export async function restoreRevision(input: unknown) {
   if (!target) {
     throw new Error("Content not found");
   }
+  const availableRevisions = await listRevisions(data.id);
+  if (!availableRevisions.includes(data.revisionFile)) {
+    throw new Error("Revision not found");
+  }
   const revisionDirectory = path.join(revisionsRoot, data.id.replace(/[/:]/g, "_"));
   const revisionPath = path.join(revisionDirectory, data.revisionFile);
   const raw = await fs.readFile(revisionPath, "utf8");
   await createRevision(data.id, target.raw);
-  await fs.writeFile(target.filePath, raw, "utf8");
+  await writeFileAtomic(target.filePath, raw);
   await rebuildIndexes();
   return getContentById(data.id);
 }

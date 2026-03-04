@@ -4,12 +4,11 @@ import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
-  getBacklinks,
+  getPublicBacklinks,
   getGeneralSettings,
-  getManifest,
+  getPublicManifest,
   getPublicChapter,
   getPublicContentTree,
-  listRevisions,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 
@@ -26,11 +25,10 @@ export default async function ChapterPage({
   }
 
   const { book, chapter } = result;
-  const [tree, manifest, backlinks, revisions, generalSettings] = await Promise.all([
+  const [tree, manifest, backlinks, generalSettings] = await Promise.all([
     getPublicContentTree(),
-    getManifest(),
-    getBacklinks(chapter.id),
-    listRevisions(chapter.id),
+    getPublicManifest(),
+    getPublicBacklinks(chapter.id),
     getGeneralSettings(),
   ]);
   const toc = extractToc(chapter.body);
@@ -49,7 +47,6 @@ export default async function ChapterPage({
           <ReadingMetaPanel
             backlinks={backlinks}
             updatedAt={chapter.meta.updatedAt}
-            revisions={revisions}
           />
         </div>
       }

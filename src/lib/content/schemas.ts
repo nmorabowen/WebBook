@@ -214,7 +214,7 @@ export const saveChapterSchema = z.object({
 
 export const restoreRevisionSchema = z.object({
   id: z.string().min(1),
-  revisionFile: z.string().min(1),
+  revisionFile: z.string().min(1).regex(/^[^\\/]+$/),
 });
 
 export const reorderChaptersSchema = z.object({
@@ -275,6 +275,10 @@ export const generalSettingsSchema = z.object({
     .number()
     .min(GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.min)
     .max(GENERAL_SETTINGS_LIMITS.fileUploadLimitMb.max),
+  workspaceTransferLimitMb: z
+    .number()
+    .min(GENERAL_SETTINGS_LIMITS.workspaceTransferLimitMb.min)
+    .max(GENERAL_SETTINGS_LIMITS.workspaceTransferLimitMb.max),
   appSidebarWidth: z
     .number()
     .min(GENERAL_SETTINGS_LIMITS.appSidebarWidth.min)

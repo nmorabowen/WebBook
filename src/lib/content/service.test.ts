@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "fs";
 import path from "path";
+import JSZip from "jszip";
 
 const tempRoot = ".tmp-content-test";
 
@@ -38,6 +39,77 @@ describe("content service", () => {
 
     const searchResults = await service.searchContent("Computational");
     expect(searchResults[0]?.title).toContain("Computational");
+  });
+
+  it("exports a persisted user store with the workspace archive", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    const usersFilePath = path.join(process.cwd(), tempRoot, ".webbook", "users.json");
+    await expect(fs.access(usersFilePath)).rejects.toThrow();
+
+    const archive = await service.exportWorkspaceArchive();
+    const zip = await JSZip.loadAsync(archive);
+    const usersFile = zip.file("content/.webbook/users.json");
+
+    expect(usersFile).toBeTruthy();
+    await expect(usersFile!.async("string")).resolves.toContain('"username": "admin"');
+    await expect(fs.readFile(usersFilePath, "utf8")).resolves.toContain('"username": "admin"');
+  });
+
+  it("rejects invalid imported workspaces before replacing current content", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Keep Me",
+      slug: "keep-me",
+      summary: "Should survive a failed import",
+      body: "# Keep Me",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const archive = await service.exportWorkspaceArchive();
+    const zip = await JSZip.loadAsync(archive);
+    zip.file("content/books/webbook-handbook/book.md", "---\nslug: broken\n---\nBroken");
+    const invalidArchive = await zip.generateAsync({ type: "nodebuffer" });
+
+    await expect(service.importWorkspaceArchive(invalidArchive)).rejects.toThrow(
+      "Imported workspace contains an invalid book: books/webbook-handbook/book.md",
+    );
+
+    const tree = await service.getContentTree();
+
+    expect(tree.books.some((book) => book.meta.slug === "webbook-handbook")).toBe(true);
+    expect(tree.notes.some((note) => note.meta.slug === "keep-me")).toBe(true);
+    await expect(
+      fs.readFile(path.join(process.cwd(), tempRoot, "notes", "keep-me.md"), "utf8"),
+    ).resolves.toContain("Keep Me");
+  });
+
+  it("uses the saved workspace transfer limit for exports", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.updateGeneralSettings({
+      ...(await service.getGeneralSettings()),
+      workspaceTransferLimitMb: 1,
+    });
+
+    const largeUploadPath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "oversized.bin",
+    );
+    await fs.mkdir(path.dirname(largeUploadPath), { recursive: true });
+    await fs.writeFile(largeUploadPath, "0123456789".repeat(150_000), "utf8");
+
+    await expect(service.exportWorkspaceArchive()).rejects.toThrow(
+      "Workspace archive exceeds the 1 MB limit",
+    );
   });
 
   it("reorders book chapters safely and rewrites their order metadata", async () => {
@@ -146,6 +218,47 @@ describe("content service", () => {
     expect(duplicate?.meta.fontPreset).toBe("oswald");
     expect(duplicate?.meta.typography?.headingIndentStep).toBe(0.45);
     expect(duplicate?.meta.typography?.contentWidth).toBe(52);
+  });
+
+  it("keeps draft content out of public manifests, backlinks, and search", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Published Anchor",
+      slug: "published-anchor",
+      summary: "Public target",
+      body: "# Published Anchor",
+      status: "published",
+      allowExecution: true,
+    });
+
+    await service.createNote({
+      title: "Published Referrer",
+      slug: "published-referrer",
+      summary: "Public backlink",
+      body: "[[published-anchor]]",
+      status: "published",
+      allowExecution: true,
+    });
+
+    await service.createNote({
+      title: "Draft Referrer",
+      slug: "draft-referrer",
+      summary: "Draft backlink",
+      body: "[[published-anchor]]",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const publicManifest = await service.getPublicManifest();
+    const publicBacklinks = await service.getPublicBacklinks("note:published-anchor");
+    const publicResults = await service.searchPublicContent("Draft");
+
+    expect(publicManifest.map((entry) => entry.slug)).toContain("published-anchor");
+    expect(publicManifest.map((entry) => entry.slug)).not.toContain("draft-referrer");
+    expect(publicBacklinks.map((entry) => entry.slug)).toEqual(["published-referrer"]);
+    expect(publicResults).toEqual([]);
   });
 
   it("duplicates and deletes chapters while keeping chapter order contiguous", async () => {
@@ -400,5 +513,101 @@ describe("content service", () => {
     const trashRoot = path.join(process.cwd(), tempRoot, ".webbook", "trash", "uploads");
     const trashEntries = await fs.readdir(trashRoot);
     expect(trashEntries.length).toBeGreaterThan(0);
+  });
+
+  it("rejects duplicate slugs, duplicate chapter orders, and unsafe revision paths", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Unique Book",
+      slug: "unique-book",
+      description: "Initial book",
+      body: "# Unique Book",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await expect(
+      service.createBook({
+        title: "Duplicate Book",
+        slug: "unique-book",
+        description: "Duplicate book slug",
+        body: "# Duplicate Book",
+        status: "draft",
+        theme: "paper",
+      }),
+    ).rejects.toThrow("A book with that slug already exists");
+
+    await service.createNote({
+      title: "Unique Note",
+      slug: "unique-note",
+      summary: "Initial note",
+      body: "# Unique Note",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await expect(
+      service.createNote({
+        title: "Duplicate Note",
+        slug: "unique-note",
+        summary: "Duplicate note slug",
+        body: "# Duplicate Note",
+        status: "draft",
+        allowExecution: true,
+      }),
+    ).rejects.toThrow("A note with that slug already exists");
+
+    await service.createChapter("unique-book", {
+      title: "Chapter One",
+      slug: "chapter-one",
+      summary: "",
+      body: "# Chapter One",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await expect(
+      service.createChapter("unique-book", {
+        title: "Duplicate Chapter Slug",
+        slug: "chapter-one",
+        summary: "",
+        body: "# Duplicate Chapter Slug",
+        status: "draft",
+        allowExecution: true,
+        order: 2,
+      }),
+    ).rejects.toThrow("A chapter with that slug already exists in this book");
+
+    await expect(
+      service.createChapter("unique-book", {
+        title: "Duplicate Chapter Order",
+        slug: "chapter-two",
+        summary: "",
+        body: "# Duplicate Chapter Order",
+        status: "draft",
+        allowExecution: true,
+        order: 1,
+      }),
+    ).rejects.toThrow("A chapter already uses order 1");
+
+    await service.updateNote("unique-note", {
+      title: "Unique Note",
+      slug: "unique-note",
+      summary: "Updated note",
+      body: "# Unique Note\n\nUpdated",
+      status: "draft",
+      allowExecution: true,
+      createRevision: true,
+    });
+
+    await expect(
+      service.restoreRevision({
+        id: "note:unique-note",
+        revisionFile: "../users.json",
+      }),
+    ).rejects.toThrow();
   });
 });

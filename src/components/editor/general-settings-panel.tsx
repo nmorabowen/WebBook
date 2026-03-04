@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useEffectEvent, useMemo, useState, useTransition } from "react";
 import type { GeneralSettings } from "@/lib/content/schemas";
 import { colorThemeOptions, colorThemePresets } from "@/lib/color-themes";
 import { GENERAL_SETTINGS_LIMITS } from "@/lib/general-settings-config";
@@ -56,6 +56,9 @@ export function GeneralSettingsPanel({
   );
   const [fileUploadLimitMb, setFileUploadLimitMb] = useState(
     initialSettings.fileUploadLimitMb,
+  );
+  const [workspaceTransferLimitMb, setWorkspaceTransferLimitMb] = useState(
+    initialSettings.workspaceTransferLimitMb,
   );
   const [appSidebarWidth, setAppSidebarWidth] = useState(initialSettings.appSidebarWidth);
   const [appInspectorWidth, setAppInspectorWidth] = useState(
@@ -166,7 +169,7 @@ export function GeneralSettingsPanel({
     ],
   );
 
-  const save = () => {
+  const save = useEffectEvent(() => {
     window.dispatchEvent(
       new CustomEvent(GENERAL_SETTINGS_SAVE_STATUS_EVENT, {
         detail: "saving",
@@ -189,6 +192,7 @@ export function GeneralSettingsPanel({
         mathInlineTranslateY,
         imageUploadLimitMb,
         fileUploadLimitMb,
+        workspaceTransferLimitMb,
         appSidebarWidth,
         appInspectorWidth,
         publicLeftPanelWidth,
@@ -237,7 +241,7 @@ export function GeneralSettingsPanel({
 
       router.refresh();
     });
-  };
+  });
 
   useEffect(() => {
     const handleSaveRequest = () => {
@@ -251,27 +255,8 @@ export function GeneralSettingsPanel({
       window.removeEventListener(GENERAL_SETTINGS_SAVE_EVENT, handleSaveRequest);
     };
   }, [
-    appInspectorWidth,
-    appSidebarWidth,
-    collapseBookChaptersByDefault,
-    colorTheme,
-    cornerRadius,
-    dividerBackgroundSize,
-    dividerColor,
-    dividerSpacing,
-    dividerWidth,
     initialSettings.mathFontFamily,
     isPending,
-    mathFontColor,
-    mathFontFamily,
-    mathFontSize,
-    mathInlineTranslateY,
-    mathInlineVerticalAlign,
-    imageUploadLimitMb,
-    fileUploadLimitMb,
-    publicLeftPanelWidth,
-    publicRightPanelWidth,
-    tileSpacing,
   ]);
 
   return (
@@ -762,6 +747,30 @@ export function GeneralSettingsPanel({
               onChange={(event) => setFileUploadLimitMb(Number(event.target.value))}
             />
             <p className="mt-2 text-sm text-[var(--paper-muted)]">{fileUploadLimitMb}MB</p>
+          </div>
+
+          <div>
+            <label className="paper-label" htmlFor="general-workspace-transfer-limit">
+              Workspace transfer archive limit
+            </label>
+            <input
+              id="general-workspace-transfer-limit"
+              type="range"
+              min={GENERAL_SETTINGS_LIMITS.workspaceTransferLimitMb.min}
+              max={GENERAL_SETTINGS_LIMITS.workspaceTransferLimitMb.max}
+              step={GENERAL_SETTINGS_LIMITS.workspaceTransferLimitMb.step}
+              value={workspaceTransferLimitMb}
+              onChange={(event) =>
+                setWorkspaceTransferLimitMb(Number(event.target.value))
+              }
+            />
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">
+              {workspaceTransferLimitMb}MB
+            </p>
+            <p className="mt-2 text-sm text-[var(--paper-muted)]">
+              Caps the zip size accepted for workspace imports and the total
+              workspace size allowed for exports.
+            </p>
           </div>
         </div>
 

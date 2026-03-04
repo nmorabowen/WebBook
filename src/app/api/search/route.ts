@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { searchContent } from "@/lib/content/service";
+import { getSession } from "@/lib/auth";
+import { searchContent, searchPublicContent } from "@/lib/content/service";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -7,5 +8,9 @@ export async function GET(request: Request) {
   if (!query) {
     return NextResponse.json([]);
   }
-  return NextResponse.json(await searchContent(query));
+
+  const session = await getSession();
+  return NextResponse.json(
+    session ? await searchContent(query) : await searchPublicContent(query),
+  );
 }

@@ -109,6 +109,16 @@ export function normalizeGeneralSettings(
         Number(input?.fileUploadLimitMb ?? DEFAULT_GENERAL_SETTINGS.fileUploadLimitMb),
       ),
     ),
+    workspaceTransferLimitMb: Math.max(
+      GENERAL_SETTINGS_LIMITS.workspaceTransferLimitMb.min,
+      Math.min(
+        GENERAL_SETTINGS_LIMITS.workspaceTransferLimitMb.max,
+        Number(
+          input?.workspaceTransferLimitMb ??
+            DEFAULT_GENERAL_SETTINGS.workspaceTransferLimitMb,
+        ),
+      ),
+    ),
     appSidebarWidth: Math.max(
       GENERAL_SETTINGS_LIMITS.appSidebarWidth.min,
       Math.min(
@@ -165,6 +175,8 @@ export function isDefaultGeneralSettings(
     normalized.mathInlineTranslateY === DEFAULT_GENERAL_SETTINGS.mathInlineTranslateY &&
     normalized.imageUploadLimitMb === DEFAULT_GENERAL_SETTINGS.imageUploadLimitMb &&
     normalized.fileUploadLimitMb === DEFAULT_GENERAL_SETTINGS.fileUploadLimitMb &&
+    normalized.workspaceTransferLimitMb ===
+      DEFAULT_GENERAL_SETTINGS.workspaceTransferLimitMb &&
     normalized.appSidebarWidth === DEFAULT_GENERAL_SETTINGS.appSidebarWidth &&
     normalized.appInspectorWidth === DEFAULT_GENERAL_SETTINGS.appInspectorWidth &&
     normalized.publicLeftPanelWidth === DEFAULT_GENERAL_SETTINGS.publicLeftPanelWidth &&

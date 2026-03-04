@@ -4,12 +4,11 @@ import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
-  getBacklinks,
+  getPublicBacklinks,
   getGeneralSettings,
-  getManifest,
+  getPublicManifest,
   getPublicContentTree,
   getPublicNote,
-  listRevisions,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 
@@ -25,11 +24,10 @@ export default async function NotePage({
     notFound();
   }
 
-  const [tree, manifest, backlinks, revisions, generalSettings] = await Promise.all([
+  const [tree, manifest, backlinks, generalSettings] = await Promise.all([
     getPublicContentTree(),
-    getManifest(),
-    getBacklinks(note.id),
-    listRevisions(note.id),
+    getPublicManifest(),
+    getPublicBacklinks(note.id),
     getGeneralSettings(),
   ]);
   const toc = extractToc(note.body);
@@ -47,7 +45,6 @@ export default async function NotePage({
           <ReadingMetaPanel
             backlinks={backlinks}
             updatedAt={note.meta.updatedAt}
-            revisions={revisions}
           />
         </div>
       }

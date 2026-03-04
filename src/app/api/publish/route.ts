@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireSession } from "@/lib/auth";
 import { publishContentById } from "@/lib/content/service";
 
 const schema = z.object({
@@ -7,6 +8,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  await requireSession();
   const input = schema.parse(await request.json());
   const content = await publishContentById(input.id, true);
   return NextResponse.json(content);

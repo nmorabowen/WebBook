@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type { GeneralSettings } from "@/lib/content/schemas";
 import { colorThemePresets } from "@/lib/color-themes";
 import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
@@ -32,63 +38,52 @@ type WorkspaceStyleFrameProps = {
   children: ReactNode;
 };
 
+function subscribeToGeneralSettings(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  const handleSettingsChange = () => {
+    onStoreChange();
+  };
+
+  window.addEventListener(GENERAL_SETTINGS_EVENT, handleSettingsChange as EventListener);
+  window.addEventListener("storage", handleSettingsChange);
+
+  return () => {
+    window.removeEventListener(
+      GENERAL_SETTINGS_EVENT,
+      handleSettingsChange as EventListener,
+    );
+    window.removeEventListener("storage", handleSettingsChange);
+  };
+}
+
+function getStoredGeneralSettingsSnapshot() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(GENERAL_SETTINGS_STORAGE_KEY);
+}
+
 export function WorkspaceStyleFrame({
   generalSettings,
   children,
 }: WorkspaceStyleFrameProps) {
-  const [resolvedSettings, setResolvedSettings] = useState<GeneralSettings>(() =>
-    resolvePreferredSettings(generalSettings, readStoredGeneralSettings()),
+  const storedSettingsSnapshot = useSyncExternalStore(
+    subscribeToGeneralSettings,
+    getStoredGeneralSettingsSnapshot,
+    () => null,
   );
-
-  useEffect(() => {
-    setResolvedSettings(resolvePreferredSettings(generalSettings, readStoredGeneralSettings()));
-  }, [
-    generalSettings?.colorTheme,
-    generalSettings?.cornerRadius,
-    generalSettings?.tileSpacing,
-    generalSettings?.dividerSpacing,
-    generalSettings?.dividerColor,
-    generalSettings?.dividerWidth,
-    generalSettings?.dividerBackgroundSize,
-    generalSettings?.collapseBookChaptersByDefault,
-    generalSettings?.mathFontSize,
-    generalSettings?.mathFontColor,
-    generalSettings?.mathFontFamily,
-    generalSettings?.mathInlineVerticalAlign,
-    generalSettings?.mathInlineTranslateY,
-    generalSettings?.appSidebarWidth,
-    generalSettings?.appInspectorWidth,
-    generalSettings?.publicLeftPanelWidth,
-    generalSettings?.publicRightPanelWidth,
-  ]);
-
-  useEffect(() => {
-    const handleSettingsEvent = (event: Event) => {
-      const detail = (event as CustomEvent<GeneralSettings>).detail;
-      setResolvedSettings(resolvePreferredSettings(detail, detail));
-    };
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== GENERAL_SETTINGS_STORAGE_KEY) {
-        return;
-      }
-
-      setResolvedSettings(
-        resolvePreferredSettings(generalSettings, readStoredGeneralSettings()),
-      );
-    };
-
-    window.addEventListener(GENERAL_SETTINGS_EVENT, handleSettingsEvent as EventListener);
-    window.addEventListener("storage", handleStorage);
-
-    return () => {
-      window.removeEventListener(
-        GENERAL_SETTINGS_EVENT,
-        handleSettingsEvent as EventListener,
-      );
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, [generalSettings]);
+  const resolvedSettings = useMemo(
+    () =>
+      resolvePreferredSettings(
+        generalSettings,
+        storedSettingsSnapshot ? readStoredGeneralSettings() : null,
+      ),
+    [generalSettings, storedSettingsSnapshot],
+  );
 
   useEffect(() => {
     try {

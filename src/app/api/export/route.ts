@@ -1,7 +1,9 @@
 import JSZip from "jszip";
+import { requireSession } from "@/lib/auth";
 import { getBook, getNote } from "@/lib/content/service";
 
 export async function GET(request: Request) {
+  await requireSession();
   const url = new URL(request.url);
   const kind = url.searchParams.get("kind");
   const slug = url.searchParams.get("slug");

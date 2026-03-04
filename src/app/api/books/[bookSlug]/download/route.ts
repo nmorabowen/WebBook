@@ -1,10 +1,12 @@
 import JSZip from "jszip";
+import { requireSession } from "@/lib/auth";
 import { getBook } from "@/lib/content/service";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ bookSlug: string }> },
 ) {
+  await requireSession();
   const { bookSlug } = await params;
   const book = await getBook(bookSlug);
   const zip = new JSZip();

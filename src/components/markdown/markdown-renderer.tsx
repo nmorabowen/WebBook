@@ -954,6 +954,7 @@ export function MarkdownRenderer({
                 typeof props.src === "string" ? props.src : "",
               );
               return (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   {...props}
                   src={sizing.src}

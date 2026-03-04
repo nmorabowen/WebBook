@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { importWorkspaceArchive } from "@/lib/content/service";
+import {
+  getGeneralSettings,
+  importWorkspaceArchive,
+} from "@/lib/content/service";
+import {
+  WorkspaceArchiveTooLargeError,
+  workspaceTransferLimitMbToBytes,
+} from "@/lib/workspace-transfer";
 
 export async function POST(request: Request) {
   const session = await requireSession();
@@ -15,6 +22,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Archive file is required" }, { status: 400 });
   }
 
+  const settings = await getGeneralSettings();
+  const maxArchiveBytes = workspaceTransferLimitMbToBytes(
+    settings.workspaceTransferLimitMb,
+  );
+
+  if (file.size > maxArchiveBytes) {
+    const error = new WorkspaceArchiveTooLargeError(maxArchiveBytes);
+    return NextResponse.json({ error: error.message }, { status: 413 });
+  }
+
   const archiveBuffer = Buffer.from(await file.arrayBuffer());
 
   try {
@@ -23,6 +40,9 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Could not import the workspace archive";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message },
+      { status: error instanceof WorkspaceArchiveTooLargeError ? 413 : 400 },
+    );
   }
 }

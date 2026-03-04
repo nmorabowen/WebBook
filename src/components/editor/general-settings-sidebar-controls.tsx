@@ -48,8 +48,12 @@ export function GeneralSettingsSidebarControls() {
         method: "GET",
       });
 
+      const payload = !response.ok
+        ? ((await response.json().catch(() => null)) as { error?: string } | null)
+        : null;
+
       if (!response.ok) {
-        setTransferMessage("Could not export the workspace.");
+        setTransferMessage(payload?.error ?? "Could not export the workspace.");
         return;
       }
 

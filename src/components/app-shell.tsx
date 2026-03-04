@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AuthoringSidebar } from "@/components/authoring-sidebar";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
@@ -29,14 +29,13 @@ export function AppShell({
   generalSettings,
   session,
 }: AppShellProps) {
-  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
-
-  useEffect(() => {
-    const storedValue = window.localStorage.getItem(RIGHT_PANEL_STORAGE_KEY);
-    if (storedValue === "true") {
-      setIsRightPanelCollapsed(true);
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
     }
-  }, []);
+
+    return window.localStorage.getItem(RIGHT_PANEL_STORAGE_KEY) === "true";
+  });
 
   const toggleRightPanel = () => {
     setIsRightPanelCollapsed((current) => {

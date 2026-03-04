@@ -1,11 +1,12 @@
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import JSZip from "jszip";
 import {
   buildWorkspaceArchive,
   restoreWorkspaceArchive,
+  WorkspaceArchiveTooLargeError,
 } from "@/lib/workspace-transfer";
 
 const tempDirectories: string[] = [];
@@ -89,5 +90,93 @@ describe("workspace transfer", () => {
     await expect(restoreWorkspaceArchive(archive, destinationContent)).rejects.toThrow(
       "Archive manifest is missing",
     );
+  });
+
+  it("rejects archive entries that escape the workspace root", async () => {
+    const destinationRoot = await makeTempDirectory("webbook-export-unsafe-");
+    const destinationContent = path.join(destinationRoot, "content");
+    const zip = new JSZip();
+    zip.file(
+      "webbook-export.json",
+      JSON.stringify({
+        format: "webbook-workspace",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+      }),
+    );
+    zip.file("content/..\\escape.txt", "escaped");
+    const archive = await zip.generateAsync({ type: "nodebuffer" });
+
+    await expect(restoreWorkspaceArchive(archive, destinationContent)).rejects.toThrow(
+      "Archive contains an unsafe path",
+    );
+    await expect(fs.access(path.join(destinationRoot, "escape.txt"))).rejects.toThrow();
+  });
+
+  it("enforces workspace archive size limits", async () => {
+    const sourceRoot = await makeTempDirectory("webbook-export-size-source-");
+    const sourceContent = path.join(sourceRoot, "content");
+    const destinationRoot = await makeTempDirectory("webbook-export-size-destination-");
+    const destinationContent = path.join(destinationRoot, "content");
+
+    await writeFile(path.join(sourceContent, "notes", "large.md"), "0123456789");
+
+    await expect(
+      buildWorkspaceArchive(sourceContent, { maxWorkspaceBytes: 4 }),
+    ).rejects.toThrow(WorkspaceArchiveTooLargeError);
+
+    const archive = await buildWorkspaceArchive(sourceContent, {
+      maxWorkspaceBytes: 128,
+    });
+
+    await expect(
+      restoreWorkspaceArchive(archive, destinationContent, { maxArchiveBytes: 4 }),
+    ).rejects.toThrow(WorkspaceArchiveTooLargeError);
+  });
+
+  it("falls back to an in-place replace when the content root cannot be renamed", async () => {
+    const sourceRoot = await makeTempDirectory("webbook-export-mounted-source-");
+    const destinationRoot = await makeTempDirectory("webbook-export-mounted-destination-");
+    const sourceContent = path.join(sourceRoot, "content");
+    const destinationContent = path.join(destinationRoot, "content");
+
+    await writeFile(
+      path.join(sourceContent, "books", "fem", "book.md"),
+      "---\ntitle: FEM\n---\nMounted import",
+    );
+    await writeFile(
+      path.join(destinationContent, "notes", "legacy.md"),
+      "---\ntitle: Legacy\n---\nOld content",
+    );
+
+    const archive = await buildWorkspaceArchive(sourceContent);
+    const originalRename = fs.rename.bind(fs);
+    const renameSpy = vi
+      .spyOn(fs, "rename")
+      .mockImplementation(async (sourcePath, targetPath) => {
+        if (
+          sourcePath === destinationContent &&
+          String(targetPath).includes(".content-backup-")
+        ) {
+          const error = new Error("resource busy or locked") as NodeJS.ErrnoException;
+          error.code = "EBUSY";
+          throw error;
+        }
+
+        return originalRename(sourcePath, targetPath);
+      });
+
+    try {
+      await restoreWorkspaceArchive(archive, destinationContent);
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    await expect(
+      fs.readFile(path.join(destinationContent, "books", "fem", "book.md"), "utf8"),
+    ).resolves.toContain("Mounted import");
+    await expect(
+      fs.access(path.join(destinationContent, "notes", "legacy.md")),
+    ).rejects.toThrow();
   });
 });

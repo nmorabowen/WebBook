@@ -1,9 +1,11 @@
+import { requireSession } from "@/lib/auth";
 import { getNote } from "@/lib/content/service";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
+  await requireSession();
   const { slug } = await params;
   const note = await getNote(slug);
 
