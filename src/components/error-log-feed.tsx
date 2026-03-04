@@ -85,13 +85,13 @@ export function ErrorLogFeed({
                 </pre>
               </div>
             ) : null}
-
-            {entry.debugTrail.length ? (
-              <div>
-                <p className="paper-label">Debug trail</p>
-                <WorkspaceDebugFeed entries={entry.debugTrail} />
-              </div>
-            ) : null}
+            <div>
+              <p className="paper-label">Debug trail</p>
+              <WorkspaceDebugFeed
+                entries={entry.debugTrail}
+                emptyLabel="No session trail was captured for this incident. Older log entries and tabs loaded before the new recorder script will look like this."
+              />
+            </div>
           </div>
         </article>
       ))}
