@@ -340,6 +340,7 @@ export function AuthoringSidebar({
   const [pendingBookSlug, setPendingBookSlug] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -477,6 +478,7 @@ export function AuthoringSidebar({
     }
 
     setOpenMenuId(null);
+    setActionError(null);
 
     if (action === "delete") {
       const confirmed = window.confirm(
@@ -503,7 +505,14 @@ export function AuthoringSidebar({
         });
 
         if (!response.ok) {
-          throw new Error(`${action} failed`);
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          setActionError(
+            payload?.error ??
+              `Unable to ${action} this ${kind}.`,
+          );
+          return;
         }
 
         if (action === "duplicate") {
@@ -521,6 +530,7 @@ export function AuthoringSidebar({
             navigated = true;
           }
         } else {
+          setActionError(null);
           setLocalTree((previousTree) => ({
             books:
               kind === "book"
@@ -571,6 +581,12 @@ export function AuthoringSidebar({
         if (!navigated) {
           router.refresh();
         }
+      } catch (error) {
+        setActionError(
+          error instanceof Error
+            ? error.message
+            : `Unable to ${action} this ${kind}.`,
+        );
       } finally {
         setPendingActionId(null);
       }
@@ -764,6 +780,15 @@ export function AuthoringSidebar({
         dialogDescription="Search books, chapters, notes, and drafts from the indexed authoring workspace."
         buttonClassName="justify-center"
       />
+
+      {actionError ? (
+        <div
+          className="rounded-[18px] border border-[var(--paper-danger)]/20 bg-[rgba(197,93,53,0.08)] px-4 py-3 text-sm text-[var(--paper-danger)]"
+          role="alert"
+        >
+          {actionError}
+        </div>
+      ) : null}
 
       <div className="grid gap-2">
         <NavLink href="/app" label="Dashboard" active={currentPath === "/app"} />

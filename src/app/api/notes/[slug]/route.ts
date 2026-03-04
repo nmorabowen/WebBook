@@ -25,7 +25,16 @@ export async function DELETE(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   await requireSession();
-  const { slug } = await params;
-  await deleteNote(slug);
-  return NextResponse.json({ ok: true });
+  try {
+    const { slug } = await params;
+    await deleteNote(slug);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Note deletion failed",
+      },
+      { status: 400 },
+    );
+  }
 }
