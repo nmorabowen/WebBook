@@ -70,9 +70,10 @@ logs_command() {
   require_repo
   local service="${1:-}"
   if [[ -n "$service" ]]; then
-    exec compose logs --tail 200 -f "$service"
+    compose logs --tail 200 -f "$service"
+    return
   fi
-  exec compose logs --tail 200 -f
+  compose logs --tail 200 -f
 }
 
 update_command() {
