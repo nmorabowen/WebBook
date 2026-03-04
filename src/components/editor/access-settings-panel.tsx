@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { SessionPayload } from "@/lib/auth";
 import type { PublicUserRecord, UserRole } from "@/lib/user-store";
@@ -10,11 +11,23 @@ type AccessSettingsPanelProps = {
 };
 
 type PasswordMap = Record<string, string>;
+type RoleDraftMap = Record<string, UserRole>;
+
+function sortUsers(users: PublicUserRecord[]) {
+  return [...users].sort((left, right) =>
+    left.role === right.role
+      ? left.username.localeCompare(right.username)
+      : left.role === "admin"
+        ? -1
+        : 1,
+  );
+}
 
 export function AccessSettingsPanel({
   session,
   initialUsers,
 }: AccessSettingsPanelProps) {
+  const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
@@ -26,9 +39,12 @@ export function AccessSettingsPanel({
   const [newUserRole, setNewUserRole] = useState<UserRole>("editor");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [adminMessage, setAdminMessage] = useState(
-    "Admins can create users and reset passwords here.",
+    "Admins can create users, edit roles, and reset passwords here.",
   );
   const [resetPasswords, setResetPasswords] = useState<PasswordMap>({});
+  const [roleDrafts, setRoleDrafts] = useState<RoleDraftMap>(() =>
+    Object.fromEntries(initialUsers.map((user) => [user.username, user.role])),
+  );
   const [isPasswordPending, startPasswordTransition] = useTransition();
   const [isAdminPending, startAdminTransition] = useTransition();
 
@@ -81,19 +97,56 @@ export function AccessSettingsPanel({
         return;
       }
 
-      setUsers((current) =>
-        [...current, payload].sort((left, right) =>
-          left.role === right.role
-            ? left.username.localeCompare(right.username)
-            : left.role === "admin"
-              ? -1
-              : 1,
-        ),
-      );
+      setUsers((current) => sortUsers([...current, payload]));
+      setRoleDrafts((current) => ({
+        ...current,
+        [payload.username]: payload.role,
+      }));
       setNewUsername("");
       setNewUserPassword("");
       setNewUserRole("editor");
       setAdminMessage(`Created user ${payload.username}.`);
+    });
+  };
+
+  const updateWorkspaceUserRole = (username: string) => {
+    const role = roleDrafts[username];
+    const currentUser = users.find((user) => user.username === username);
+    if (!role || !currentUser || currentUser.role === role) {
+      return;
+    }
+
+    setAdminMessage("");
+    startAdminTransition(async () => {
+      const response = await fetch(`/api/users/${username}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ role }),
+      });
+
+      const payload = (await response.json()) as PublicUserRecord & { error?: string };
+      if (!response.ok) {
+        setAdminMessage(payload.error ?? `Could not update ${username}.`);
+        setRoleDrafts((current) => ({
+          ...current,
+          [username]: currentUser.role,
+        }));
+        return;
+      }
+
+      setUsers((current) =>
+        sortUsers(
+          current.map((user) => (user.username === username ? payload : user)),
+        ),
+      );
+      setRoleDrafts((current) => ({
+        ...current,
+        [username]: payload.role,
+      }));
+      setAdminMessage(`Updated role for ${username}.`);
+      router.refresh();
     });
   };
 
@@ -194,8 +247,8 @@ export function AccessSettingsPanel({
           <div className="grid gap-2">
             <p className="paper-label">Workspace users</p>
             <p className="text-sm leading-7 text-[var(--paper-muted)]">
-              Create additional editor or admin accounts and reset workspace
-              passwords.
+              Create additional editor or admin accounts, change roles, and reset
+              workspace passwords.
             </p>
           </div>
 
@@ -263,8 +316,36 @@ export function AccessSettingsPanel({
                     Updated {new Date(user.updatedAt).toLocaleDateString()}
                   </p>
                 </div>
-                <div className="flex items-start">
-                  <span className="paper-badge">{user.role}</span>
+                <div>
+                  <label className="paper-label" htmlFor={`user-role-${user.username}`}>
+                    Role
+                  </label>
+                  <select
+                    id={`user-role-${user.username}`}
+                    className="paper-select"
+                    value={roleDrafts[user.username] ?? user.role}
+                    onChange={(event) =>
+                      setRoleDrafts((current) => ({
+                        ...current,
+                        [user.username]: event.target.value as UserRole,
+                      }))
+                    }
+                    disabled={isAdminPending}
+                  >
+                    <option value="editor">Editor</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="paper-button paper-button-secondary mt-3"
+                    disabled={
+                      isAdminPending ||
+                      (roleDrafts[user.username] ?? user.role) === user.role
+                    }
+                    onClick={() => updateWorkspaceUserRole(user.username)}
+                  >
+                    Save role
+                  </button>
                 </div>
                 <div>
                   <label

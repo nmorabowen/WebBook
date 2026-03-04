@@ -37,6 +37,10 @@ export const adminResetPasswordSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+export const updateUserRoleSchema = z.object({
+  role: userRoleSchema,
+});
+
 export const changeOwnPasswordSchema = z
   .object({
     currentPassword: z.string().min(1),
@@ -72,6 +76,10 @@ function sortUsers(users: StoredUser[]) {
     }
     return left.username.localeCompare(right.username);
   });
+}
+
+function countAdmins(users: StoredUser[]) {
+  return users.filter((user) => user.role === "admin").length;
 }
 
 async function ensureUserDirectory() {
@@ -235,6 +243,41 @@ export async function updateUserPassword(username: string, password: string) {
   return sanitizeUser(
     nextUsers.find((user) => user.username === normalizedUsername)!,
   );
+}
+
+export async function updateUserRole(username: string, role: UserRole) {
+  const normalizedUsername = username.trim().toLowerCase();
+  const store = await ensureWritableUserStore();
+  const targetUser = store.users.find((user) => user.username === normalizedUsername);
+  if (!targetUser) {
+    throw new Error("User not found");
+  }
+
+  if (targetUser.role === role) {
+    return sanitizeUser(targetUser);
+  }
+
+  if (
+    targetUser.role === "admin" &&
+    role !== "admin" &&
+    countAdmins(store.users) === 1
+  ) {
+    throw new Error("At least one admin account must remain");
+  }
+
+  const now = new Date().toISOString();
+  const nextUsers = store.users.map((user) =>
+    user.username === normalizedUsername
+      ? {
+          ...user,
+          role,
+          updatedAt: now,
+        }
+      : user,
+  );
+
+  await writeUserStore(nextUsers);
+  return sanitizeUser(nextUsers.find((user) => user.username === normalizedUsername)!);
 }
 
 export async function changeOwnPassword(

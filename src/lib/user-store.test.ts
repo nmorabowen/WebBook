@@ -54,4 +54,24 @@ describe("user store", () => {
     expect(oldLogin).toBeNull();
     expect(newLogin?.role).toBe("admin");
   });
+
+  it("updates roles but keeps at least one admin account", async () => {
+    const store = await loadUserStore();
+
+    await store.createUser({
+      username: "editor-one",
+      role: "editor",
+      password: "editor-secret",
+    });
+
+    const promoted = await store.updateUserRole("editor-one", "admin");
+    expect(promoted.role).toBe("admin");
+
+    const demoted = await store.updateUserRole("admin", "editor");
+    expect(demoted.role).toBe("editor");
+
+    await expect(store.updateUserRole("editor-one", "editor")).rejects.toThrow(
+      "At least one admin account must remain",
+    );
+  });
 });

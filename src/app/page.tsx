@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, BookOpen, FileText, NotebookPen } from "lucide-react";
+import { ArrowUpRight, BookOpen, NotebookPen } from "lucide-react";
 import type { CSSProperties } from "react";
 import { getSession } from "@/lib/auth";
 import { LandingBackground } from "@/components/landing-background";
@@ -148,8 +148,15 @@ export default async function HomePage() {
                   >
                     <span className="moleskine-stack-shadow" />
                     <div className="moleskine-stack-body">
-                      <span className="moleskine-stack-spine">
-                        <FileText className="h-4 w-4" />
+                      <span className="moleskine-stack-spine moleskine-stack-spine-note">
+                        <span className="notepad-glyph" aria-hidden="true">
+                          <span className="notepad-glyph-binding" />
+                          <span className="notepad-glyph-page">
+                            <span className="notepad-glyph-line" />
+                            <span className="notepad-glyph-line" />
+                            <span className="notepad-glyph-line notepad-glyph-line-short" />
+                          </span>
+                        </span>
                       </span>
                       <div className="moleskine-stack-content">
                         <div className="flex items-center justify-between gap-3">
