@@ -12,6 +12,11 @@ export function normalizeGeneralSettings(
   input?: Partial<GeneralSettings> | null,
 ): GeneralSettings {
   return {
+    analyticsMeasurementId:
+      typeof input?.analyticsMeasurementId === "string" &&
+      /^$|^G-[A-Za-z0-9]+$/.test(input.analyticsMeasurementId.trim())
+        ? input.analyticsMeasurementId.trim()
+        : DEFAULT_GENERAL_SETTINGS.analyticsMeasurementId,
     colorTheme:
       typeof input?.colorTheme === "string" &&
       colorThemeValues.includes(input.colorTheme as (typeof colorThemeValues)[number])
@@ -159,6 +164,7 @@ export function isDefaultGeneralSettings(
 ): boolean {
   const normalized = normalizeGeneralSettings(input);
   return (
+    normalized.analyticsMeasurementId === DEFAULT_GENERAL_SETTINGS.analyticsMeasurementId &&
     normalized.colorTheme === DEFAULT_GENERAL_SETTINGS.colorTheme &&
     normalized.cornerRadius === DEFAULT_GENERAL_SETTINGS.cornerRadius &&
     normalized.tileSpacing === DEFAULT_GENERAL_SETTINGS.tileSpacing &&

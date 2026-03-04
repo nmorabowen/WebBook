@@ -189,6 +189,7 @@ export function GeneralSettingsPanel({
     );
     startTransition(async () => {
       const nextSettings = {
+        analyticsMeasurementId: initialSettings.analyticsMeasurementId,
         colorTheme,
         cornerRadius,
         tileSpacing,

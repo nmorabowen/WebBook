@@ -112,6 +112,24 @@ describe("content service", () => {
     );
   });
 
+  it("persists the analytics measurement id and preserves other settings on partial updates", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    const initialSettings = await service.getGeneralSettings();
+    await service.updateGeneralSettings({
+      analyticsMeasurementId: "G-TEST12345",
+    });
+
+    const updatedSettings = await service.getGeneralSettings();
+
+    expect(updatedSettings.analyticsMeasurementId).toBe("G-TEST12345");
+    expect(updatedSettings.colorTheme).toBe(initialSettings.colorTheme);
+    expect(updatedSettings.workspaceTransferLimitMb).toBe(
+      initialSettings.workspaceTransferLimitMb,
+    );
+  });
+
   it("reorders book chapters safely and rewrites their order metadata", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

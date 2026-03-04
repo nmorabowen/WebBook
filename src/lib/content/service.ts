@@ -711,8 +711,12 @@ export async function getGeneralSettings(): Promise<GeneralSettings> {
 
 export async function updateGeneralSettings(input: unknown) {
   await ensureContentScaffold();
+  const currentSettings = await getGeneralSettings();
   const settings = saveGeneralSettingsSchema.parse(
-    normalizeGeneralSettings(input as Partial<GeneralSettings>),
+    normalizeGeneralSettings({
+      ...currentSettings,
+      ...(input as Partial<GeneralSettings>),
+    }),
   );
   await writeFileAtomic(settingsFilePath, JSON.stringify(settings, null, 2));
   return settings;

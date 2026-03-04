@@ -1,13 +1,11 @@
 import { BarChart3, ExternalLink, Radar, Route, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { AnalyticsSettingsPanel } from "@/components/editor/analytics-settings-panel";
 import { requireSession } from "@/lib/auth";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
 import { isAnalyticsEnabled } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
-
-const measurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
-const analyticsEnabled = isAnalyticsEnabled(measurementId);
 
 const trackedAreas = [
   {
@@ -28,6 +26,8 @@ export default async function AnalyticsSettingsPage() {
     getContentTree(),
     getGeneralSettings(),
   ]);
+  const measurementId = generalSettings.analyticsMeasurementId;
+  const analyticsEnabled = isAnalyticsEnabled(measurementId);
 
   return (
     <AppShell
@@ -81,6 +81,11 @@ export default async function AnalyticsSettingsPage() {
             Review whether tracking is active, which parts of WebBook send pageviews, and how to validate reporting after deployment.
           </p>
         </div>
+
+        <AnalyticsSettingsPanel
+          initialMeasurementId={measurementId}
+          canEdit={session.role === "admin"}
+        />
 
         <div className="grid gap-4 md:grid-cols-2">
           <section

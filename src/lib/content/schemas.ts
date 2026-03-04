@@ -10,6 +10,10 @@ export const fontPresetSchema = z.enum(fontPresetValues);
 export const mathJaxFontFamilySchema = z.enum(mathJaxFontValues);
 export const colorThemeSchema = z.enum(colorThemeValues);
 export const hexColorSchema = z.string().regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/);
+export const analyticsMeasurementIdSchema = z
+  .string()
+  .trim()
+  .regex(/^$|^G-[A-Za-z0-9]+$/);
 export const bookTypographySchema = z.object({
   bodyFontSize: z
     .number()
@@ -231,6 +235,7 @@ export const reorderNotesSchema = z.object({
 
 export const generalSettingsSchema = z.object({
   colorTheme: colorThemeSchema,
+  analyticsMeasurementId: analyticsMeasurementIdSchema,
   cornerRadius: z
     .number()
     .min(GENERAL_SETTINGS_LIMITS.cornerRadius.min)

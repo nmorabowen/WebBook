@@ -6,7 +6,7 @@ import {
   JetBrains_Mono,
   Source_Serif_4,
 } from "next/font/google";
-import { Analytics } from "@/components/analytics";
+import { AnalyticsRoot } from "@/components/analytics-root";
 import { MathHydrator } from "@/components/markdown/math-hydrator";
 import "./globals.css";
 
@@ -144,7 +144,7 @@ export default function RootLayout({
         ].join(" ")}
       >
         <Suspense fallback={null}>
-          <Analytics />
+          <AnalyticsRoot />
         </Suspense>
         <MathHydrator />
         {children}

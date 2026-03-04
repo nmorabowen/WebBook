@@ -18,9 +18,11 @@ declare global {
   }
 }
 
-const measurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+type AnalyticsProps = {
+  measurementId?: string;
+};
 
-export function Analytics() {
+export function Analytics({ measurementId }: AnalyticsProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams.toString();
@@ -40,7 +42,7 @@ export function Analytics() {
       });
     window.gtag("js", new Date());
     window.gtag("config", measurementId, { send_page_view: false });
-  }, [enabled]);
+  }, [enabled, measurementId]);
 
   useEffect(() => {
     if (!enabled || !pathname || !shouldTrackAnalyticsPath(pathname) || !window.gtag) {

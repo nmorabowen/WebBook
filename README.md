@@ -50,7 +50,7 @@ WebBook supports optional Google Analytics 4 pageview tracking for public readin
 routes and the authenticated workspace: `/`, `/books/*`, `/notes/*`, and `/app/*`.
 
 Signed-in users can review the current analytics status from the workspace at
-`/app/settings/analytics`.
+`/app/settings/analytics`. Admins can also set or clear the GA4 measurement ID there.
 
 Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` in your environment to enable it. Leave the
 variable empty to keep analytics disabled.
