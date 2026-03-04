@@ -14,7 +14,10 @@ EOF
 }
 
 rebuild_release() {
-  compose build web python-runner
+  if ! compose build web python-runner; then
+    return 1
+  fi
+
   compose up -d redis python-runner web
 }
 

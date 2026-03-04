@@ -41,7 +41,7 @@ services:
     image: ${PYTHON_IMAGE}
     build:
       context: ./services/python-runner
-      dockerfile: ./services/python-runner/Dockerfile
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
       - ${WEBBOOK_ROOT}/.env.production
