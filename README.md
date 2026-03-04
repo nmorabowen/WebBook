@@ -83,6 +83,11 @@ Bootstrap command:
 curl -fsSL https://raw.githubusercontent.com/nmorabowen/WebBook/main/deploy/install.sh | sudo bash
 ```
 
+For production storage, all books, notes, uploads, revisions, users, and workspace
+settings live under the content root. Set `WEBBOOK_CONTENT_HOST_PATH` in
+[`.env.production.example`](/c:/Users/nmb/Desktop/WebBook/.env.production.example)
+to place that workspace on a different disk such as `/srv/webbook-data`.
+
 ## Useful commands
 
 ```bash

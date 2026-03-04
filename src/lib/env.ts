@@ -1,5 +1,9 @@
+import path from "path";
+
+const configuredContentRoot = process.env.CONTENT_ROOT ?? "content";
+
 export const env = {
-  contentRoot: process.env.CONTENT_ROOT ?? "content",
+  contentRoot: configuredContentRoot,
   authDisabled: process.env.AUTH_DISABLED === "true",
   sessionSecret:
     process.env.SESSION_SECRET ?? "webbook-dev-session-secret-change-me",
@@ -17,3 +21,23 @@ export const env = {
   executionWindowHour:
     Number(process.env.EXECUTION_PER_HOUR_LIMIT ?? "20") || 20,
 };
+
+export function resolveContentRoot() {
+  return path.resolve(process.cwd(), env.contentRoot);
+}
+
+export function getWorkspaceStorageLayout() {
+  const root = resolveContentRoot();
+  const systemRoot = path.join(root, ".webbook");
+  return {
+    configuredContentRoot: env.contentRoot,
+    root,
+    books: path.join(root, "books"),
+    notes: path.join(root, "notes"),
+    systemRoot,
+    uploads: path.join(systemRoot, "uploads"),
+    revisions: path.join(systemRoot, "revisions"),
+    settings: path.join(systemRoot, "settings.json"),
+    users: path.join(systemRoot, "users.json"),
+  };
+}

@@ -5,6 +5,7 @@ REPO_URL="${WEBBOOK_REPO_URL:-https://github.com/nmorabowen/WebBook.git}"
 WEBBOOK_ROOT="${WEBBOOK_ROOT:-/opt/webbook}"
 WEBBOOK_REPO_DIR="${WEBBOOK_REPO_DIR:-$WEBBOOK_ROOT/repo}"
 WEBBOOK_ENV_FILE="${WEBBOOK_ENV_FILE:-$WEBBOOK_ROOT/.env.production}"
+WEBBOOK_CONTENT_HOST_PATH="${WEBBOOK_CONTENT_HOST_PATH:-$WEBBOOK_ROOT/content}"
 DEPLOY_USER="${SUDO_USER:-$(id -un)}"
 
 require_root() {
@@ -46,7 +47,6 @@ install_packages() {
 ensure_directories() {
   mkdir -p \
     "$WEBBOOK_ROOT" \
-    "$WEBBOOK_ROOT/content" \
     "$WEBBOOK_ROOT/deploy/state" \
     "$WEBBOOK_ROOT/backups/local"
 }
@@ -98,15 +98,17 @@ write_env_file() {
   local admin_username="$2"
   local admin_password_hash="$3"
   local session_secret="$4"
-  local restic_repository="$5"
-  local restic_password="$6"
-  local aws_access_key_id="$7"
-  local aws_secret_access_key="$8"
-  local aws_region="$9"
+  local content_host_path="$5"
+  local restic_repository="$6"
+  local restic_password="$7"
+  local aws_access_key_id="$8"
+  local aws_secret_access_key="$9"
+  local aws_region="${10}"
 
   cat > "$WEBBOOK_ENV_FILE" <<EOF
 DOMAIN=$domain
 WEBBOOK_ROOT=$WEBBOOK_ROOT
+WEBBOOK_CONTENT_HOST_PATH=$content_host_path
 CONTENT_ROOT=content
 
 AUTH_DISABLED=false
@@ -204,12 +206,14 @@ main() {
   local existing_aws_access_key_id
   local existing_aws_secret_access_key
   local existing_aws_region
+  local existing_content_host_path
   local default_domain
   local domain
   local admin_username
   local admin_password=""
   local admin_password_hash
   local session_secret
+  local content_host_path
   local restic_repository
   local restic_password
   local aws_access_key_id
@@ -231,6 +235,7 @@ main() {
   existing_admin_username="$(read_existing_value ADMIN_USERNAME)"
   existing_password_hash="$(read_existing_value ADMIN_PASSWORD_HASH)"
   existing_session_secret="$(read_existing_value SESSION_SECRET)"
+  existing_content_host_path="$(read_existing_value WEBBOOK_CONTENT_HOST_PATH)"
   existing_restic_repository="$(read_existing_value RESTIC_REPOSITORY)"
   existing_restic_password="$(read_existing_value RESTIC_PASSWORD)"
   existing_aws_access_key_id="$(read_existing_value AWS_ACCESS_KEY_ID)"
@@ -240,6 +245,7 @@ main() {
   default_domain="${existing_domain:-$(hostname -f 2>/dev/null || hostname)}"
   domain="$(prompt_with_default "Domain for WebBook" "$default_domain")"
   admin_username="$(prompt_with_default "Admin username" "${existing_admin_username:-admin}")"
+  content_host_path="$(prompt_with_default "Host content path" "${existing_content_host_path:-$WEBBOOK_CONTENT_HOST_PATH}")"
 
   if [[ -n "$existing_password_hash" ]]; then
     admin_password_hash="$existing_password_hash"
@@ -272,11 +278,14 @@ main() {
     "$admin_username" \
     "$admin_password_hash" \
     "$session_secret" \
+    "$content_host_path" \
     "$restic_repository" \
     "$restic_password" \
     "$aws_access_key_id" \
     "$aws_secret_access_key" \
     "$aws_region"
+
+  mkdir -p "$content_host_path"
 
   install_webbookctl
   /usr/local/bin/webbookctl update-config
@@ -295,6 +304,7 @@ Paths:
   root: $WEBBOOK_ROOT
   repo: $WEBBOOK_REPO_DIR
   env:  $WEBBOOK_ENV_FILE
+  content: $content_host_path
 
 Useful commands:
   webbookctl status

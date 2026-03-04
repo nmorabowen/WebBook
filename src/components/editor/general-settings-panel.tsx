@@ -19,10 +19,22 @@ const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 
 type GeneralSettingsPanelProps = {
   initialSettings: GeneralSettings;
+  workspaceStorage: {
+    configuredContentRoot: string;
+    root: string;
+    books: string;
+    notes: string;
+    systemRoot: string;
+    uploads: string;
+    revisions: string;
+    settings: string;
+    users: string;
+  };
 };
 
 export function GeneralSettingsPanel({
   initialSettings,
+  workspaceStorage,
 }: GeneralSettingsPanelProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -272,6 +284,44 @@ export function GeneralSettingsPanel({
       </div>
 
       <div className="grid gap-4">
+        <div className="grid gap-4 rounded-[20px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.46)] p-4">
+          <div>
+            <p className="paper-label mb-1">Workspace storage</p>
+            <p className="text-sm leading-7 text-[var(--paper-muted)]">
+              Books, notes, uploads, revisions, users, and workspace settings already
+              live under one workspace root. Change that root at deploy time with the
+              {" "}
+              <code>CONTENT_ROOT</code>
+              {" "}
+              app setting and the host volume mount, not from inside the
+              workspace itself.
+            </p>
+          </div>
+
+          <div className="grid gap-3 text-sm text-[var(--paper-muted)]">
+            <div>
+              <p className="paper-label mb-1">Configured content root</p>
+              <code className="break-all">{workspaceStorage.configuredContentRoot}</code>
+            </div>
+            <div>
+              <p className="paper-label mb-1">Resolved workspace root</p>
+              <code className="break-all">{workspaceStorage.root}</code>
+            </div>
+            <div>
+              <p className="paper-label mb-1">Content directories</p>
+              <code className="block break-all">{workspaceStorage.books}</code>
+              <code className="block break-all">{workspaceStorage.notes}</code>
+            </div>
+            <div>
+              <p className="paper-label mb-1">Internal workspace data</p>
+              <code className="block break-all">{workspaceStorage.settings}</code>
+              <code className="block break-all">{workspaceStorage.users}</code>
+              <code className="block break-all">{workspaceStorage.uploads}</code>
+              <code className="block break-all">{workspaceStorage.revisions}</code>
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-3">
           <p className="paper-label mb-0">Color theme</p>
           <div className="flex flex-wrap gap-4">

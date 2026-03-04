@@ -53,6 +53,7 @@ status_command() {
 
   echo "Domain: ${DOMAIN:-unset}"
   echo "Root: $WEBBOOK_ROOT"
+  echo "Content path: ${WEBBOOK_CONTENT_HOST_PATH:-unset}"
   echo "Compose file: $WEBBOOK_COMPOSE_FILE"
   echo "Current web image: ${WEB_IMAGE:-unset}"
   echo "Current python image: ${PYTHON_IMAGE:-unset}"

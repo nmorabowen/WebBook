@@ -3,11 +3,13 @@ import { GeneralSettingsPanel } from "@/components/editor/general-settings-panel
 import { GeneralSettingsSidebarControls } from "@/components/editor/general-settings-sidebar-controls";
 import { requireAdminSession } from "@/lib/auth";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
+import { getWorkspaceStorageLayout } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 export default async function GeneralSettingsPage() {
   const session = await requireAdminSession();
+  const workspaceStorage = getWorkspaceStorageLayout();
   const [tree, generalSettings] = await Promise.all([
     getContentTree(),
     getGeneralSettings(),
@@ -30,7 +32,10 @@ export default async function GeneralSettingsPage() {
           </p>
         </div>
 
-        <GeneralSettingsPanel initialSettings={generalSettings} />
+        <GeneralSettingsPanel
+          initialSettings={generalSettings}
+          workspaceStorage={workspaceStorage}
+        />
       </div>
     </AppShell>
   );

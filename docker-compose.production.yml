@@ -12,7 +12,7 @@ services:
       python-runner:
         condition: service_healthy
     volumes:
-      - ${WEBBOOK_ROOT}/content:/app/content
+      - ${WEBBOOK_CONTENT_HOST_PATH}:/app/content
     healthcheck:
       test:
         - CMD-SHELL

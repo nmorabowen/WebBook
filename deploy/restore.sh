@@ -40,20 +40,31 @@ restore_from_restic_snapshot() {
 
 apply_restore() {
   local restore_root="$1"
-  local payload_root="$restore_root"
+  local restored_env_path="$restore_root${WEBBOOK_ENV_FILE}"
+  local restored_content_host_path
+  local restored_content_path
+  local restored_state_path="$restore_root$WEBBOOK_ROOT/deploy/state"
 
-  if [[ -d "$restore_root/$WEBBOOK_ROOT" ]]; then
-    payload_root="$restore_root/$WEBBOOK_ROOT"
+  if [[ ! -f "$restored_env_path" ]]; then
+    echo "Restore payload is missing $WEBBOOK_ENV_FILE" >&2
+    exit 1
   fi
+
+  restored_content_host_path="$(
+    grep '^WEBBOOK_CONTENT_HOST_PATH=' "$restored_env_path" | tail -n 1 | cut -d '=' -f 2-
+  )"
+  restored_content_host_path="${restored_content_host_path:-$WEBBOOK_CONTENT_HOST_PATH}"
+  restored_content_path="$restore_root${restored_content_host_path}"
 
   compose down || true
 
-  rm -rf "$WEBBOOK_ROOT/content" "$WEBBOOK_ROOT/deploy/state"
+  rm -rf "$restored_content_host_path" "$WEBBOOK_ROOT/deploy/state"
+  mkdir -p "$(dirname "$restored_content_host_path")"
   mkdir -p "$WEBBOOK_ROOT/deploy"
 
-  cp -a "$payload_root/content" "$WEBBOOK_ROOT/content"
-  cp -a "$payload_root/deploy/state" "$WEBBOOK_ROOT/deploy/state"
-  cp -a "$payload_root/.env.production" "$WEBBOOK_ROOT/.env.production"
+  cp -a "$restored_content_path" "$restored_content_host_path"
+  cp -a "$restored_state_path" "$WEBBOOK_ROOT/deploy/state"
+  cp -a "$restored_env_path" "$WEBBOOK_ENV_FILE"
 
   compose up -d redis python-runner web
   wait_for_release_health

@@ -14,7 +14,7 @@ The production host uses:
 Runtime layout:
 
 - `/opt/webbook/repo`
-- `/opt/webbook/content`
+- configured content path such as `/opt/webbook/content` or `/srv/webbook-data`
 - `/opt/webbook/.env.production`
 - `/opt/webbook/deploy/state`
 - `/opt/webbook/backups/local`
@@ -31,7 +31,7 @@ The installer will:
 
 1. install Docker, Caddy, Restic, and supporting tools
 2. clone the repo into `/opt/webbook/repo`
-3. prompt for domain, admin credentials, and backup settings
+3. prompt for domain, admin credentials, the host content path, and backup settings
 4. render `/opt/webbook/.env.production`
 5. install `webbookctl`
 6. configure Caddy
@@ -79,7 +79,7 @@ webbookctl doctor
 
 Backups include:
 
-- `/opt/webbook/content`
+- the configured `WEBBOOK_CONTENT_HOST_PATH`
 - `/opt/webbook/.env.production`
 - `/opt/webbook/deploy/state`
 
@@ -114,4 +114,7 @@ Production health checks use:
 
 - Production should use `AUTH_DISABLED=false`
 - Production content on the server is the source of truth
-- Deploys update code and images, but do not overwrite `/opt/webbook/content`
+- Deploys update code and images, but do not overwrite the configured content path
+- To place the workspace on a separate disk, set `WEBBOOK_CONTENT_HOST_PATH` to a
+  mounted path such as `/srv/webbook-data`; the container still reads it at
+  `/app/content`
