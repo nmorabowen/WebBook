@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCcw, ScrollText } from "lucide-react";
@@ -179,20 +178,20 @@ export default function WorkspaceError({
                     <RefreshCcw className="h-4 w-4" />
                     Try again
                   </button>
-                  <Link
+                  <a
                     href="/app"
                     className="paper-button paper-button-secondary"
                   >
                     Back to dashboard
-                  </Link>
+                  </a>
                   {isAdmin ? (
-                    <Link
+                    <a
                       href="/app/settings/errors"
                       className="paper-button paper-button-secondary inline-flex items-center gap-2"
                     >
                       <ScrollText className="h-4 w-4" />
                       Open full logs
-                    </Link>
+                    </a>
                   ) : null}
                 </div>
               </div>
