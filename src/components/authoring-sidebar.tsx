@@ -491,6 +491,7 @@ export function AuthoringSidebar({
 
     startTransition(async () => {
       try {
+        let navigated = false;
         const endpoint =
           kind === "book"
             ? `/api/books/${slug}${action === "duplicate" ? "/duplicate" : ""}`
@@ -517,6 +518,7 @@ export function AuthoringSidebar({
                   ? `/app/notes/${payload.meta.slug}`
                   : `/app/books/${payload.meta.bookSlug}/chapters/${payload.meta.slug}`,
             );
+            navigated = true;
           }
         } else {
           setLocalTree((previousTree) => ({
@@ -562,10 +564,13 @@ export function AuthoringSidebar({
             router.push(
               kind === "chapter" ? `/app/books/${slug.split("/")[0]}` : "/app",
             );
+            navigated = true;
           }
         }
 
-        router.refresh();
+        if (!navigated) {
+          router.refresh();
+        }
       } finally {
         setPendingActionId(null);
       }
@@ -763,11 +768,18 @@ export function AuthoringSidebar({
       <div className="grid gap-2">
         <NavLink href="/app" label="Dashboard" active={currentPath === "/app"} />
         {session?.role === "admin" ? (
-          <NavLink
-            href="/app/settings/general"
-            label="General settings"
-            active={currentPath === "/app/settings/general"}
-          />
+          <>
+            <NavLink
+              href="/app/settings/general"
+              label="General settings"
+              active={currentPath === "/app/settings/general"}
+            />
+            <NavLink
+              href="/app/settings/errors"
+              label="Errors"
+              active={currentPath === "/app/settings/errors"}
+            />
+          </>
         ) : null}
         <NavLink
           href="/app/settings/access"
