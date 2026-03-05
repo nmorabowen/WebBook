@@ -1001,35 +1001,43 @@ export function AuthoringSidebar({
 
       <div className="grid gap-2">
         <NavLink href="/app" label="Dashboard" active={currentPath === "/app"} />
-        {session?.role === "admin" ? (
-          <>
+
+        <div className="grid gap-2">
+          {session?.role === "admin" ? (
             <NavLink
               href="/app/settings/general"
               label="General settings"
-              active={currentPath === "/app/settings/general"}
+              active={currentPath?.startsWith("/app/settings/") ?? false}
+            />
+          ) : (
+            <p className="paper-label px-3">General settings</p>
+          )}
+
+          <div className="ml-4 grid gap-2">
+            {session?.role === "admin" ? (
+              <NavLink
+                href="/app/settings/errors"
+                label="Errors"
+                active={currentPath === "/app/settings/errors"}
+              />
+            ) : null}
+            <NavLink
+              href="/app/settings/access"
+              label="Access"
+              active={currentPath === "/app/settings/access"}
             />
             <NavLink
-              href="/app/settings/errors"
-              label="Errors"
-              active={currentPath === "/app/settings/errors"}
+              href="/app/settings/shortcuts"
+              label="Shortcuts"
+              active={currentPath === "/app/settings/shortcuts"}
             />
-          </>
-        ) : null}
-        <NavLink
-          href="/app/settings/access"
-          label="Access"
-          active={currentPath === "/app/settings/access"}
-        />
-        <NavLink
-          href="/app/settings/shortcuts"
-          label="Shortcuts"
-          active={currentPath === "/app/settings/shortcuts"}
-        />
-        <NavLink
-          href="/app/settings/analytics"
-          label="Analytics"
-          active={currentPath === "/app/settings/analytics"}
-        />
+            <NavLink
+              href="/app/settings/analytics"
+              label="Analytics"
+              active={currentPath === "/app/settings/analytics"}
+            />
+          </div>
+        </div>
       </div>
 
       <section className="grid gap-3">
