@@ -96,6 +96,23 @@ function findChapterNode(chapters: ChapterTreeNode[], chapterPath: string[]): Ch
   return findChapterNode(chapter.children, tail);
 }
 
+function findChapterSiblings(
+  chapters: ChapterTreeNode[],
+  parentPath: string[],
+): ChapterTreeNode[] | null {
+  if (!parentPath.length) {
+    return chapters;
+  }
+
+  const [head, ...tail] = parentPath;
+  const parent = chapters.find((entry) => entry.meta.slug === head);
+  if (!parent) {
+    return null;
+  }
+
+  return findChapterSiblings(parent.children, tail);
+}
+
 function defaultCollapsedBooks(
   tree: ContentTree,
   currentPath?: string,
@@ -518,6 +535,83 @@ export function AuthoringSidebar({
       return;
     }
 
+    if ((action === "move-up" || action === "move-down") && kind === "chapter") {
+      const direction = action === "move-up" ? "up" : "down";
+      const { bookSlug, chapterPath } = decodeChapterActionSlug(slug);
+      const book = localTree.books.find((entry) => entry.meta.slug === bookSlug);
+      if (!book) {
+        setActionError("Book not found.");
+        return;
+      }
+
+      const parentChapterPath = chapterPath.slice(0, -1);
+      const siblings = findChapterSiblings(book.chapters, parentChapterPath);
+      if (!siblings) {
+        setActionError("Chapter parent not found.");
+        return;
+      }
+
+      const chapterSlug = chapterPath.at(-1);
+      if (!chapterSlug) {
+        setActionError("Chapter not found.");
+        return;
+      }
+
+      const currentIndex = siblings.findIndex((chapter) => chapter.meta.slug === chapterSlug);
+      if (currentIndex < 0) {
+        setActionError("Chapter not found.");
+        return;
+      }
+
+      const currentChapter = siblings[currentIndex];
+      const targetOrder =
+        currentChapter.meta.order + (direction === "up" ? -1 : 1);
+      if (targetOrder < 1 || targetOrder > siblings.length) {
+        return;
+      }
+
+      setPendingActionId(actionId);
+      setActionError(null);
+
+      startTransition(async () => {
+        try {
+          const response = await fetch(`/api/books/${bookSlug}/chapters/move`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              chapterPath,
+              parentChapterPath,
+              order: targetOrder,
+            }),
+          });
+
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string; path?: string[] }
+            | null;
+
+          if (!response.ok) {
+            throw new Error(payload?.error ?? "Unable to reorder this chapter.");
+          }
+
+          if (payload?.path?.length) {
+            router.push(`/app/books/${bookSlug}/chapters/${payload.path.join("/")}`);
+          }
+          router.refresh();
+        } catch (error) {
+          setActionError(
+            error instanceof Error
+              ? error.message
+              : "Unable to reorder this chapter.",
+          );
+        } finally {
+          setPendingActionId(null);
+        }
+      });
+      return;
+    }
+
     if ((action === "move-up" || action === "move-down") && (kind === "book" || kind === "note")) {
       const direction = action === "move-up" ? "up" : "down";
       const orderedSlugs =
@@ -778,10 +872,12 @@ export function AuthoringSidebar({
   };
 
   const renderChapterTree = (bookSlug: string, chapters: ChapterTreeNode[], depth = 0) =>
-    chapters.map((chapter) => {
+    chapters.map((chapter, chapterIndex) => {
       const chapterPath = `/app/books/${bookSlug}/chapters/${chapter.path.join("/")}`;
       const chapterActionSlug = encodeChapterActionSlug(bookSlug, chapter.path);
       const collapsed = isChapterCollapsed(bookSlug, chapter.path);
+      const disableMoveUp = chapterIndex === 0;
+      const disableMoveDown = chapterIndex === chapters.length - 1;
 
       return (
         <div key={chapterPath} className="grid gap-1">
@@ -828,6 +924,14 @@ export function AuthoringSidebar({
                     onMove={() =>
                       runItemAction("chapter", chapterActionSlug, "move")
                     }
+                    onMoveUp={() =>
+                      runItemAction("chapter", chapterActionSlug, "move-up")
+                    }
+                    onMoveDown={() =>
+                      runItemAction("chapter", chapterActionSlug, "move-down")
+                    }
+                    disableMoveUp={disableMoveUp}
+                    disableMoveDown={disableMoveDown}
                     onDuplicate={() =>
                       runItemAction("chapter", chapterActionSlug, "duplicate")
                     }

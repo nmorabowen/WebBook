@@ -23,6 +23,23 @@ function moveSlugByStep(slugs: string[], slug: string, direction: "up" | "down")
   return next;
 }
 
+function findChapterSiblings(
+  chapters: ChapterTreeNode[],
+  parentPath: string[],
+): ChapterTreeNode[] | null {
+  if (!parentPath.length) {
+    return chapters;
+  }
+
+  const [head, ...tail] = parentPath;
+  const parent = chapters.find((entry) => entry.meta.slug === head);
+  if (!parent) {
+    return null;
+  }
+
+  return findChapterSiblings(parent.children, tail);
+}
+
 type BookMoveControls = {
   mode: "book";
   slug: string;
@@ -53,22 +70,101 @@ export function PageMoveControls(props: PageMoveControlsProps) {
   const [, startTransition] = useTransition();
 
   if (props.mode === "chapter") {
+    const parentChapterPath = props.chapterPath.slice(0, -1);
+    const siblings = findChapterSiblings(props.bookChapters, parentChapterPath);
+    const chapterSlug = props.chapterPath.at(-1);
+    const currentIndex =
+      siblings && chapterSlug
+        ? siblings.findIndex((chapter) => chapter.meta.slug === chapterSlug)
+        : -1;
+    const currentChapter =
+      siblings && currentIndex >= 0 ? siblings[currentIndex] : null;
+    const canMoveUp = currentIndex > 0;
+    const canMoveDown =
+      siblings !== null && currentIndex >= 0 && currentIndex < siblings.length - 1;
+
+    const reorderSibling = (direction: "up" | "down") => {
+      if (!siblings || !currentChapter) {
+        setErrorMessage("Chapter context unavailable for reorder.");
+        return;
+      }
+      const order = currentChapter.meta.order + (direction === "up" ? -1 : 1);
+      if (order < 1 || order > siblings.length) {
+        return;
+      }
+
+      setPendingAction(direction);
+      setErrorMessage(null);
+      startTransition(async () => {
+        try {
+          const response = await fetch(`/api/books/${props.bookSlug}/chapters/move`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              chapterPath: props.chapterPath,
+              parentChapterPath,
+              order,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string; path?: string[] }
+            | null;
+          if (!response.ok) {
+            throw new Error(payload?.error ?? "Unable to reorder this chapter.");
+          }
+
+          if (payload?.path?.length) {
+            router.push(`/app/books/${props.bookSlug}/chapters/${payload.path.join("/")}`);
+          }
+          router.refresh();
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Unable to reorder this chapter.",
+          );
+        } finally {
+          setPendingAction(null);
+        }
+      });
+    };
+
     return (
       <>
         <div className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-3">
           <p className="paper-label">Move/Reorder</p>
-          <button
-            type="button"
-            className="paper-button mt-2 inline-flex items-center gap-2"
-            onClick={() => {
-              setErrorMessage(null);
-              setIsMoveDialogOpen(true);
-            }}
-            disabled={pendingAction !== null}
-          >
-            <MoveRight className="h-4 w-4" />
-            Move chapter
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="paper-button paper-button-secondary inline-flex items-center gap-2"
+              onClick={() => reorderSibling("up")}
+              disabled={!canMoveUp || pendingAction !== null}
+            >
+              <ArrowUp className="h-4 w-4" />
+              Move up
+            </button>
+            <button
+              type="button"
+              className="paper-button paper-button-secondary inline-flex items-center gap-2"
+              onClick={() => reorderSibling("down")}
+              disabled={!canMoveDown || pendingAction !== null}
+            >
+              <ArrowDown className="h-4 w-4" />
+              Move down
+            </button>
+            <button
+              type="button"
+              className="paper-button inline-flex items-center gap-2"
+              onClick={() => {
+                setErrorMessage(null);
+                setIsMoveDialogOpen(true);
+              }}
+              disabled={pendingAction !== null}
+            >
+              <MoveRight className="h-4 w-4" />
+              Move chapter
+            </button>
+          </div>
           {errorMessage ? (
             <p className="mt-2 text-sm text-[var(--paper-danger)]" role="alert">
               {errorMessage}
