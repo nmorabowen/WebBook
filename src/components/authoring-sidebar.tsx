@@ -613,7 +613,9 @@ export function AuthoringSidebar({
               ? `/api/notes/${slug}${action === "duplicate" ? "/duplicate" : ""}`
               : (() => {
                   const { bookSlug, chapterPath } = decodeChapterActionSlug(slug);
-                  return `/api/books/${bookSlug}/chapters/${chapterPath.join("/")}${action === "duplicate" ? "/duplicate" : ""}`;
+                  return action === "duplicate"
+                    ? `/api/books/${bookSlug}/chapters/duplicate/${chapterPath.join("/")}`
+                    : `/api/books/${bookSlug}/chapters/${chapterPath.join("/")}`;
                 })();
         const response = await fetch(endpoint, {
           method: action === "duplicate" ? "POST" : "DELETE",
