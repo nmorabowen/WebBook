@@ -1356,6 +1356,111 @@ describe("content service", () => {
     ).resolves.toContain("order: 2");
   });
 
+  it("moves chapters across parents even when a sibling chapter front matter is malformed", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Move Broken Chapter",
+      slug: "move-broken-chapter",
+      description: "Testing move with malformed sibling",
+      body: "# Move Broken Chapter",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("move-broken-chapter", {
+      title: "Part A",
+      slug: "part-a",
+      summary: "",
+      body: "# Part A",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("move-broken-chapter", {
+      title: "Part B",
+      slug: "part-b",
+      summary: "",
+      body: "# Part B",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+    await service.createChapter("move-broken-chapter", {
+      title: "Broken Child",
+      slug: "broken-child",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Broken Child",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("move-broken-chapter", {
+      title: "Healthy Child",
+      slug: "healthy-child",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Healthy Child",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    await fs.writeFile(
+      path.join(
+        process.cwd(),
+        tempRoot,
+        "books",
+        "move-broken-chapter",
+        "chapters",
+        "001-part-a",
+        "chapters",
+        "001-broken-child.md",
+      ),
+      [
+        "---",
+        "kind: chapter",
+        "bookSlug: move-broken-chapter",
+        "title: Broken Child",
+        "slug: broken-child",
+        "order: 1",
+        "summary: bad:",
+        "oops",
+        "status: draft",
+        "allowExecution: true",
+        "createdAt: '2026-03-04T00:00:00.000Z'",
+        "updatedAt: '2026-03-04T00:00:00.000Z'",
+        "---",
+        "# Broken Child",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const moved = await service.moveChapter("move-broken-chapter", {
+      chapterPath: ["part-a", "healthy-child"],
+      parentChapterPath: ["part-b"],
+      order: 1,
+    });
+    expect(moved.path).toEqual(["part-b", "healthy-child"]);
+
+    await expect(
+      fs.access(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          "books",
+          "move-broken-chapter",
+          "chapters",
+          "002-part-b",
+          "chapters",
+          "001-healthy-child.md",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it("deletes books and notes while keeping collection order contiguous", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

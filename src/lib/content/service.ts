@@ -532,6 +532,15 @@ type ChapterEntryLocation = {
   entry: OrderedChapterFile;
 };
 
+type ChapterFileNode = {
+  slug: string;
+  order: number;
+  path: string[];
+  filePath: string;
+  raw: string;
+  children: ChapterFileNode[];
+};
+
 async function listChapterEntryLocations(
   bookSlug: string,
   chaptersPath = path.join(bookDirectory(bookSlug), "chapters"),
@@ -944,22 +953,6 @@ function resolveChapterPath(
   return { ok: false, reason: "not-found" };
 }
 
-function getChapterSiblingsByParentPath(
-  chapters: BookRecord["chapters"],
-  parentPath: string[],
-): BookRecord["chapters"] | null {
-  if (!parentPath.length) {
-    return chapters;
-  }
-
-  const parent = findChapterByPath(chapters, parentPath);
-  if (!parent) {
-    return null;
-  }
-
-  return parent.children;
-}
-
 function chapterPathsEqual(left: string[], right: string[]) {
   return (
     left.length === right.length &&
@@ -974,55 +967,74 @@ function chapterPathStartsWith(pathValue: string[], prefix: string[]) {
   );
 }
 
-function renumberChapterSiblings(
-  chapters: BookRecord["chapters"],
-  now: string,
-  options?: { touchUpdatedAt?: boolean },
-) {
-  const touchUpdatedAt = options?.touchUpdatedAt ?? true;
+async function loadChapterFileTree(
+  chaptersPath: string,
+  parentPath: string[] = [],
+): Promise<ChapterFileNode[]> {
+  const entries = await listOrderedChapterFilesAtPath(chaptersPath);
+  return Promise.all(
+    entries.map(async (entry) => {
+      const chapterPath = [...parentPath, entry.slug];
+      return {
+        slug: entry.slug,
+        order: entry.order,
+        path: chapterPath,
+        filePath: entry.filePath,
+        raw: await fs.readFile(entry.filePath, "utf8"),
+        children: await loadChapterFileTree(
+          chapterChildrenDirectory(chaptersPath, entry.order, entry.slug),
+          chapterPath,
+        ),
+      } satisfies ChapterFileNode;
+    }),
+  );
+}
+
+function findChapterFileSiblingsByParentPath(
+  chapters: ChapterFileNode[],
+  parentPath: string[],
+): ChapterFileNode[] | null {
+  if (parentPath.length === 0) {
+    return chapters;
+  }
+
+  const [head, ...tail] = parentPath;
+  const parent = chapters.find((chapter) => chapter.slug === head);
+  if (!parent) {
+    return null;
+  }
+
+  return findChapterFileSiblingsByParentPath(parent.children, tail);
+}
+
+function renumberChapterFileSiblings(chapters: ChapterFileNode[], now: string) {
   for (const [index, chapter] of chapters.entries()) {
-    const nextOrder = index + 1;
-    chapter.meta.order = nextOrder;
-    if (touchUpdatedAt) {
-      chapter.meta.updatedAt = now;
-    }
+    chapter.order = index + 1;
+    chapter.raw = rewriteFrontMatterScalar(chapter.raw, "order", chapter.order);
+    chapter.raw = rewriteFrontMatterScalar(chapter.raw, "updatedAt", now);
   }
 }
 
-async function writeChapterTreeToDirectory(
+async function writeChapterFileTreeToDirectory(
   chaptersPath: string,
-  chapters: BookRecord["chapters"],
-  bookSlug: string,
+  chapters: ChapterFileNode[],
 ) {
   for (const chapter of chapters) {
-    const stem = chapterStem(chapter.meta.order, chapter.meta.slug);
+    const stem = chapterStem(chapter.order, chapter.slug);
     const filePath = path.join(chaptersPath, `${stem}.md`);
-    await fs.writeFile(
-      filePath,
-      renderMatter(
-        {
-          ...chapter.meta,
-          kind: "chapter",
-          bookSlug,
-          slug: chapter.meta.slug,
-          order: chapter.meta.order,
-        } satisfies ChapterMeta,
-        chapter.body,
-      ),
-      "utf8",
-    );
+    await fs.writeFile(filePath, chapter.raw, "utf8");
 
-    if (chapter.children.length) {
+    if (chapter.children.length > 0) {
       const childrenPath = path.join(chaptersPath, stem, "chapters");
       await ensureDirectory(childrenPath);
-      await writeChapterTreeToDirectory(childrenPath, chapter.children, bookSlug);
+      await writeChapterFileTreeToDirectory(childrenPath, chapter.children);
     }
   }
 }
 
-async function replaceBookChaptersDirectory(
+async function replaceBookChaptersDirectoryFromFileTree(
   bookSlug: string,
-  chapters: BookRecord["chapters"],
+  chapters: ChapterFileNode[],
 ) {
   const chaptersPath = path.join(bookDirectory(bookSlug), "chapters");
   const bookRoot = bookDirectory(bookSlug);
@@ -1030,7 +1042,7 @@ async function replaceBookChaptersDirectory(
   const backupPath = path.join(bookRoot, `.chapters-backup-${Date.now()}`);
 
   await ensureDirectory(stagingPath);
-  await writeChapterTreeToDirectory(stagingPath, chapters, bookSlug);
+  await writeChapterFileTreeToDirectory(stagingPath, chapters);
   await ensureDirectory(chaptersPath);
   await fs.rename(chaptersPath, backupPath);
 
@@ -1991,6 +2003,20 @@ export async function moveChapter(bookSlug: string, input: unknown) {
   const data = moveChapterSchema.parse(input);
   const chapterPath = normalizeChapterPathInput(data.chapterPath);
   const destinationParentPath = normalizeChapterPathInput(data.parentChapterPath);
+  const loadChapterByPath = async (pathInput: string[]) => {
+    const resolution = await resolveChapterEntryLocation(bookSlug, pathInput);
+    if (!resolution.ok) {
+      if (resolution.reason === "ambiguous") {
+        throw new Error("Chapter path is ambiguous");
+      }
+      return null;
+    }
+    return parseChapterFile(
+      resolution.location.entry.filePath,
+      bookSlug,
+      resolution.location.chapterPath,
+    );
+  };
   if (!chapterPath.length) {
     throw new Error("Chapter path is required");
   }
@@ -2005,19 +2031,21 @@ export async function moveChapter(bookSlug: string, input: unknown) {
     throw new Error("Chapter not found");
   }
 
-  const book = await getBook(bookSlug);
-  const sourceSiblings = getChapterSiblingsByParentPath(book.chapters, sourceParentPath);
+  const rootChaptersPath = path.join(bookDirectory(bookSlug), "chapters");
+  const chapterTree = await loadChapterFileTree(rootChaptersPath, []);
+
+  const sourceSiblings = findChapterFileSiblingsByParentPath(chapterTree, sourceParentPath);
   if (!sourceSiblings) {
     throw new Error("Chapter not found");
   }
 
-  const sourceIndex = sourceSiblings.findIndex((chapter) => chapter.meta.slug === movingSlug);
+  const sourceIndex = sourceSiblings.findIndex((chapter) => chapter.slug === movingSlug);
   if (sourceIndex < 0) {
     throw new Error("Chapter not found");
   }
 
-  const destinationSiblingsBeforeMove = getChapterSiblingsByParentPath(
-    book.chapters,
+  const destinationSiblingsBeforeMove = findChapterFileSiblingsByParentPath(
+    chapterTree,
     destinationParentPath,
   );
   if (!destinationSiblingsBeforeMove) {
@@ -2026,7 +2054,7 @@ export async function moveChapter(bookSlug: string, input: unknown) {
 
   const sameParent = chapterPathsEqual(sourceParentPath, destinationParentPath);
   if (sameParent && data.order === undefined) {
-    const currentChapter = findChapterByPath(book.chapters, chapterPath);
+    const currentChapter = await loadChapterByPath(chapterPath);
     if (!currentChapter) {
       throw new Error("Chapter not found");
     }
@@ -2041,24 +2069,26 @@ export async function moveChapter(bookSlug: string, input: unknown) {
   }
 
   if (sameParent && requestedOrder === sourceIndex + 1) {
-    const currentChapter = findChapterByPath(book.chapters, chapterPath);
+    const currentChapter = await loadChapterByPath(chapterPath);
     if (!currentChapter) {
       throw new Error("Chapter not found");
     }
     return currentChapter;
   }
 
-  const revisionCandidates = new Map<string, ChapterRecord>();
+  const revisionCandidates = new Map<string, { id: string; raw: string }>();
   for (const chapter of sourceSiblings) {
-    revisionCandidates.set(chapter.path.join("/"), chapter);
+    const chapterId = chapterIdFromPath(bookSlug, chapter.path);
+    revisionCandidates.set(chapter.path.join("/"), { id: chapterId, raw: chapter.raw });
   }
   for (const chapter of destinationSiblingsBeforeMove) {
-    revisionCandidates.set(chapter.path.join("/"), chapter);
+    const chapterId = chapterIdFromPath(bookSlug, chapter.path);
+    revisionCandidates.set(chapter.path.join("/"), { id: chapterId, raw: chapter.raw });
   }
 
   const [movedChapter] = sourceSiblings.splice(sourceIndex, 1);
-  const destinationSiblingsAfterRemoval = getChapterSiblingsByParentPath(
-    book.chapters,
+  const destinationSiblingsAfterRemoval = findChapterFileSiblingsByParentPath(
+    chapterTree,
     destinationParentPath,
   );
   if (!destinationSiblingsAfterRemoval) {
@@ -2066,7 +2096,7 @@ export async function moveChapter(bookSlug: string, input: unknown) {
   }
 
   if (
-    destinationSiblingsAfterRemoval.some((chapter) => chapter.meta.slug === movedChapter.meta.slug)
+    destinationSiblingsAfterRemoval.some((chapter) => chapter.slug === movedChapter.slug)
   ) {
     throw new Error("A chapter with that slug already exists in the destination");
   }
@@ -2079,17 +2109,16 @@ export async function moveChapter(bookSlug: string, input: unknown) {
     await createRevision(chapter.id, chapter.raw);
   }
 
-  renumberChapterSiblings(sourceSiblings, now);
+  renumberChapterFileSiblings(sourceSiblings, now);
   if (destinationSiblingsAfterRemoval !== sourceSiblings) {
-    renumberChapterSiblings(destinationSiblingsAfterRemoval, now);
+    renumberChapterFileSiblings(destinationSiblingsAfterRemoval, now);
   }
-  movedChapter.meta.updatedAt = now;
 
-  await replaceBookChaptersDirectory(bookSlug, book.chapters);
+  await replaceBookChaptersDirectoryFromFileTree(bookSlug, chapterTree);
   await rebuildIndexes();
 
-  const movedPath = [...destinationParentPath, movedChapter.meta.slug];
-  const moved = await getChapter(bookSlug, movedPath);
+  const movedPath = [...destinationParentPath, movedChapter.slug];
+  const moved = await loadChapterByPath(movedPath);
   if (!moved) {
     throw new Error("Chapter move failed");
   }
