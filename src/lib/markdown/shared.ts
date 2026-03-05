@@ -193,12 +193,19 @@ export function createWikiLinkPlugin(resolve: Resolver) {
 }
 
 export function extractToc(markdown: string) {
-  const parsed = matter(markdown);
+  let content = markdown;
+  try {
+    content = matter(markdown).content;
+  } catch {
+    // Some pages start with invalid front matter-like blocks. Strip a leading
+    // fenced metadata block if present, then continue without failing TOC generation.
+    content = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/, "");
+  }
   const tree = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
-    .parse(parsed.content) as Root;
+    .parse(content) as Root;
   const toc: TocItem[] = [];
   visit(tree, "heading", (node) => {
     const value = toString(node).replace(/\s+/g, " ").trim();

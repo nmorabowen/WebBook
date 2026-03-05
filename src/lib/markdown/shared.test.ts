@@ -33,6 +33,17 @@ $$
     ]);
   });
 
+  it("does not throw when markdown begins with invalid frontmatter-like content", () => {
+    const toc = extractToc(`---
+summary: bad:
+oops
+---
+
+# Real Heading`);
+
+    expect(toc).toEqual([{ depth: 1, value: "Real Heading", id: "real-heading" }]);
+  });
+
   it("extracts executable code cells and metadata", () => {
     const cells = extractCodeCells(
       "```python exec id=cell-1\nprint('hi')\n```\n\n```ts\nconsole.log('x')\n```",
