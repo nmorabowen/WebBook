@@ -14,6 +14,26 @@ import {
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 
+type PreviewChapterNode = {
+  path: string[];
+  title: string;
+  order: number;
+  summary?: string;
+  children: PreviewChapterNode[];
+};
+
+function mapPreviewChapters(
+  chapters: Awaited<ReturnType<typeof getBook>>["chapters"],
+): PreviewChapterNode[] {
+  return chapters.map((chapter) => ({
+    path: chapter.path,
+    title: chapter.meta.title,
+    order: chapter.meta.order,
+    summary: chapter.meta.summary,
+    children: mapPreviewChapters(chapter.children),
+  }));
+}
+
 export default async function EditorPreviewPage({
   searchParams,
 }: {
@@ -108,12 +128,7 @@ export default async function EditorPreviewPage({
                 generalSettings={generalSettings}
                 sourceNavigation
                 currentRoute={`/books/${book.meta.slug}`}
-                chapters={book.chapters.map((chapter) => ({
-                  slug: chapter.meta.slug,
-                  title: chapter.meta.title,
-                  order: chapter.meta.order,
-                  summary: chapter.meta.summary,
-                }))}
+                chapters={mapPreviewChapters(book.chapters)}
               />
             </main>
             <aside
@@ -166,7 +181,7 @@ export default async function EditorPreviewPage({
                 bookTitle={book.meta.title}
                 chapterOrder={chapter.meta.order}
                 sourceNavigation
-                currentRoute={`/books/${book.meta.slug}/${chapter.meta.slug}`}
+                currentRoute={`/books/${book.meta.slug}/${chapter.path.join("/")}`}
               />
             </main>
             <aside

@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 
 export function CreateChapterPanel({
   bookSlug,
+  parentChapterPath,
   nextOrder,
 }: {
   bookSlug: string;
+  parentChapterPath: string[];
   nextOrder: number;
 }) {
   const router = useRouter();
@@ -28,6 +30,7 @@ export function CreateChapterPanel({
           body: JSON.stringify({
             title,
             slug: title,
+            parentChapterPath,
             summary: "A fresh chapter.",
             body: "# New chapter\n\nStart writing here.",
             status: "draft",
@@ -36,7 +39,7 @@ export function CreateChapterPanel({
           }),
         });
         const payload = (await response.json().catch(() => null)) as
-          | { meta?: { slug: string }; error?: string }
+          | { meta?: { slug: string }; path?: string[]; error?: string }
           | null;
 
         if (!response.ok) {
@@ -44,12 +47,19 @@ export function CreateChapterPanel({
           return;
         }
 
-        if (!payload?.meta?.slug) {
+        const createdPath =
+          payload?.path && payload.path.length
+            ? payload.path
+            : payload?.meta?.slug
+              ? [...parentChapterPath, payload.meta.slug]
+              : null;
+
+        if (!createdPath) {
           setErrorMessage("Could not create chapter.");
           return;
         }
 
-        router.push(`/app/books/${bookSlug}/chapters/${payload.meta.slug}`);
+        router.push(`/app/books/${bookSlug}/chapters/${createdPath.join("/")}`);
         router.refresh();
       } catch (error) {
         setErrorMessage(

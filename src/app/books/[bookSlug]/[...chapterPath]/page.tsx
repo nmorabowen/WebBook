@@ -17,16 +17,17 @@ import { buildPublicMetadata } from "@/lib/seo";
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ bookSlug: string; chapterSlug: string }>;
+  params: Promise<{ bookSlug: string; chapterPath: string[] }>;
 }): Promise<Metadata> {
-  const { bookSlug, chapterSlug } = await params;
-  const result = await getPublicChapter(bookSlug, chapterSlug);
+  const { bookSlug, chapterPath } = await params;
+  const requestedPath = chapterPath ?? [];
+  const result = await getPublicChapter(bookSlug, requestedPath);
 
   if (!result) {
     return buildPublicMetadata({
       title: "Chapter Not Found | WebBook",
       description: "The requested chapter is not published.",
-      path: `/books/${bookSlug}/${chapterSlug}`,
+      path: `/books/${bookSlug}/${requestedPath.join("/")}`,
       noIndex: true,
     });
   }
@@ -38,7 +39,7 @@ export async function generateMetadata({
     description:
       chapter.meta.summary ??
       `Read ${chapter.meta.title} from ${book.meta.title} on WebBook.`,
-    path: `/books/${book.meta.slug}/${chapter.meta.slug}`,
+    path: `/books/${book.meta.slug}/${chapter.path.join("/")}`,
     type: "article",
     publishedTime: chapter.meta.publishedAt,
     modifiedTime: chapter.meta.updatedAt,
@@ -48,10 +49,11 @@ export async function generateMetadata({
 export default async function ChapterPage({
   params,
 }: {
-  params: Promise<{ bookSlug: string; chapterSlug: string }>;
+  params: Promise<{ bookSlug: string; chapterPath: string[] }>;
 }) {
-  const { bookSlug, chapterSlug } = await params;
-  const result = await getPublicChapter(bookSlug, chapterSlug);
+  const { bookSlug, chapterPath } = await params;
+  const requestedPath = chapterPath ?? [];
+  const result = await getPublicChapter(bookSlug, requestedPath);
 
   if (!result) {
     notFound();
@@ -65,11 +67,12 @@ export default async function ChapterPage({
     getGeneralSettings(),
   ]);
   const toc = extractToc(chapter.body);
+  const chapterRoute = `/books/${book.meta.slug}/${chapter.path.join("/")}`;
 
   return (
     <PublicShell
       tree={tree}
-      currentPath={`/books/${book.meta.slug}/${chapter.meta.slug}`}
+      currentPath={chapterRoute}
       bookSlug={book.meta.slug}
       fontPreset={chapter.meta.fontPreset ?? book.meta.fontPreset ?? "source-serif"}
       generalSettings={generalSettings}
@@ -98,7 +101,7 @@ export default async function ChapterPage({
         generalSettings={generalSettings}
         bookTitle={book.meta.title}
         chapterOrder={chapter.meta.order}
-        currentRoute={`/books/${book.meta.slug}/${chapter.meta.slug}`}
+        currentRoute={chapterRoute}
       />
     </PublicShell>
   );

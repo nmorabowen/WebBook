@@ -14,6 +14,26 @@ import {
 import { extractToc } from "@/lib/markdown/shared";
 import { buildPublicMetadata } from "@/lib/seo";
 
+type PreviewChapterNode = {
+  path: string[];
+  title: string;
+  order: number;
+  summary?: string;
+  children: PreviewChapterNode[];
+};
+
+function mapPreviewChapters(
+  chapters: NonNullable<Awaited<ReturnType<typeof getPublicBook>>>["chapters"],
+): PreviewChapterNode[] {
+  return chapters.map((chapter) => ({
+    path: chapter.path,
+    title: chapter.meta.title,
+    order: chapter.meta.order,
+    summary: chapter.meta.summary,
+    children: mapPreviewChapters(chapter.children),
+  }));
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -93,12 +113,7 @@ export default async function BookPage({
         bookSlug={book.meta.slug}
         generalSettings={generalSettings}
         currentRoute={`/books/${book.meta.slug}`}
-        chapters={book.chapters.map((chapter) => ({
-          slug: chapter.meta.slug,
-          title: chapter.meta.title,
-          order: chapter.meta.order,
-          summary: chapter.meta.summary,
-        }))}
+        chapters={mapPreviewChapters(book.chapters)}
       />
     </PublicShell>
   );

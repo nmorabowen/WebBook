@@ -13,9 +13,9 @@ export function defaultUploadTargetPath(pageId: string) {
 
   if (pageId.startsWith("chapter:")) {
     const chapterTarget = pageId.slice("chapter:".length).trim();
-    const [bookSlug, chapterSlug] = chapterTarget.split("/");
-    if (bookSlug && chapterSlug) {
-      return `books/${bookSlug}/chapters/${chapterSlug}`;
+    const [bookSlug, ...chapterPath] = chapterTarget.split("/").filter(Boolean);
+    if (bookSlug && chapterPath.length > 0) {
+      return `books/${bookSlug}/chapters/${chapterPath.join("/")}`;
     }
 
     if (bookSlug) {

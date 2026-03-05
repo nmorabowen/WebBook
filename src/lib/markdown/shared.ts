@@ -49,6 +49,54 @@ function normalizeHeadingQuery(value: string) {
   return headingId(value);
 }
 
+function buildManifestAliasLookup(manifest: ManifestEntry[]) {
+  const aliasLookup = new Map<string, ManifestEntry | null>();
+  const chapterEntries = manifest.filter((entry) => entry.kind === "chapter");
+
+  const addAlias = (alias: string, entry: ManifestEntry) => {
+    const existing = aliasLookup.get(alias);
+    if (!existing) {
+      aliasLookup.set(alias, entry);
+      return;
+    }
+
+    if (existing.id !== entry.id) {
+      aliasLookup.set(alias, null);
+    }
+  };
+
+  for (const entry of manifest) {
+    if (entry.kind !== "chapter") {
+      addAlias(entry.slug, entry);
+    }
+  }
+
+  const leafAliasCount = new Map<string, number>();
+  const bookLeafAliasCount = new Map<string, number>();
+  for (const entry of chapterEntries) {
+    const leafAlias = entry.slug;
+    const bookLeafAlias = `${entry.bookSlug}/${entry.slug}`;
+    leafAliasCount.set(leafAlias, (leafAliasCount.get(leafAlias) ?? 0) + 1);
+    bookLeafAliasCount.set(bookLeafAlias, (bookLeafAliasCount.get(bookLeafAlias) ?? 0) + 1);
+  }
+
+  for (const entry of chapterEntries) {
+    const canonicalAlias = `${entry.bookSlug}/${entry.chapterPath?.join("/") ?? entry.slug}`;
+    addAlias(canonicalAlias, entry);
+
+    const bookLeafAlias = `${entry.bookSlug}/${entry.slug}`;
+    if ((bookLeafAliasCount.get(bookLeafAlias) ?? 0) === 1) {
+      addAlias(bookLeafAlias, entry);
+    }
+
+    if ((leafAliasCount.get(entry.slug) ?? 0) === 1) {
+      addAlias(entry.slug, entry);
+    }
+  }
+
+  return aliasLookup;
+}
+
 export function resolveWikiTargetFromManifest(
   manifest: ManifestEntry[],
   target: string,
@@ -59,20 +107,9 @@ export function resolveWikiTargetFromManifest(
   }
 
   const normalizedPageTarget = pageTarget.toLowerCase();
-  const entry =
-    manifest.find((candidate) => {
-      if (candidate.slug === normalizedPageTarget) {
-        return true;
-      }
+  const entry = buildManifestAliasLookup(manifest).get(normalizedPageTarget) ?? null;
 
-      return (
-        candidate.kind === "chapter" &&
-        candidate.bookSlug &&
-        `${candidate.bookSlug}/${candidate.slug}` === normalizedPageTarget
-      );
-    }) ?? null;
-
-  if (!entry) {
+  if (!entry || entry === null) {
     return null;
   }
 

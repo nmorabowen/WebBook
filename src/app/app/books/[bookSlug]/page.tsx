@@ -74,6 +74,7 @@ export default async function AppBookPage({
         extraActions={
           <CreateChapterPanel
             bookSlug={loaded.content.meta.slug}
+            parentChapterPath={[]}
             nextOrder={nextChapterOrder}
           />
         }

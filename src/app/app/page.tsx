@@ -2,7 +2,12 @@ import { BookOpen, FileText, LogOut } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardCreatePanel } from "@/components/editor/dashboard-create-panel";
 import { requireSession } from "@/lib/auth";
+import type { ContentTree } from "@/lib/content/schemas";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
+
+function countChapterNodes(chapters: ContentTree["books"][number]["chapters"]): number {
+  return chapters.reduce((total, chapter) => total + 1 + countChapterNodes(chapter.children), 0);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +73,9 @@ export default async function AppDashboardPage() {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="text-lg font-semibold">{book.meta.title}</h3>
-                      <span className="paper-badge">{book.chapters.length} chapters</span>
+                      <span className="paper-badge">
+                        {countChapterNodes(book.chapters)} chapters
+                      </span>
                     </div>
                     <p className="mt-2 text-sm text-[var(--paper-muted)]">
                       {book.meta.description ?? "No description yet."}

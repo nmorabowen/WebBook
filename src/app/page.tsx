@@ -7,6 +7,7 @@ import { LandingBackground } from "@/components/landing-background";
 import { PublicCredit } from "@/components/public-credit";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import { getGeneralSettings, getPublicContentTree } from "@/lib/content/service";
+import type { ContentTree } from "@/lib/content/schemas";
 import { buildPublicMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,13 @@ export default async function HomePage() {
     )
     .slice(0, 3);
   const displayFeaturedBooks = featuredBooks.length ? featuredBooks : tree.books.slice(0, 3);
+  const countChapterNodes = (
+    chapters: ContentTree["books"][number]["chapters"],
+  ): number =>
+    chapters.reduce(
+      (total, chapter) => total + 1 + countChapterNodes(chapter.children),
+      0,
+    );
 
   return (
     <WorkspaceStyleFrame generalSettings={generalSettings}>
@@ -125,7 +133,9 @@ export default async function HomePage() {
                       <div className="moleskine-stack-content">
                         <div className="flex items-center justify-between gap-3">
                           <span className="moleskine-kicker">Book</span>
-                          <span className="moleskine-chip">{book.chapters.length} chapters</span>
+                          <span className="moleskine-chip">
+                            {countChapterNodes(book.chapters)} chapters
+                          </span>
                         </div>
                         <h3 className="moleskine-stack-title">{book.meta.title}</h3>
                         <p className="moleskine-stack-summary">

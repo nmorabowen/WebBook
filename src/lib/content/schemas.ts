@@ -111,9 +111,11 @@ export type ChapterRecord = {
   kind: "chapter";
   filePath: string;
   meta: ChapterMeta;
+  path: string[];
   body: string;
   raw: string;
   route: string;
+  children: ChapterRecord[];
 };
 
 export type NoteRecord = {
@@ -132,15 +134,19 @@ export type ContentTree = {
   books: Array<{
     meta: BookMeta;
     route: string;
-    chapters: Array<{
-      meta: ChapterMeta;
-      route: string;
-    }>;
+    chapters: ChapterTreeNode[];
   }>;
   notes: Array<{
     meta: NoteMeta;
     route: string;
   }>;
+};
+
+export type ChapterTreeNode = {
+  meta: ChapterMeta;
+  route: string;
+  path: string[];
+  children: ChapterTreeNode[];
 };
 
 export type SearchDocument = {
@@ -184,6 +190,7 @@ export type ManifestEntry = {
   status: "draft" | "published";
   allowExecution?: boolean;
   bookSlug?: string;
+  chapterPath?: string[];
   summary?: string;
   headings?: ManifestHeading[];
 };
@@ -228,6 +235,7 @@ export const saveBookSchema = z.object({
 export const saveChapterSchema = z.object({
   title: z.string().min(1),
   slug: z.string().min(1),
+  parentChapterPath: z.array(z.string().min(1)).default([]),
   summary: z.string().optional(),
   body: z.string(),
   status: statusSchema.default("draft"),
@@ -243,6 +251,7 @@ export const restoreRevisionSchema = z.object({
 });
 
 export const reorderChaptersSchema = z.object({
+  parentChapterPath: z.array(z.string().min(1)).default([]),
   chapterSlugs: z.array(z.string().min(1)).min(1),
 });
 

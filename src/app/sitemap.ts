@@ -2,6 +2,12 @@ import type { MetadataRoute } from "next";
 import { getPublicContentTree } from "@/lib/content/service";
 import { absoluteUrl } from "@/lib/seo";
 
+function flattenChapters(
+  chapters: Awaited<ReturnType<typeof getPublicContentTree>>["books"][number]["chapters"],
+): Awaited<ReturnType<typeof getPublicContentTree>>["books"][number]["chapters"] {
+  return chapters.flatMap((chapter) => [chapter, ...flattenChapters(chapter.children)]);
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const tree = await getPublicContentTree();
 
@@ -19,8 +25,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: "weekly" as const,
         priority: 0.9,
       },
-      ...book.chapters.map((chapter) => ({
-        url: absoluteUrl(`/books/${book.meta.slug}/${chapter.meta.slug}`).toString(),
+      ...flattenChapters(book.chapters).map((chapter) => ({
+        url: absoluteUrl(`/books/${book.meta.slug}/${chapter.path.join("/")}`).toString(),
         lastModified: new Date(chapter.meta.updatedAt),
         changeFrequency: "weekly" as const,
         priority: 0.8,

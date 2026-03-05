@@ -96,6 +96,7 @@ type EditorShellProps = {
     fontPreset?: FontPreset;
     typography?: Partial<BookTypography>;
     order?: number;
+    parentChapterPath?: string[];
   };
   toc: TocItem[];
   backlinks: ManifestEntry[];
@@ -279,9 +280,11 @@ function detectMathAutocompleteContext(
 function manifestEntryAliases(entry: ManifestEntry) {
   const aliases = [entry.slug];
   if (entry.kind === "chapter" && entry.bookSlug) {
-    aliases.unshift(`${entry.bookSlug}/${entry.slug}`);
+    const canonicalPath = entry.chapterPath?.join("/") ?? entry.slug;
+    aliases.unshift(`${entry.bookSlug}/${canonicalPath}`);
+    aliases.push(`${entry.bookSlug}/${entry.slug}`);
   }
-  return aliases;
+  return Array.from(new Set(aliases));
 }
 
 function wikiEntryTypeLabel(entry: ManifestEntry) {
@@ -483,6 +486,10 @@ export function EditorShell({
     ),
   );
   const [order, setOrder] = useState(initialValues.order ?? 1);
+  const parentChapterPath = useMemo(
+    () => initialValues.parentChapterPath ?? [],
+    [initialValues.parentChapterPath],
+  );
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState<string>("Ready");
   const [imageUploadPending, setImageUploadPending] = useState(false);
@@ -853,6 +860,7 @@ export function EditorShell({
       fontPreset,
       typography: mode === "book" || mode === "note" ? typography : undefined,
       order: mode === "chapter" ? order : undefined,
+      parentChapterPath: mode === "chapter" ? parentChapterPath : undefined,
     }),
     [
       allowExecution,
@@ -865,6 +873,7 @@ export function EditorShell({
       summary,
       title,
       typography,
+      parentChapterPath,
       featured,
       coverColor,
     ],

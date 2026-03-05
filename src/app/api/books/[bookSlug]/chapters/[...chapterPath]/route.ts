@@ -4,32 +4,32 @@ import { deleteChapter, getChapter, updateChapter } from "@/lib/content/service"
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ bookSlug: string; chapterSlug: string }> },
+  { params }: { params: Promise<{ bookSlug: string; chapterPath: string[] }> },
 ) {
   await requireSession();
-  const { bookSlug, chapterSlug } = await params;
-  return NextResponse.json(await getChapter(bookSlug, chapterSlug));
+  const { bookSlug, chapterPath } = await params;
+  return NextResponse.json(await getChapter(bookSlug, chapterPath ?? []));
 }
 
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ bookSlug: string; chapterSlug: string }> },
+  { params }: { params: Promise<{ bookSlug: string; chapterPath: string[] }> },
 ) {
   await requireSession();
-  const { bookSlug, chapterSlug } = await params;
+  const { bookSlug, chapterPath } = await params;
   return NextResponse.json(
-    await updateChapter(bookSlug, chapterSlug, await request.json()),
+    await updateChapter(bookSlug, chapterPath ?? [], await request.json()),
   );
 }
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: Promise<{ bookSlug: string; chapterSlug: string }> },
+  { params }: { params: Promise<{ bookSlug: string; chapterPath: string[] }> },
 ) {
   await requireSession();
   try {
-    const { bookSlug, chapterSlug } = await params;
-    await deleteChapter(bookSlug, chapterSlug);
+    const { bookSlug, chapterPath } = await params;
+    await deleteChapter(bookSlug, chapterPath ?? []);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

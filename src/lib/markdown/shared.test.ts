@@ -98,4 +98,60 @@ $$
 
     expect(resolveWikiTargetFromManifest(manifest, "fem/cst#Missing")).toBeNull();
   });
+
+  it("prefers canonical nested chapter aliases and rejects ambiguous legacy aliases", () => {
+    const manifest: ManifestEntry[] = [
+      {
+        id: "chapter:fem/part-one/setup",
+        kind: "chapter",
+        slug: "setup",
+        chapterPath: ["part-one", "setup"],
+        title: "Setup A",
+        route: "/books/fem/part-one/setup",
+        status: "published",
+        bookSlug: "fem",
+      },
+      {
+        id: "chapter:fem/part-two/setup",
+        kind: "chapter",
+        slug: "setup",
+        chapterPath: ["part-two", "setup"],
+        title: "Setup B",
+        route: "/books/fem/part-two/setup",
+        status: "published",
+        bookSlug: "fem",
+      },
+      {
+        id: "chapter:fem/theory",
+        kind: "chapter",
+        slug: "theory",
+        chapterPath: ["theory"],
+        title: "Theory",
+        route: "/books/fem/theory",
+        status: "published",
+        bookSlug: "fem",
+      },
+    ];
+
+    expect(resolveWikiTargetFromManifest(manifest, "fem/part-one/setup")).toEqual({
+      route: "/books/fem/part-one/setup",
+      title: "Setup A",
+    });
+    expect(resolveWikiTargetFromManifest(manifest, "fem/part-two/setup")).toEqual({
+      route: "/books/fem/part-two/setup",
+      title: "Setup B",
+    });
+
+    expect(resolveWikiTargetFromManifest(manifest, "fem/setup")).toBeNull();
+    expect(resolveWikiTargetFromManifest(manifest, "setup")).toBeNull();
+
+    expect(resolveWikiTargetFromManifest(manifest, "fem/theory")).toEqual({
+      route: "/books/fem/theory",
+      title: "Theory",
+    });
+    expect(resolveWikiTargetFromManifest(manifest, "theory")).toEqual({
+      route: "/books/fem/theory",
+      title: "Theory",
+    });
+  });
 });

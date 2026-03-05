@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, BookOpenText, GripVertical, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  ArrowLeft,
+  BookOpenText,
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+  Search,
+} from "lucide-react";
 import { ContentSearchLauncher } from "@/components/content-search-launcher";
 import { PublicCredit } from "@/components/public-credit";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
@@ -14,6 +21,10 @@ import {
 } from "@/lib/general-settings-config";
 import { normalizeGeneralSettings } from "@/lib/general-settings";
 import { cn } from "@/lib/utils";
+
+function chapterPathKey(bookSlug: string, chapterPath: string[]) {
+  return `${bookSlug}/${chapterPath.join("/")}`;
+}
 
 type PublicShellProps = {
   tree: ContentTree;
@@ -54,6 +65,7 @@ export function PublicShell({
   const [leftWidthOverride, setLeftWidthOverride] = useState<number | null>(null);
   const [rightWidthOverride, setRightWidthOverride] = useState<number | null>(null);
   const [dragTarget, setDragTarget] = useState<"left" | "right" | null>(null);
+  const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const hasRightPanel = Boolean(rightPanel);
   const leftWidth = leftWidthOverride ?? normalizedSettings.publicLeftPanelWidth;
@@ -101,6 +113,27 @@ export function PublicShell({
       window.removeEventListener("pointerup", stopDragging);
     };
   }, [dragTarget]);
+
+  const effectiveCollapsedChapters = useMemo(() => {
+    if (!bookSlug || !currentPath?.startsWith(`/books/${bookSlug}/`)) {
+      return collapsedChapters;
+    }
+
+    const chapterPath = currentPath
+      .replace(`/books/${bookSlug}/`, "")
+      .split("/")
+      .filter(Boolean);
+    if (!chapterPath.length) {
+      return collapsedChapters;
+    }
+
+    const expanded = { ...collapsedChapters };
+    for (let index = 0; index < chapterPath.length - 1; index += 1) {
+      const ancestor = chapterPath.slice(0, index + 1);
+      expanded[chapterPathKey(bookSlug, ancestor)] = false;
+    }
+    return expanded;
+  }, [bookSlug, collapsedChapters, currentPath]);
 
   const layoutStyle = useMemo(
     () =>
@@ -171,21 +204,70 @@ export function PublicShell({
                   >
                     {activeBook.meta.title}
                   </Link>
-                  {activeBook.chapters.map((chapter) => (
-                    <Link
-                      key={`${activeBook.meta.slug}/${chapter.meta.slug}`}
-                      href={`/books/${activeBook.meta.slug}/${chapter.meta.slug}`}
-                      className={cn(
-                        "paper-nav-link ml-4",
-                        currentPath ===
-                          `/books/${activeBook.meta.slug}/${chapter.meta.slug}` &&
-                          "paper-nav-link-active",
-                      )}
-                    >
-                      <span>{chapter.meta.title}</span>
-                      <span className="text-xs">{chapter.meta.order}</span>
-                    </Link>
-                  ))}
+                  {(() => {
+                    const renderChapterTree = (
+                      chapters: typeof activeBook.chapters,
+                      depth = 0,
+                    ): ReactNode =>
+                      chapters.map((chapter) => {
+                        const chapterRoute = `/books/${activeBook.meta.slug}/${chapter.path.join("/")}`;
+                        const chapterKey = chapterPathKey(activeBook.meta.slug, chapter.path);
+                        const collapsed = effectiveCollapsedChapters[chapterKey] ?? false;
+
+                        return (
+                          <div key={chapterRoute} className="grid gap-1">
+                            <div
+                              className="flex items-center gap-2"
+                              style={{ paddingLeft: `${depth * 10}px` }}
+                            >
+                              {chapter.children.length ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex shrink-0 items-center justify-center rounded-full p-1 text-[var(--paper-muted)] transition hover:text-[var(--paper-ink)]"
+                                  onClick={() =>
+                                    setCollapsedChapters((current) => ({
+                                      ...current,
+                                      [chapterKey]: !current[chapterKey],
+                                    }))
+                                  }
+                                  aria-label={
+                                    collapsed
+                                      ? `Expand ${chapter.meta.title}`
+                                      : `Collapse ${chapter.meta.title}`
+                                  }
+                                  aria-expanded={!collapsed}
+                                >
+                                  {collapsed ? (
+                                    <ChevronRight className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="inline-flex h-6 w-6 shrink-0" />
+                              )}
+                              <Link
+                                href={chapterRoute}
+                                className={cn(
+                                  "paper-nav-link min-w-0 flex-1",
+                                  currentPath === chapterRoute && "paper-nav-link-active",
+                                )}
+                              >
+                                <span>{chapter.meta.title}</span>
+                                <span className="text-xs">{chapter.meta.order}</span>
+                              </Link>
+                            </div>
+                            {!collapsed && chapter.children.length ? (
+                              <div className="grid gap-1 border-l border-[rgba(73,57,38,0.12)] pl-1">
+                                {renderChapterTree(chapter.children, depth + 1)}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      });
+
+                    return renderChapterTree(activeBook.chapters);
+                  })()}
                 </div>
               ) : (
                 <div className="grid gap-2">

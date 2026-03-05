@@ -536,6 +536,341 @@ describe("content service", () => {
     expect(book.chapters[0]?.meta.fontPreset).toBe("oswald");
   });
 
+  it("creates nested chapters with sibling-scoped slug uniqueness and path lookups", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Nested Book",
+      slug: "nested-book",
+      description: "Nested chapter behavior",
+      body: "# Nested Book",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("nested-book", {
+      title: "Part One",
+      slug: "part-one",
+      summary: "",
+      body: "# Part One",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("nested-book", {
+      title: "Part Two",
+      slug: "part-two",
+      summary: "",
+      body: "# Part Two",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    await service.createChapter("nested-book", {
+      title: "Intro A",
+      slug: "intro",
+      parentChapterPath: ["part-one"],
+      summary: "",
+      body: "# Intro A",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("nested-book", {
+      title: "Intro B",
+      slug: "intro",
+      parentChapterPath: ["part-two"],
+      summary: "",
+      body: "# Intro B",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await expect(
+      service.createChapter("nested-book", {
+        title: "Duplicate Intro",
+        slug: "intro",
+        parentChapterPath: ["part-one"],
+        summary: "",
+        body: "# Duplicate Intro",
+        status: "draft",
+        allowExecution: true,
+        order: 2,
+      }),
+    ).rejects.toThrow("A chapter with that slug already exists in this book");
+
+    const uniqueChild = await service.createChapter("nested-book", {
+      title: "Unique Child",
+      slug: "unique-child",
+      parentChapterPath: ["part-one"],
+      summary: "",
+      body: "# Unique Child",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    const nestedChapter = await service.getChapter("nested-book", ["part-one", "intro"]);
+    expect(nestedChapter?.id).toBe("chapter:nested-book/part-one/intro");
+    expect(nestedChapter?.route).toBe("/books/nested-book/part-one/intro");
+
+    expect(await service.getChapter("nested-book", "intro")).toBeNull();
+    expect(await service.getChapter("nested-book", "unique-child")).toMatchObject({
+      id: uniqueChild?.id,
+      path: ["part-one", "unique-child"],
+    });
+
+    const book = await service.getBook("nested-book");
+    expect(book.chapters.map((chapter) => chapter.meta.slug)).toEqual(["part-one", "part-two"]);
+    expect(book.chapters[0]?.children.map((chapter) => chapter.meta.slug)).toEqual([
+      "intro",
+      "unique-child",
+    ]);
+    expect(book.chapters[1]?.children.map((chapter) => chapter.meta.slug)).toEqual(["intro"]);
+  });
+
+  it("updates nested chapter paths while preserving subtrees and enforcing sibling-only reorder", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Nested Reorder",
+      slug: "nested-reorder",
+      description: "Nested reorder behavior",
+      body: "# Nested Reorder",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("nested-reorder", {
+      title: "Part A",
+      slug: "part-a",
+      summary: "",
+      body: "# Part A",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("nested-reorder", {
+      title: "Part B",
+      slug: "part-b",
+      summary: "",
+      body: "# Part B",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    await service.createChapter("nested-reorder", {
+      title: "Child One",
+      slug: "child-one",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Child One",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("nested-reorder", {
+      title: "Child Two",
+      slug: "child-two",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Child Two",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    await service.createChapter("nested-reorder", {
+      title: "Leaf",
+      slug: "leaf",
+      parentChapterPath: ["part-a", "child-one"],
+      summary: "",
+      body: "# Leaf",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("nested-reorder", {
+      title: "Other Child",
+      slug: "other-child",
+      parentChapterPath: ["part-b"],
+      summary: "",
+      body: "# Other Child",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    const moved = await service.updateChapter("nested-reorder", ["part-a", "child-one"], {
+      title: "Child One Renamed",
+      slug: "child-one-renamed",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Child One Renamed",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+    expect(moved?.path).toEqual(["part-a", "child-one-renamed"]);
+
+    const renamedChapterPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "nested-reorder",
+      "chapters",
+      "001-part-a",
+      "chapters",
+      "002-child-one-renamed.md",
+    );
+    const oldChapterPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "nested-reorder",
+      "chapters",
+      "001-part-a",
+      "chapters",
+      "001-child-one.md",
+    );
+    const renamedLeafPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "nested-reorder",
+      "chapters",
+      "001-part-a",
+      "chapters",
+      "002-child-one-renamed",
+      "chapters",
+      "001-leaf.md",
+    );
+
+    await expect(fs.access(renamedChapterPath)).resolves.toBeUndefined();
+    await expect(fs.access(renamedLeafPath)).resolves.toBeUndefined();
+    await expect(fs.access(oldChapterPath)).rejects.toThrow();
+
+    await expect(
+      service.reorderBookChapters("nested-reorder", {
+        parentChapterPath: ["part-a"],
+        chapterSlugs: ["child-one-renamed", "child-two"],
+      }),
+    ).resolves.toBeTruthy();
+
+    await expect(
+      service.reorderBookChapters("nested-reorder", {
+        parentChapterPath: ["part-b"],
+        chapterSlugs: ["child-two"],
+      }),
+    ).rejects.toThrow("Unknown chapter slug: child-two");
+
+    await expect(
+      service.updateChapter("nested-reorder", ["part-a", "child-two"], {
+        title: "Child Two",
+        slug: "child-two",
+        parentChapterPath: ["part-b"],
+        summary: "",
+        body: "# Child Two",
+        status: "draft",
+        allowExecution: true,
+        order: 2,
+      }),
+    ).rejects.toThrow("Reparenting chapters is not supported");
+
+    const book = await service.getBook("nested-reorder");
+    const partA = book.chapters.find((chapter) => chapter.meta.slug === "part-a");
+    expect(partA?.children.map((chapter) => chapter.meta.slug)).toEqual([
+      "child-one-renamed",
+      "child-two",
+    ]);
+    expect(partA?.children.map((chapter) => chapter.meta.order)).toEqual([1, 2]);
+    expect(partA?.children[0]?.children[0]?.path).toEqual([
+      "part-a",
+      "child-one-renamed",
+      "leaf",
+    ]);
+  });
+
+  it("duplicates and deletes nested chapter subtrees while supporting nested content ids", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Nested Subtree",
+      slug: "nested-subtree",
+      description: "Nested subtree actions",
+      body: "# Nested Subtree",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("nested-subtree", {
+      title: "Root",
+      slug: "root",
+      summary: "",
+      body: "# Root",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("nested-subtree", {
+      title: "Topic",
+      slug: "topic",
+      parentChapterPath: ["root"],
+      summary: "",
+      body: "# Topic",
+      status: "published",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await service.createChapter("nested-subtree", {
+      title: "Detail",
+      slug: "detail",
+      parentChapterPath: ["root", "topic"],
+      summary: "",
+      body: "# Detail",
+      status: "published",
+      allowExecution: true,
+      order: 1,
+    });
+
+    const duplicate = await service.duplicateChapter("nested-subtree", ["root", "topic"]);
+    if (!duplicate) {
+      throw new Error("Expected duplicated chapter");
+    }
+    expect(duplicate.path).toEqual(["root", "topic-copy"]);
+    expect(duplicate.meta.status).toBe("draft");
+    expect(duplicate.children[0]?.meta.slug).toBe("detail");
+    expect(duplicate.children[0]?.meta.status).toBe("draft");
+
+    const canonicalId = `chapter:nested-subtree/${duplicate.path.join("/")}`;
+    const byCanonicalId = await service.getContentById(canonicalId);
+    expect(byCanonicalId?.id).toBe(canonicalId);
+
+    const byLegacyLeafId = await service.getContentById("chapter:nested-subtree/topic-copy");
+    expect(byLegacyLeafId?.id).toBe(canonicalId);
+
+    await service.publishContentById(canonicalId, true);
+    expect((await service.getContentById(canonicalId))?.meta.status).toBe("published");
+
+    await service.deleteChapter("nested-subtree", ["root", "topic"]);
+    const book = await service.getBook("nested-subtree");
+    expect(book.chapters[0]?.children.map((chapter) => chapter.meta.slug)).toEqual(["topic-copy"]);
+    expect(book.chapters[0]?.children.map((chapter) => chapter.meta.order)).toEqual([1]);
+  });
+
   it("surfaces the file path when reading a book hits invalid chapter front matter", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
@@ -1093,7 +1428,6 @@ describe("content service", () => {
       bookSlugs: ["beta-book", "webbook-handbook", "alpha-book"],
     });
 
-    const beforeReorder = await service.getContentTree();
     const reorderedNoteSlugs = ["beta-note", "webbook-notes", "alpha-note"];
 
     await service.reorderNotes({

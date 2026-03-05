@@ -21,7 +21,11 @@ import {
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 import { ContentSearchLauncher } from "@/components/content-search-launcher";
-import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
+import type {
+  ChapterTreeNode,
+  ContentTree,
+  GeneralSettings,
+} from "@/lib/content/schemas";
 import { cn } from "@/lib/utils";
 
 type AuthoringSidebarProps = {
@@ -33,7 +37,7 @@ type AuthoringSidebarProps = {
 
 type DropIndicator = {
   bookSlug: string;
-  chapterSlug: string;
+  chapterPath: string[];
   position: "before" | "after";
 };
 
@@ -50,6 +54,7 @@ type DownloadableBook = {
   chapters: Array<{
     meta: { slug: string; order: number };
     raw: string;
+    children: DownloadableBook["chapters"];
   }>;
 };
 
@@ -64,6 +69,24 @@ type DownloadableChapter = {
 };
 
 const COLLAPSED_BOOKS_STORAGE_KEY = "webbook.authoring-sidebar.collapsed-books";
+const COLLAPSED_CHAPTERS_STORAGE_KEY = "webbook.authoring-sidebar.collapsed-chapters";
+const CHAPTER_ACTION_SEPARATOR = "::";
+
+function chapterPathKey(bookSlug: string, chapterPath: string[]) {
+  return `${bookSlug}/${chapterPath.join("/")}`;
+}
+
+function encodeChapterActionSlug(bookSlug: string, chapterPath: string[]) {
+  return `${bookSlug}${CHAPTER_ACTION_SEPARATOR}${chapterPath.join("/")}`;
+}
+
+function decodeChapterActionSlug(encoded: string) {
+  const [bookSlug, chapterPathRaw = ""] = encoded.split(CHAPTER_ACTION_SEPARATOR);
+  return {
+    bookSlug,
+    chapterPath: chapterPathRaw.split("/").filter(Boolean),
+  };
+}
 
 function defaultCollapsedBooks(
   tree: ContentTree,
@@ -86,8 +109,45 @@ function defaultCollapsedBooks(
 function applyChapterOrder(
   tree: ContentTree,
   bookSlug: string,
+  parentChapterPath: string[],
   chapterSlugs: string[],
 ): ContentTree {
+  const reorderSiblings = (
+    chapters: ChapterTreeNode[],
+    parentPath: string[],
+  ): ChapterTreeNode[] => {
+    if (parentPath.length === 0) {
+      const chapterMap = new Map(
+        chapters.map((chapter) => [chapter.meta.slug, chapter] as const),
+      );
+      return chapterSlugs.map((slug, index) => {
+        const chapter = chapterMap.get(slug);
+        if (!chapter) {
+          throw new Error(`Missing chapter ${slug}`);
+        }
+        return {
+          ...chapter,
+          meta: {
+            ...chapter.meta,
+            order: index + 1,
+          },
+        };
+      });
+    }
+
+    const [head, ...tail] = parentPath;
+    return chapters.map((chapter) => {
+      if (chapter.meta.slug !== head) {
+        return chapter;
+      }
+
+      return {
+        ...chapter,
+        children: reorderSiblings(chapter.children, tail),
+      };
+    });
+  };
+
   return {
     ...tree,
     books: tree.books.map((book) => {
@@ -95,29 +155,29 @@ function applyChapterOrder(
         return book;
       }
 
-      const chapterMap = new Map(
-        book.chapters.map((chapter) => [chapter.meta.slug, chapter] as const),
-      );
-
       return {
         ...book,
-        chapters: chapterSlugs.map((slug, index) => {
-          const chapter = chapterMap.get(slug);
-          if (!chapter) {
-            throw new Error(`Missing chapter ${slug}`);
-          }
-
-          return {
-            ...chapter,
-            meta: {
-              ...chapter.meta,
-              order: index + 1,
-            },
-          };
-        }),
+        chapters: reorderSiblings(book.chapters, parentChapterPath),
       };
     }),
   };
+}
+
+function chaptersAtPath(
+  chapters: ChapterTreeNode[],
+  parentPath: string[],
+): ChapterTreeNode[] | null {
+  if (parentPath.length === 0) {
+    return chapters;
+  }
+
+  const [head, ...tail] = parentPath;
+  const parent = chapters.find((chapter) => chapter.meta.slug === head);
+  if (!parent) {
+    return null;
+  }
+
+  return chaptersAtPath(parent.children, tail);
 }
 
 function getReorderedSlugs(
@@ -333,9 +393,11 @@ export function AuthoringSidebar({
   const [collapsedBooks, setCollapsedBooks] = useState<Record<string, boolean>>(() =>
     defaultCollapsedBooks(tree, currentPath, generalSettings),
   );
+  const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
   const [draggedChapter, setDraggedChapter] = useState<{
     bookSlug: string;
-    chapterSlug: string;
+    chapterPath: string[];
+    parentPath: string[];
   } | null>(null);
   const [draggedBookSlug, setDraggedBookSlug] = useState<string | null>(null);
   const [draggedNoteSlug, setDraggedNoteSlug] = useState<string | null>(null);
@@ -378,6 +440,28 @@ export function AuthoringSidebar({
   }, [collapsedBooks]);
 
   useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLLAPSED_CHAPTERS_STORAGE_KEY);
+      if (!raw) {
+        setCollapsedChapters({});
+        return;
+      }
+      setCollapsedChapters(JSON.parse(raw) as Record<string, boolean>);
+    } catch {
+      setCollapsedChapters({});
+    }
+  }, [tree]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        COLLAPSED_CHAPTERS_STORAGE_KEY,
+        JSON.stringify(collapsedChapters),
+      );
+    } catch {}
+  }, [collapsedChapters]);
+
+  useEffect(() => {
     if (!currentPath?.startsWith("/app/books/")) {
       return;
     }
@@ -397,6 +481,20 @@ export function AuthoringSidebar({
         ...current,
         [activeBookSlug]: false,
       };
+    });
+
+    const chapterPath = pathSegments.slice(5).filter(Boolean);
+    if (!chapterPath.length) {
+      return;
+    }
+
+    setCollapsedChapters((current) => {
+      const expanded = { ...current };
+      for (let index = 0; index < chapterPath.length - 1; index += 1) {
+        const ancestorPath = chapterPath.slice(0, index + 1);
+        expanded[chapterPathKey(activeBookSlug, ancestorPath)] = false;
+      }
+      return expanded;
     });
   }, [currentPath]);
 
@@ -418,8 +516,8 @@ export function AuthoringSidebar({
 
     try {
       if (kind === "chapter") {
-        const [bookSlug, chapterSlug] = slug.split("/");
-        const response = await fetch(`/api/books/${bookSlug}/chapters/${chapterSlug}`);
+        const { bookSlug, chapterPath } = decodeChapterActionSlug(slug);
+        const response = await fetch(`/api/books/${bookSlug}/chapters/${chapterPath.join("/")}`);
         if (!response.ok) {
           throw new Error("Unable to load chapter for download");
         }
@@ -456,13 +554,22 @@ export function AuthoringSidebar({
       const root = zip.folder(payload.meta.slug);
       root?.file("book.md", payload.raw);
       const chaptersFolder = root?.folder("chapters");
-
-      for (const chapter of payload.chapters) {
-        chaptersFolder?.file(
-          `${String(chapter.meta.order).padStart(3, "0")}-${chapter.meta.slug}.md`,
-          chapter.raw,
-        );
-      }
+      const appendChapters = (
+        chapters: DownloadableBook["chapters"],
+        folder: JSZip | null | undefined,
+      ) => {
+        if (!folder) {
+          return;
+        }
+        for (const chapter of chapters) {
+          const stem = `${String(chapter.meta.order).padStart(3, "0")}-${chapter.meta.slug}`;
+          folder.file(`${stem}.md`, chapter.raw);
+          if (chapter.children.length > 0) {
+            appendChapters(chapter.children, folder.folder(stem)?.folder("chapters"));
+          }
+        }
+      };
+      appendChapters(payload.chapters, chaptersFolder);
 
       const content = await zip.generateAsync({ type: "blob" });
       triggerDownload(`${payload.meta.slug}.zip`, content);
@@ -504,7 +611,10 @@ export function AuthoringSidebar({
             ? `/api/books/${slug}${action === "duplicate" ? "/duplicate" : ""}`
             : kind === "note"
               ? `/api/notes/${slug}${action === "duplicate" ? "/duplicate" : ""}`
-              : `/api/books/${slug.split("/")[0]}/chapters/${slug.split("/")[1]}${action === "duplicate" ? "/duplicate" : ""}`;
+              : (() => {
+                  const { bookSlug, chapterPath } = decodeChapterActionSlug(slug);
+                  return `/api/books/${bookSlug}/chapters/${chapterPath.join("/")}${action === "duplicate" ? "/duplicate" : ""}`;
+                })();
         const response = await fetch(endpoint, {
           method: action === "duplicate" ? "POST" : "DELETE",
         });
@@ -523,14 +633,19 @@ export function AuthoringSidebar({
         if (action === "duplicate") {
           const payload = (await response.json()) as {
             meta?: { slug: string; bookSlug?: string };
+            path?: string[];
           };
           if (payload.meta?.slug) {
+            const duplicatedPath =
+              payload.path && payload.path.length
+                ? payload.path.join("/")
+                : payload.meta.slug;
             router.push(
               kind === "book"
                 ? `/app/books/${payload.meta.slug}`
                 : kind === "note"
                   ? `/app/notes/${payload.meta.slug}`
-                  : `/app/books/${payload.meta.bookSlug}/chapters/${payload.meta.slug}`,
+                  : `/app/books/${payload.meta.bookSlug}/chapters/${duplicatedPath}`,
             );
             navigated = true;
           }
@@ -540,28 +655,6 @@ export function AuthoringSidebar({
             books:
               kind === "book"
                 ? previousTree.books.filter((book) => book.meta.slug !== slug)
-                : kind === "chapter"
-                  ? previousTree.books.map((book) => {
-                      const [bookSlug, chapterSlug] = slug.split("/");
-                      if (book.meta.slug !== bookSlug) {
-                        return book;
-                      }
-
-                      const nextChapters = book.chapters
-                        .filter((chapter) => chapter.meta.slug !== chapterSlug)
-                        .map((chapter, index) => ({
-                          ...chapter,
-                          meta: {
-                            ...chapter.meta,
-                            order: index + 1,
-                          },
-                        }));
-
-                      return {
-                        ...book,
-                        chapters: nextChapters,
-                      };
-                    })
                 : previousTree.books,
             notes:
               kind === "note"
@@ -569,15 +662,21 @@ export function AuthoringSidebar({
                 : previousTree.notes,
           }));
 
+          const chapterContext =
+            kind === "chapter" ? decodeChapterActionSlug(slug) : null;
+          const chapterRoute = chapterContext
+            ? `/app/books/${chapterContext.bookSlug}/chapters/${chapterContext.chapterPath.join("/")}`
+            : null;
+
           if (
             (kind === "book" && currentPath?.startsWith(`/app/books/${slug}`)) ||
             (kind === "note" && currentPath === `/app/notes/${slug}`) ||
-            (kind === "chapter" &&
-              currentPath ===
-                `/app/books/${slug.split("/")[0]}/chapters/${slug.split("/")[1]}`)
+            (kind === "chapter" && chapterRoute && currentPath === chapterRoute)
           ) {
             router.push(
-              kind === "chapter" ? `/app/books/${slug.split("/")[0]}` : "/app",
+              kind === "chapter" && chapterContext
+                ? `/app/books/${chapterContext.bookSlug}`
+                : "/app",
             );
             navigated = true;
           }
@@ -600,10 +699,15 @@ export function AuthoringSidebar({
 
   const handleDrop = (
     bookSlug: string,
+    parentChapterPath: string[],
     targetSlug: string,
     position: "before" | "after",
   ) => {
-    if (!draggedChapter || draggedChapter.bookSlug !== bookSlug) {
+    if (
+      !draggedChapter ||
+      draggedChapter.bookSlug !== bookSlug ||
+      draggedChapter.parentPath.join("/") !== parentChapterPath.join("/")
+    ) {
       setDropIndicator(null);
       return;
     }
@@ -614,9 +718,15 @@ export function AuthoringSidebar({
       return;
     }
 
+    const siblings = chaptersAtPath(book.chapters, parentChapterPath);
+    if (!siblings) {
+      setDropIndicator(null);
+      return;
+    }
+
     const nextChapterSlugs = getReorderedSlugs(
-      book.chapters,
-      draggedChapter.chapterSlug,
+      siblings,
+      draggedChapter.chapterPath[draggedChapter.chapterPath.length - 1] ?? "",
       targetSlug,
       position,
     );
@@ -629,7 +739,7 @@ export function AuthoringSidebar({
     }
 
     const previousTree = localTree;
-    const nextTree = applyChapterOrder(localTree, bookSlug, nextChapterSlugs);
+    const nextTree = applyChapterOrder(localTree, bookSlug, parentChapterPath, nextChapterSlugs);
     setLocalTree(nextTree);
     setPendingBookSlug(bookSlug);
     setActionError(null);
@@ -641,7 +751,10 @@ export function AuthoringSidebar({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ chapterSlugs: nextChapterSlugs }),
+          body: JSON.stringify({
+            parentChapterPath,
+            chapterSlugs: nextChapterSlugs,
+          }),
         });
 
         if (!response.ok) {
@@ -768,6 +881,17 @@ export function AuthoringSidebar({
     }));
   };
 
+  const toggleChapterCollapsed = (bookSlug: string, chapterPath: string[]) => {
+    const key = chapterPathKey(bookSlug, chapterPath);
+    setCollapsedChapters((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
+
+  const isChapterCollapsed = (bookSlug: string, chapterPath: string[]) =>
+    collapsedChapters[chapterPathKey(bookSlug, chapterPath)] ?? false;
+
   const allBooksCollapsed =
     localTree.books.length > 0 &&
     localTree.books.every((book) => collapsedBooks[book.meta.slug]);
@@ -780,6 +904,135 @@ export function AuthoringSidebar({
       ) as Record<string, boolean>;
     });
   };
+
+  const renderChapterTree = (bookSlug: string, chapters: ChapterTreeNode[], depth = 0) =>
+    chapters.map((chapter) => {
+      const chapterPath = `/app/books/${bookSlug}/chapters/${chapter.path.join("/")}`;
+      const chapterActionSlug = encodeChapterActionSlug(bookSlug, chapter.path);
+      const indicator =
+        dropIndicator?.bookSlug === bookSlug &&
+        dropIndicator.chapterPath.join("/") === chapter.path.join("/")
+          ? dropIndicator.position
+          : null;
+      const collapsed = isChapterCollapsed(bookSlug, chapter.path);
+
+      return (
+        <div key={chapterPath} className="grid gap-1">
+          <div
+            className="flex items-center gap-2"
+            style={{ paddingLeft: `${Math.max(depth, 0) * 10}px` }}
+          >
+            {chapter.children.length ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center justify-center rounded-full p-1 text-[var(--paper-muted)] transition hover:text-[var(--paper-ink)]"
+                onClick={() => toggleChapterCollapsed(bookSlug, chapter.path)}
+                aria-label={
+                  collapsed ? `Expand ${chapter.meta.title}` : `Collapse ${chapter.meta.title}`
+                }
+                aria-expanded={!collapsed}
+              >
+                {collapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              <span className="inline-flex h-6 w-6 shrink-0" />
+            )}
+            <div className="min-w-0 flex-1">
+              <NavLink
+                href={chapterPath}
+                label={`Chapter ${chapter.meta.order}: ${chapter.meta.title}`}
+                active={currentPath === chapterPath}
+                chapter
+                draggableItem
+                dragging={
+                  draggedChapter?.bookSlug === bookSlug &&
+                  draggedChapter.chapterPath.join("/") === chapter.path.join("/")
+                }
+                dropIndicator={indicator}
+                dragHandle={
+                  <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[var(--paper-muted)]" />
+                }
+                trailingAction={
+                  <ActionMenu
+                    open={openMenuId === `chapter:${chapterActionSlug}`}
+                    busy={pendingActionId?.startsWith(`chapter:${chapterActionSlug}:`) ?? false}
+                    onToggle={() =>
+                      setOpenMenuId((current) =>
+                        current === `chapter:${chapterActionSlug}`
+                          ? null
+                          : `chapter:${chapterActionSlug}`,
+                      )
+                    }
+                    onDuplicate={() =>
+                      runItemAction("chapter", chapterActionSlug, "duplicate")
+                    }
+                    onDelete={() =>
+                      runItemAction("chapter", chapterActionSlug, "delete")
+                    }
+                    onDownload={() =>
+                      runItemAction("chapter", chapterActionSlug, "download")
+                    }
+                  />
+                }
+                onDragStart={(event) => {
+                  setDraggedChapter({
+                    bookSlug,
+                    chapterPath: chapter.path,
+                    parentPath: chapter.path.slice(0, -1),
+                  });
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", chapter.path.join("/"));
+                }}
+                onDragEnd={() => {
+                  setDraggedChapter(null);
+                  setDropIndicator(null);
+                }}
+                onDragOver={(event) => {
+                  if (
+                    !draggedChapter ||
+                    draggedChapter.bookSlug !== bookSlug ||
+                    draggedChapter.parentPath.join("/") !==
+                      chapter.path.slice(0, -1).join("/") ||
+                    draggedChapter.chapterPath.join("/") === chapter.path.join("/")
+                  ) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  const position = getVerticalDropPosition(event);
+
+                  setDropIndicator({
+                    bookSlug,
+                    chapterPath: chapter.path,
+                    position,
+                  });
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const position = getVerticalDropPosition(event);
+                  handleDrop(
+                    bookSlug,
+                    chapter.path.slice(0, -1),
+                    chapter.meta.slug,
+                    position,
+                  );
+                }}
+              />
+            </div>
+          </div>
+          {!collapsed && chapter.children.length ? (
+            <div className="grid gap-1 border-l border-[rgba(73,57,38,0.12)] pl-1">
+              {renderChapterTree(bookSlug, chapter.children, depth + 1)}
+            </div>
+          ) : null}
+        </div>
+      );
+    });
 
   return (
     <>
@@ -962,103 +1215,7 @@ export function AuthoringSidebar({
 
               {!collapsedBooks[book.meta.slug] ? (
                 <div className="grid gap-1 border-l border-[rgba(73,57,38,0.12)] pl-1">
-                  {book.chapters.map((chapter) => {
-                    const chapterPath = `/app/books/${book.meta.slug}/chapters/${chapter.meta.slug}`;
-                    const chapterActionSlug = `${book.meta.slug}/${chapter.meta.slug}`;
-                    const indicator =
-                      dropIndicator?.bookSlug === book.meta.slug &&
-                      dropIndicator.chapterSlug === chapter.meta.slug
-                        ? dropIndicator.position
-                        : null;
-
-                    return (
-                      <NavLink
-                        key={`${book.meta.slug}/${chapter.meta.slug}`}
-                        href={chapterPath}
-                        label={`Chapter ${chapter.meta.order}: ${chapter.meta.title}`}
-                        active={currentPath === chapterPath}
-                        chapter
-                        draggableItem
-                        dragging={
-                          draggedChapter?.bookSlug === book.meta.slug &&
-                          draggedChapter.chapterSlug === chapter.meta.slug
-                        }
-                        dropIndicator={indicator}
-                        dragHandle={
-                          <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[var(--paper-muted)]" />
-                        }
-                        trailingAction={
-                          <ActionMenu
-                            open={openMenuId === `chapter:${chapterActionSlug}`}
-                            busy={
-                              pendingActionId?.startsWith(
-                                `chapter:${chapterActionSlug}:`,
-                              ) ?? false
-                            }
-                            onToggle={() =>
-                              setOpenMenuId((current) =>
-                                current === `chapter:${chapterActionSlug}`
-                                  ? null
-                                  : `chapter:${chapterActionSlug}`,
-                              )
-                            }
-                            onDuplicate={() =>
-                              runItemAction("chapter", chapterActionSlug, "duplicate")
-                            }
-                            onDelete={() =>
-                              runItemAction("chapter", chapterActionSlug, "delete")
-                            }
-                            onDownload={() =>
-                              runItemAction("chapter", chapterActionSlug, "download")
-                            }
-                          />
-                        }
-                        onDragStart={(event) => {
-                          setDraggedChapter({
-                            bookSlug: book.meta.slug,
-                            chapterSlug: chapter.meta.slug,
-                          });
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData(
-                            "text/plain",
-                            `${book.meta.slug}:${chapter.meta.slug}`,
-                          );
-                        }}
-                        onDragEnd={() => {
-                          setDraggedChapter(null);
-                          setDropIndicator(null);
-                        }}
-                        onDragOver={(event) => {
-                          if (
-                            !draggedChapter ||
-                            draggedChapter.bookSlug !== book.meta.slug ||
-                            draggedChapter.chapterSlug === chapter.meta.slug
-                          ) {
-                            return;
-                          }
-
-                          event.preventDefault();
-                          event.dataTransfer.dropEffect = "move";
-                          const position = getVerticalDropPosition(event);
-
-                          setDropIndicator({
-                            bookSlug: book.meta.slug,
-                            chapterSlug: chapter.meta.slug,
-                            position,
-                          });
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          const position = getVerticalDropPosition(event);
-                          handleDrop(
-                            book.meta.slug,
-                            chapter.meta.slug,
-                            position,
-                          );
-                        }}
-                      />
-                    );
-                  })}
+                  {renderChapterTree(book.meta.slug, book.chapters)}
                 </div>
               ) : null}
             </div>

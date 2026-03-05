@@ -8,6 +8,7 @@ import {
   type BookMeta,
   type BookRecord,
   type ChapterMeta,
+  type ChapterRecord,
   type ContentRecord,
   type ContentTree,
   type GeneralSettings,
@@ -77,6 +78,9 @@ type OrderedChapterFile = {
   order: number;
   slug: string;
 };
+type ChapterPathResolution =
+  | { ok: true; chapterPath: string[] }
+  | { ok: false; reason: "not-found" | "ambiguous" };
 type OrderedBookFile = {
   filePath: string;
   order?: number;
@@ -98,6 +102,34 @@ function chapterFilePath(bookSlug: string, chapterSlug: string, order: number) {
     "chapters",
     `${String(order).padStart(3, "0")}-${chapterSlug}.md`,
   );
+}
+
+function chapterStem(order: number, slug: string) {
+  return `${String(order).padStart(3, "0")}-${slug}`;
+}
+
+function chapterNodeDirectory(chaptersPath: string, order: number, slug: string) {
+  return path.join(chaptersPath, chapterStem(order, slug));
+}
+
+function chapterChildrenDirectory(chaptersPath: string, order: number, slug: string) {
+  return path.join(chapterNodeDirectory(chaptersPath, order, slug), "chapters");
+}
+
+function chapterChildrenDirectoryByFile(chapterFilePathValue: string) {
+  return path.join(
+    path.dirname(chapterFilePathValue),
+    path.basename(chapterFilePathValue, ".md"),
+    "chapters",
+  );
+}
+
+function chapterRoute(bookSlug: string, chapterPath: string[]) {
+  return `/books/${bookSlug}/${chapterPath.join("/")}`;
+}
+
+function chapterWorkspaceRoute(bookSlug: string, chapterPath: string[]) {
+  return `/app/books/${bookSlug}/chapters/${chapterPath.join("/")}`;
 }
 
 function parseOrderedMarkdownFileName(fileName: string) {
@@ -318,8 +350,28 @@ function bookId(slug: string) {
   return `book:${slug}`;
 }
 
-function chapterId(bookSlug: string, slug: string) {
-  return `chapter:${bookSlug}/${slug}`;
+function chapterIdFromPath(bookSlug: string, chapterPath: string[]) {
+  return `chapter:${bookSlug}/${chapterPath.join("/")}`;
+}
+
+function chapterPathFromLocation(location: string) {
+  const [bookSlug, ...chapterPath] = location.split("/").filter(Boolean);
+  return {
+    bookSlug: bookSlug ?? "",
+    chapterPath,
+  };
+}
+
+function normalizeChapterPathInput(input: string | string[]) {
+  const chapterPath = Array.isArray(input)
+    ? input.filter(Boolean)
+    : input.split("/").filter(Boolean);
+
+  for (const segment of chapterPath) {
+    ensureSafeSlugOrThrow(segment);
+  }
+
+  return chapterPath;
 }
 
 function nextCopyTitle(title: string) {
@@ -428,8 +480,7 @@ function rewriteFrontMatterScalar(raw: string, key: string, value: string | numb
   return `${raw.slice(0, frontMatterMatch.index)}---\n${nextFrontMatter}\n---${frontMatterMatch[2]}${raw.slice(frontMatterMatch.index + frontMatterMatch[0].length)}`;
 }
 
-async function listOrderedChapterFiles(bookSlug: string) {
-  const chaptersPath = path.join(bookDirectory(bookSlug), "chapters");
+async function listOrderedChapterFilesAtPath(chaptersPath: string) {
   return (await readDirectoryEntries(chaptersPath))
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
     .map((entry) => {
@@ -449,6 +500,112 @@ async function listOrderedChapterFiles(bookSlug: string) {
       ): entry is OrderedChapterFile => entry !== null,
     )
     .sort((left, right) => left.order - right.order || left.slug.localeCompare(right.slug));
+}
+
+type ChapterEntryLocation = {
+  chapterPath: string[];
+  chaptersPath: string;
+  entry: OrderedChapterFile;
+};
+
+async function listChapterEntryLocations(
+  bookSlug: string,
+  chaptersPath = path.join(bookDirectory(bookSlug), "chapters"),
+  parentPath: string[] = [],
+): Promise<ChapterEntryLocation[]> {
+  const entries = await listOrderedChapterFilesAtPath(chaptersPath);
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const chapterPath = [...parentPath, entry.slug];
+      const childrenPath = chapterChildrenDirectory(chaptersPath, entry.order, entry.slug);
+      return [
+        { chapterPath, chaptersPath, entry } satisfies ChapterEntryLocation,
+        ...(await listChapterEntryLocations(bookSlug, childrenPath, chapterPath)),
+      ];
+    }),
+  );
+  return nested.flat();
+}
+
+async function resolveChapterEntryLocation(
+  bookSlug: string,
+  chapterPathInput: string | string[],
+): Promise<
+  | { ok: true; location: ChapterEntryLocation }
+  | { ok: false; reason: "not-found" | "ambiguous" }
+> {
+  const requestedPath = normalizeChapterPathInput(chapterPathInput);
+  if (!requestedPath.length) {
+    return { ok: false, reason: "not-found" };
+  }
+
+  const locations = await listChapterEntryLocations(bookSlug);
+  const exact = locations.find(
+    (location) =>
+      location.chapterPath.length === requestedPath.length &&
+      location.chapterPath.every((segment, index) => segment === requestedPath[index]),
+  );
+  if (exact) {
+    return { ok: true, location: exact };
+  }
+
+  if (requestedPath.length === 1) {
+    const leafMatches = locations.filter(
+      (location) => location.chapterPath[location.chapterPath.length - 1] === requestedPath[0],
+    );
+    if (leafMatches.length === 1) {
+      return { ok: true, location: leafMatches[0] };
+    }
+    if (leafMatches.length > 1) {
+      return { ok: false, reason: "ambiguous" };
+    }
+  }
+
+  return { ok: false, reason: "not-found" };
+}
+
+async function resolveParentChaptersPath(bookSlug: string, parentPath: string[]) {
+  if (!parentPath.length) {
+    return path.join(bookDirectory(bookSlug), "chapters");
+  }
+
+  const parentResolution = await resolveChapterEntryLocation(bookSlug, parentPath);
+  if (!parentResolution.ok) {
+    if (parentResolution.reason === "ambiguous") {
+      throw new Error("Parent chapter path is ambiguous");
+    }
+    throw new Error("Parent chapter not found");
+  }
+
+  const { chaptersPath, entry } = parentResolution.location;
+  return chapterChildrenDirectory(chaptersPath, entry.order, entry.slug);
+}
+
+async function copyChapterSubtree(
+  sourceChaptersPath: string,
+  sourceEntry: OrderedChapterFile,
+  destinationChaptersPath: string,
+  destinationOrder: number,
+  destinationSlug: string,
+) {
+  const sourceNodePath = chapterNodeDirectory(
+    sourceChaptersPath,
+    sourceEntry.order,
+    sourceEntry.slug,
+  );
+  const destinationNodePath = chapterNodeDirectory(
+    destinationChaptersPath,
+    destinationOrder,
+    destinationSlug,
+  );
+
+  try {
+    await fs.access(sourceNodePath);
+  } catch {
+    return;
+  }
+
+  await fs.cp(sourceNodePath, destinationNodePath, { recursive: true });
 }
 
 async function listOrderedBookFiles() {
@@ -518,13 +675,53 @@ function extractWikiTargets(markdown: string) {
   );
 }
 
-function buildAliases(entry: ManifestEntry) {
-  const aliases = new Set<string>();
-  aliases.add(entry.slug);
-  if (entry.kind === "chapter" && entry.bookSlug) {
-    aliases.add(`${entry.bookSlug}/${entry.slug}`);
+function buildManifestAliasLookup(manifest: ManifestEntry[]) {
+  const aliasLookup = new Map<string, ManifestEntry | null>();
+  const chapterEntries = manifest.filter((entry) => entry.kind === "chapter");
+
+  const addAlias = (alias: string, entry: ManifestEntry) => {
+    const existing = aliasLookup.get(alias);
+    if (!existing) {
+      aliasLookup.set(alias, entry);
+      return;
+    }
+
+    if (existing.id !== entry.id) {
+      aliasLookup.set(alias, null);
+    }
+  };
+
+  for (const entry of manifest) {
+    if (entry.kind !== "chapter") {
+      addAlias(entry.slug, entry);
+    }
   }
-  return aliases;
+
+  const leafAliasCount = new Map<string, number>();
+  const bookLeafAliasCount = new Map<string, number>();
+
+  for (const entry of chapterEntries) {
+    const leafAlias = entry.slug;
+    const bookLeafAlias = `${entry.bookSlug}/${entry.slug}`;
+    leafAliasCount.set(leafAlias, (leafAliasCount.get(leafAlias) ?? 0) + 1);
+    bookLeafAliasCount.set(bookLeafAlias, (bookLeafAliasCount.get(bookLeafAlias) ?? 0) + 1);
+  }
+
+  for (const entry of chapterEntries) {
+    const canonicalAlias = `${entry.bookSlug}/${entry.chapterPath?.join("/") ?? entry.slug}`;
+    addAlias(canonicalAlias, entry);
+
+    const bookLeafAlias = `${entry.bookSlug}/${entry.slug}`;
+    if ((bookLeafAliasCount.get(bookLeafAlias) ?? 0) === 1) {
+      addAlias(bookLeafAlias, entry);
+    }
+
+    if ((leafAliasCount.get(entry.slug) ?? 0) === 1) {
+      addAlias(entry.slug, entry);
+    }
+  }
+
+  return aliasLookup;
 }
 
 async function parseBookFile(filePath: string) {
@@ -533,16 +730,7 @@ async function parseBookFile(filePath: string) {
     const parsed = matter(raw);
     const meta = bookMetaSchema.parse(parsed.data);
     const chaptersDir = path.join(path.dirname(filePath), "chapters");
-    const chapterEntries = await readDirectoryEntries(chaptersDir);
-    const chapters = (
-      await Promise.all(
-        chapterEntries
-          .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-          .map(async (entry) =>
-            parseChapterFile(path.join(chaptersDir, entry.name), meta.slug),
-          ),
-      )
-    ).sort((left, right) => left.meta.order - right.meta.order);
+    const chapters = await parseChapterDirectory(chaptersDir, meta.slug, []);
 
     return {
       id: bookId(meta.slug),
@@ -559,22 +747,55 @@ async function parseBookFile(filePath: string) {
   }
 }
 
-async function parseChapterFile(filePath: string, bookSlug: string) {
+async function parseChapterDirectory(
+  chaptersPath: string,
+  bookSlug: string,
+  parentPath: string[],
+): Promise<ChapterRecord[]> {
+  const entries = await listOrderedChapterFilesAtPath(chaptersPath);
+  const chapters: ChapterRecord[] = await Promise.all(
+    entries.map((entry) =>
+      parseChapterFile(entry.filePath, bookSlug, [...parentPath, entry.slug]),
+    ),
+  );
+  return chapters.sort(
+    (left: ChapterRecord, right: ChapterRecord) => left.meta.order - right.meta.order,
+  );
+}
+
+async function parseChapterFile(
+  filePath: string,
+  bookSlug: string,
+  chapterPath: string[],
+): Promise<ChapterRecord> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = matter(raw);
+    const slugFromPath = chapterPath.at(-1);
+    if (!slugFromPath) {
+      throw new Error("Missing chapter slug");
+    }
     const meta = chapterMetaSchema.parse({
       ...parsed.data,
       bookSlug,
+      slug: slugFromPath,
     });
+    const children = await parseChapterDirectory(
+      chapterChildrenDirectoryByFile(filePath),
+      bookSlug,
+      chapterPath,
+    );
+
     return {
-      id: chapterId(meta.bookSlug, meta.slug),
+      id: chapterIdFromPath(meta.bookSlug, chapterPath),
       kind: "chapter" as const,
       filePath,
       meta,
+      path: chapterPath,
       body: parsed.content.trim(),
       raw,
-      route: `/books/${meta.bookSlug}/${meta.slug}`,
+      route: chapterRoute(meta.bookSlug, chapterPath),
+      children,
     };
   } catch (error) {
     throw wrapContentFileError(filePath, error);
@@ -644,6 +865,61 @@ async function listNoteRecords() {
   );
 }
 
+function flattenChapters(chapters: BookRecord["chapters"]): BookRecord["chapters"] {
+  return chapters.flatMap((chapter) => [chapter, ...flattenChapters(chapter.children)]);
+}
+
+function findChapterByPath(
+  chapters: BookRecord["chapters"],
+  chapterPath: string[],
+): BookRecord["chapters"][number] | null {
+  if (!chapterPath.length) {
+    return null;
+  }
+
+  const [segment, ...rest] = chapterPath;
+  const chapter = chapters.find((entry) => entry.meta.slug === segment) ?? null;
+  if (!chapter) {
+    return null;
+  }
+
+  if (!rest.length) {
+    return chapter;
+  }
+
+  return findChapterByPath(chapter.children, rest);
+}
+
+function findChapterByLeafSlug(
+  chapters: BookRecord["chapters"],
+  leafSlug: string,
+): ChapterPathResolution {
+  const matches = flattenChapters(chapters).filter((chapter) => chapter.meta.slug === leafSlug);
+  if (matches.length === 0) {
+    return { ok: false, reason: "not-found" };
+  }
+  if (matches.length > 1) {
+    return { ok: false, reason: "ambiguous" };
+  }
+  return { ok: true, chapterPath: matches[0].path };
+}
+
+function resolveChapterPath(
+  chapters: BookRecord["chapters"],
+  requestedPath: string[],
+): ChapterPathResolution {
+  const exact = findChapterByPath(chapters, requestedPath);
+  if (exact) {
+    return { ok: true, chapterPath: exact.path };
+  }
+
+  if (requestedPath.length === 1) {
+    return findChapterByLeafSlug(chapters, requestedPath[0]);
+  }
+
+  return { ok: false, reason: "not-found" };
+}
+
 function recordToMediaReference(record: ContentRecord): MediaReference {
   return {
     id: record.id,
@@ -658,7 +934,7 @@ async function listAllContentRecords() {
   const notes = await listNoteRecords();
   return [
     ...books,
-    ...books.flatMap((book) => book.chapters),
+    ...books.flatMap((book) => flattenChapters(book.chapters)),
     ...notes,
   ] satisfies ContentRecord[];
 }
@@ -694,7 +970,20 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
   const manifest: ManifestEntry[] = [];
   const documents: SearchDocument[] = [];
   const backlinks: Record<string, ManifestEntry[]> = {};
-  const aliasLookup = new Map<string, ManifestEntry>();
+  const aliasLookup = new Map<string, ManifestEntry | null>();
+  const chapterEntries: ManifestEntry[] = [];
+
+  const addAlias = (alias: string, entry: ManifestEntry) => {
+    const existing = aliasLookup.get(alias);
+    if (!existing) {
+      aliasLookup.set(alias, entry);
+      return;
+    }
+
+    if (existing.id !== entry.id) {
+      aliasLookup.set(alias, null);
+    }
+  };
 
   for (const book of content.books) {
     const bookEntry: ManifestEntry = {
@@ -720,13 +1009,14 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
       publicRoute: book.route,
       workspaceRoute: `/app/books/${book.meta.slug}`,
     });
-    buildAliases(bookEntry).forEach((alias) => aliasLookup.set(alias, bookEntry));
+    addAlias(bookEntry.slug, bookEntry);
 
-    for (const chapter of book.chapters) {
+    for (const chapter of flattenChapters(book.chapters)) {
       const chapterEntry: ManifestEntry = {
         id: chapter.id,
         kind: "chapter",
         slug: chapter.meta.slug,
+        chapterPath: chapter.path,
         title: chapter.meta.title,
         route: chapter.route,
         status: chapter.meta.status,
@@ -747,11 +1037,9 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
         summary: chapter.meta.summary ?? "",
         body: stripMarkdown(chapter.body),
         publicRoute: chapter.route,
-        workspaceRoute: `/app/books/${chapter.meta.bookSlug}/chapters/${chapter.meta.slug}`,
+        workspaceRoute: chapterWorkspaceRoute(chapter.meta.bookSlug, chapter.path),
       });
-      buildAliases(chapterEntry).forEach((alias) =>
-        aliasLookup.set(alias, chapterEntry),
-      );
+      chapterEntries.push(chapterEntry);
     }
   }
 
@@ -780,11 +1068,36 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
       publicRoute: note.route,
       workspaceRoute: `/app/notes/${note.meta.slug}`,
     });
-    buildAliases(noteEntry).forEach((alias) => aliasLookup.set(alias, noteEntry));
+    addAlias(noteEntry.slug, noteEntry);
+  }
+
+  const leafAliasCount = new Map<string, number>();
+  const bookLeafAliasCount = new Map<string, number>();
+  const canonicalChapterAlias = (entry: ManifestEntry) =>
+    `${entry.bookSlug}/${entry.chapterPath?.join("/") ?? entry.slug}`;
+
+  for (const entry of chapterEntries) {
+    const leafAlias = entry.slug;
+    const bookLeafAlias = `${entry.bookSlug}/${entry.slug}`;
+    leafAliasCount.set(leafAlias, (leafAliasCount.get(leafAlias) ?? 0) + 1);
+    bookLeafAliasCount.set(bookLeafAlias, (bookLeafAliasCount.get(bookLeafAlias) ?? 0) + 1);
+  }
+
+  for (const entry of chapterEntries) {
+    addAlias(canonicalChapterAlias(entry), entry);
+
+    const bookLeafAlias = `${entry.bookSlug}/${entry.slug}`;
+    if ((bookLeafAliasCount.get(bookLeafAlias) ?? 0) === 1) {
+      addAlias(bookLeafAlias, entry);
+    }
+
+    if ((leafAliasCount.get(entry.slug) ?? 0) === 1) {
+      addAlias(entry.slug, entry);
+    }
   }
 
   const allContent = [
-    ...content.books.flatMap<ContentRecord>((book) => [book, ...book.chapters]),
+    ...content.books.flatMap<ContentRecord>((book) => [book, ...flattenChapters(book.chapters)]),
     ...content.notes,
   ];
 
@@ -792,7 +1105,7 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
     for (const target of extractWikiTargets(item.body)) {
       const { pageTarget } = splitWikiTarget(target);
       const resolved = aliasLookup.get(pageTarget || target);
-      if (!resolved) {
+      if (!resolved || resolved === null) {
         continue;
       }
       const current = backlinks[resolved.id] ?? [];
@@ -805,6 +1118,7 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
           route: item.route,
           status: item.meta.status,
           bookSlug: item.kind === "chapter" ? item.meta.bookSlug : undefined,
+          chapterPath: item.kind === "chapter" ? item.path : undefined,
         });
       }
       backlinks[resolved.id] = current;
@@ -1011,6 +1325,17 @@ function toContentTree(
   options?: { publicOnly?: boolean },
 ): ContentTree {
   const publicOnly = options?.publicOnly ?? false;
+  const mapChapterTree = (
+    chapters: BookRecord["chapters"],
+  ): ContentTree["books"][number]["chapters"] =>
+    chapters
+      .filter((chapter) => !publicOnly || chapter.meta.status === "published")
+      .map((chapter) => ({
+        meta: chapter.meta,
+        route: chapter.route,
+        path: chapter.path,
+        children: mapChapterTree(chapter.children),
+      }));
 
   return {
     books: books
@@ -1018,12 +1343,7 @@ function toContentTree(
       .map((book) => ({
         meta: book.meta,
         route: book.route,
-        chapters: book.chapters
-          .filter((chapter) => !publicOnly || chapter.meta.status === "published")
-          .map((chapter) => ({
-            meta: chapter.meta,
-            route: chapter.route,
-          })),
+        chapters: mapChapterTree(book.chapters),
       })),
     notes: notes
       .filter((note) => !publicOnly || note.meta.status === "published")
@@ -1050,11 +1370,18 @@ export async function getBook(bookSlug: string) {
   return parseBookFile(bookFilePath(bookSlug));
 }
 
-export async function getChapter(bookSlug: string, chapterSlug: string) {
+export async function getChapter(bookSlug: string, chapterPathInput: string | string[]) {
   ensureSafeSlugOrThrow(bookSlug);
-  ensureSafeSlugOrThrow(chapterSlug);
+  const requestedPath = normalizeChapterPathInput(chapterPathInput);
+  if (!requestedPath.length) {
+    return null;
+  }
   const book = await getBook(bookSlug);
-  return book.chapters.find((chapter) => chapter.meta.slug === chapterSlug) ?? null;
+  const resolution = resolveChapterPath(book.chapters, requestedPath);
+  if (!resolution.ok) {
+    return null;
+  }
+  return findChapterByPath(book.chapters, resolution.chapterPath);
 }
 
 export async function getNote(slug: string) {
@@ -1072,18 +1399,35 @@ export async function getPublicBook(bookSlug: string) {
   if (book.meta.status !== "published") {
     return null;
   }
+
+  const filterPublished = (chapters: BookRecord["chapters"]): BookRecord["chapters"] =>
+    chapters
+      .filter((chapter) => chapter.meta.status === "published")
+      .map((chapter) => ({
+        ...chapter,
+        children: filterPublished(chapter.children),
+      }));
+
   return {
     ...book,
-    chapters: book.chapters.filter((chapter) => chapter.meta.status === "published"),
+    chapters: filterPublished(book.chapters),
   };
 }
 
-export async function getPublicChapter(bookSlug: string, chapterSlug: string) {
+export async function getPublicChapter(bookSlug: string, chapterPathInput: string | string[]) {
+  const requestedPath = normalizeChapterPathInput(chapterPathInput);
+  if (!requestedPath.length) {
+    return null;
+  }
   const book = await getPublicBook(bookSlug);
   if (!book) {
     return null;
   }
-  const chapter = book.chapters.find((item) => item.meta.slug === chapterSlug);
+  const resolution = resolveChapterPath(book.chapters, requestedPath);
+  if (!resolution.ok) {
+    return null;
+  }
+  const chapter = findChapterByPath(book.chapters, resolution.chapterPath);
   if (!chapter || chapter.meta.status !== "published") {
     return null;
   }
@@ -1190,15 +1534,12 @@ export async function getPublicManifest() {
 
 export async function unresolvedWikiLinks(markdown: string) {
   const manifest = await getManifest();
-  const aliasLookup = new Map<string, ManifestEntry>();
-  manifest.forEach((entry) => {
-    buildAliases(entry).forEach((alias) => aliasLookup.set(alias, entry));
-  });
+  const aliasLookup = buildManifestAliasLookup(manifest);
 
   return extractWikiTargets(markdown).filter((target) => {
     const { pageTarget, headingTarget } = splitWikiTarget(target);
     const resolved = aliasLookup.get(pageTarget || target);
-    if (!resolved) {
+    if (!resolved || resolved === null) {
       return true;
     }
 
@@ -1319,9 +1660,11 @@ export async function createChapter(bookSlug: string, input: unknown) {
   ensureSafeSlugOrThrow(bookSlug);
   await fs.access(bookFilePath(bookSlug));
   const data = saveChapterSchema.parse(input);
+  const parentChapterPath = normalizeChapterPathInput(data.parentChapterPath);
+  const chaptersPath = await resolveParentChaptersPath(bookSlug, parentChapterPath);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
-  const chapterEntries = await listOrderedChapterFiles(bookSlug);
+  const chapterEntries = await listOrderedChapterFilesAtPath(chaptersPath);
   if (chapterEntries.some((chapter) => chapter.slug === slug)) {
     throw new Error("A chapter with that slug already exists in this book");
   }
@@ -1346,37 +1689,63 @@ export async function createChapter(bookSlug: string, input: unknown) {
     } satisfies ChapterMeta,
     data.body,
   );
-  const filePath = chapterFilePath(bookSlug, slug, data.order);
+  const filePath = path.join(chaptersPath, `${chapterStem(data.order, slug)}.md`);
   await ensureDirectory(path.dirname(filePath));
   await fs.writeFile(filePath, raw, {
     encoding: "utf8",
     flag: "wx",
   });
   await rebuildIndexes();
-  return parseChapterFile(filePath, bookSlug);
+  return parseChapterFile(filePath, bookSlug, [...parentChapterPath, slug]);
 }
 
 export async function updateChapter(
   bookSlug: string,
-  chapterSlug: string,
+  chapterPathInput: string | string[],
   input: unknown,
 ) {
   ensureSafeSlugOrThrow(bookSlug);
-  ensureSafeSlugOrThrow(chapterSlug);
-  const chapterEntries = await listOrderedChapterFiles(bookSlug);
-  const existingEntry = chapterEntries.find((chapter) => chapter.slug === chapterSlug) ?? null;
+  const chapterPath = normalizeChapterPathInput(chapterPathInput);
+  const locationResolution = await resolveChapterEntryLocation(bookSlug, chapterPath);
+  if (!locationResolution.ok) {
+    if (locationResolution.reason === "ambiguous") {
+      throw new Error("Chapter path is ambiguous");
+    }
+    throw new Error("Chapter not found");
+  }
+
+  const { location } = locationResolution;
+  const chapterEntries = await listOrderedChapterFilesAtPath(location.chaptersPath);
+  const existingEntry =
+    chapterEntries.find((chapter) => chapter.filePath === location.entry.filePath) ?? null;
   if (!existingEntry) {
     throw new Error("Chapter not found");
   }
-  const existing = await parseChapterFile(existingEntry.filePath, bookSlug);
+
+  const existing = await parseChapterFile(existingEntry.filePath, bookSlug, location.chapterPath);
+  const hasExplicitParentPath =
+    typeof input === "object" &&
+    input !== null &&
+    Array.isArray((input as { parentChapterPath?: unknown }).parentChapterPath);
   const data = saveChapterSchema.parse(input);
+  const currentParentPath = location.chapterPath.slice(0, -1);
+  const requestedParentPath = hasExplicitParentPath
+    ? normalizeChapterPathInput(data.parentChapterPath)
+    : currentParentPath;
+  if (
+    requestedParentPath.length !== currentParentPath.length ||
+    requestedParentPath.some((segment, index) => segment !== currentParentPath[index])
+  ) {
+    throw new Error("Reparenting chapters is not supported");
+  }
+
   const now = new Date().toISOString();
   const nextSlug = toSlug(data.slug);
   ensureSafeSlugOrThrow(nextSlug);
   if (
     chapterEntries.some(
       (chapter) =>
-        chapter.slug === nextSlug && chapter.slug !== existing.meta.slug,
+        chapter.slug === nextSlug && chapter.filePath !== existingEntry.filePath,
     )
   ) {
     throw new Error("A chapter with that slug already exists in this book");
@@ -1400,10 +1769,13 @@ export async function updateChapter(
         : undefined,
   } satisfies ChapterMeta;
   const raw = renderMatter(nextMeta, data.body);
-  const requiresReorder = data.order !== existing.meta.order;
+  const requiresReorderOrRename =
+    data.order !== existingEntry.order || nextSlug !== existingEntry.slug;
 
-  if (requiresReorder) {
-    const reorderedChapters = chapterEntries.filter((chapter) => chapter.slug !== existing.meta.slug);
+  if (requiresReorderOrRename) {
+    const reorderedChapters = chapterEntries.filter(
+      (chapter) => chapter.filePath !== existingEntry.filePath,
+    );
 
     reorderedChapters.splice(data.order - 1, 0, {
       ...existingEntry,
@@ -1411,44 +1783,54 @@ export async function updateChapter(
       order: data.order,
     });
 
-    const bookPath = bookDirectory(bookSlug);
-    const currentChaptersPath = path.join(bookPath, "chapters");
-    const stagingPath = path.join(bookPath, `.chapters-update-${Date.now()}`);
-    const backupPath = path.join(bookPath, `.chapters-backup-${Date.now()}`);
+    const parentDirectory = path.dirname(location.chaptersPath);
+    const currentChaptersPath = location.chaptersPath;
+    const stagingPath = path.join(parentDirectory, `.chapters-update-${Date.now()}`);
+    const backupPath = path.join(parentDirectory, `.chapters-backup-${Date.now()}`);
 
     await ensureDirectory(stagingPath);
 
     for (const chapter of chapterEntries) {
       await createRevision(
-        chapterId(bookSlug, chapter.slug),
+        chapterIdFromPath(bookSlug, [...currentParentPath, chapter.slug]),
         await fs.readFile(chapter.filePath, "utf8"),
       );
     }
 
     for (const [index, chapter] of reorderedChapters.entries()) {
       const isUpdatedChapter = chapter.filePath === existingEntry.filePath;
+      const nextChapterSlug = isUpdatedChapter ? nextSlug : chapter.slug;
+      const nextOrder = index + 1;
+      const sourceChapter = isUpdatedChapter ? existingEntry : chapter;
       const nextPath = path.join(
         stagingPath,
-        `${String(index + 1).padStart(3, "0")}-${chapter.slug}.md`,
+        `${chapterStem(nextOrder, nextChapterSlug)}.md`,
       );
 
       if (isUpdatedChapter) {
         const chapterMeta = {
           ...nextMeta,
-          order: index + 1,
+          order: nextOrder,
           updatedAt: now,
         } satisfies ChapterMeta;
         await fs.writeFile(nextPath, renderMatter(chapterMeta, data.body), "utf8");
-        continue;
+      } else {
+        const rawChapter = await fs.readFile(chapter.filePath, "utf8");
+        const nextRaw = rewriteFrontMatterScalar(
+          rewriteFrontMatterScalar(rawChapter, "order", nextOrder),
+          "updatedAt",
+          now,
+        );
+        await fs.writeFile(nextPath, nextRaw, "utf8");
       }
 
-      const rawChapter = await fs.readFile(chapter.filePath, "utf8");
-      const nextRaw = rewriteFrontMatterScalar(
-        rewriteFrontMatterScalar(rawChapter, "order", index + 1),
-        "updatedAt",
-        now,
+      await copyChapterSubtree(
+        currentChaptersPath,
+        sourceChapter,
+        stagingPath,
+        nextOrder,
+        nextChapterSlug,
       );
-      await fs.writeFile(nextPath, nextRaw, "utf8");
     }
 
     await fs.rename(currentChaptersPath, backupPath);
@@ -1463,34 +1845,28 @@ export async function updateChapter(
 
     await fs.rm(backupPath, { recursive: true, force: true });
     await rebuildIndexes();
-    return parseChapterFile(chapterFilePath(bookSlug, nextSlug, data.order), bookSlug);
+    const canonicalPath = [...currentParentPath, nextSlug];
+    return parseChapterFile(
+      path.join(currentChaptersPath, `${chapterStem(data.order, nextSlug)}.md`),
+      bookSlug,
+      canonicalPath,
+    );
   }
 
   if (data.createRevision) {
     await createRevision(existing.id, existing.raw);
   }
-  const nextPath = chapterFilePath(bookSlug, nextSlug, data.order);
-  if (existing.filePath === nextPath) {
-    await writeFileAtomic(nextPath, raw);
-  } else {
-    const backupPath = `${existing.filePath}.rename-${process.pid}-${Date.now()}`;
-    await fs.rename(existing.filePath, backupPath);
-    try {
-      await writeFileAtomic(nextPath, raw);
-      await fs.rm(backupPath, { force: true });
-    } catch (error) {
-      await fs.rename(backupPath, existing.filePath).catch(() => undefined);
-      throw error;
-    }
-  }
+  await writeFileAtomic(existing.filePath, raw);
   await rebuildIndexes();
-  return parseChapterFile(nextPath, bookSlug);
+  return parseChapterFile(existing.filePath, bookSlug, location.chapterPath);
 }
 
 export async function reorderBookChapters(bookSlug: string, input: unknown) {
   ensureSafeSlugOrThrow(bookSlug);
   const data = reorderChaptersSchema.parse(input);
-  const chapterEntries = await listOrderedChapterFiles(bookSlug);
+  const parentChapterPath = normalizeChapterPathInput(data.parentChapterPath);
+  const currentChaptersPath = await resolveParentChaptersPath(bookSlug, parentChapterPath);
+  const chapterEntries = await listOrderedChapterFilesAtPath(currentChaptersPath);
   const chapterMap = new Map(chapterEntries.map((chapter) => [chapter.slug, chapter] as const));
   const uniqueSlugs = new Set(data.chapterSlugs);
 
@@ -1509,16 +1885,15 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
   }
 
   const now = new Date().toISOString();
-  const bookPath = bookDirectory(bookSlug);
-  const currentChaptersPath = path.join(bookPath, "chapters");
-  const stagingPath = path.join(bookPath, `.chapters-reorder-${Date.now()}`);
-  const backupPath = path.join(bookPath, `.chapters-backup-${Date.now()}`);
+  const parentDirectory = path.dirname(currentChaptersPath);
+  const stagingPath = path.join(parentDirectory, `.chapters-reorder-${Date.now()}`);
+  const backupPath = path.join(parentDirectory, `.chapters-backup-${Date.now()}`);
 
   await ensureDirectory(stagingPath);
 
   for (const chapter of chapterEntries) {
     await createRevision(
-      chapterId(bookSlug, chapter.slug),
+      chapterIdFromPath(bookSlug, [...parentChapterPath, chapter.slug]),
       await fs.readFile(chapter.filePath, "utf8"),
     );
   }
@@ -1538,10 +1913,11 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
     );
 
     await fs.writeFile(
-      path.join(stagingPath, `${String(nextOrder).padStart(3, "0")}-${slug}.md`),
+      path.join(stagingPath, `${chapterStem(nextOrder, slug)}.md`),
       nextRaw,
       "utf8",
     );
+    await copyChapterSubtree(currentChaptersPath, chapter, stagingPath, nextOrder, slug);
   }
 
   await fs.rename(currentChaptersPath, backupPath);
@@ -1716,6 +2092,88 @@ export async function updateNote(slug: string, input: unknown) {
   return getNote(existing.meta.slug);
 }
 
+async function duplicateChapterTreeToPath(
+  chapters: BookRecord["chapters"],
+  destinationChaptersPath: string,
+  destinationBookSlug: string,
+  now: string,
+) {
+  for (const chapter of chapters) {
+    const nextPath = path.join(
+      destinationChaptersPath,
+      `${chapterStem(chapter.meta.order, chapter.meta.slug)}.md`,
+    );
+    await fs.writeFile(
+      nextPath,
+      renderMatter(
+        {
+          ...chapter.meta,
+          bookSlug: destinationBookSlug,
+          status: "draft",
+          publishedAt: undefined,
+          updatedAt: now,
+          createdAt: now,
+        } satisfies ChapterMeta,
+        chapter.body,
+      ),
+      "utf8",
+    );
+
+    if (chapter.children.length > 0) {
+      const childrenPath = chapterChildrenDirectory(
+        destinationChaptersPath,
+        chapter.meta.order,
+        chapter.meta.slug,
+      );
+      await ensureDirectory(childrenPath);
+      await duplicateChapterTreeToPath(
+        chapter.children,
+        childrenPath,
+        destinationBookSlug,
+        now,
+      );
+    }
+  }
+}
+
+async function resetNestedChapterTreeToDraft(
+  chaptersPath: string,
+  bookSlug: string,
+  now: string,
+) {
+  const chapterEntries = await listOrderedChapterFilesAtPath(chaptersPath);
+  for (const chapter of chapterEntries) {
+    const raw = await fs.readFile(chapter.filePath, "utf8");
+    const parsed = matter(raw);
+    const meta = chapterMetaSchema.parse({
+      ...parsed.data,
+      bookSlug,
+      slug: chapter.slug,
+      order: chapter.order,
+    });
+
+    await writeFileAtomic(
+      chapter.filePath,
+      renderMatter(
+        {
+          ...meta,
+          status: "draft",
+          publishedAt: undefined,
+          updatedAt: now,
+          createdAt: now,
+        } satisfies ChapterMeta,
+        parsed.content.trim(),
+      ),
+    );
+
+    await resetNestedChapterTreeToDraft(
+      chapterChildrenDirectory(chaptersPath, chapter.order, chapter.slug),
+      bookSlug,
+      now,
+    );
+  }
+}
+
 export async function duplicateBook(bookSlug: string) {
   const existing = await getBook(bookSlug);
   const allBooks = await listOrderedBookFiles();
@@ -1754,40 +2212,39 @@ export async function duplicateBook(bookSlug: string) {
     "utf8",
   );
 
-  for (const chapter of existing.chapters) {
-    await fs.writeFile(
-      chapterFilePath(nextSlug, chapter.meta.slug, chapter.meta.order),
-      renderMatter(
-        {
-          ...chapter.meta,
-          bookSlug: nextSlug,
-          status: "draft",
-          publishedAt: undefined,
-          updatedAt: now,
-          createdAt: now,
-        } satisfies ChapterMeta,
-        chapter.body,
-      ),
-      "utf8",
-    );
-  }
+  await duplicateChapterTreeToPath(
+    existing.chapters,
+    path.join(directoryPath, "chapters"),
+    nextSlug,
+    now,
+  );
 
   await rebuildIndexes();
   return getBook(nextSlug);
 }
 
-export async function duplicateChapter(bookSlug: string, chapterSlug: string) {
+export async function duplicateChapter(bookSlug: string, chapterPathInput: string | string[]) {
   ensureSafeSlugOrThrow(bookSlug);
-  ensureSafeSlugOrThrow(chapterSlug);
-  const chapterEntries = await listOrderedChapterFiles(bookSlug);
-  const existingEntry = chapterEntries.find((chapter) => chapter.slug === chapterSlug);
+  const chapterPath = normalizeChapterPathInput(chapterPathInput);
+  const locationResolution = await resolveChapterEntryLocation(bookSlug, chapterPath);
+  if (!locationResolution.ok) {
+    if (locationResolution.reason === "ambiguous") {
+      throw new Error("Chapter path is ambiguous");
+    }
+    throw new Error("Chapter not found");
+  }
+  const { location } = locationResolution;
+  const chapterEntries = await listOrderedChapterFilesAtPath(location.chaptersPath);
+  const existingEntry =
+    chapterEntries.find((chapter) => chapter.filePath === location.entry.filePath) ?? null;
   if (!existingEntry) {
     throw new Error("Chapter not found");
   }
-  const existing = await parseChapterFile(existingEntry.filePath, bookSlug);
+
+  const existing = await parseChapterFile(existingEntry.filePath, bookSlug, location.chapterPath);
 
   const nextSlug = nextCopySlug(
-    existing.meta.slug,
+    existingEntry.slug,
     new Set(chapterEntries.map((chapter) => chapter.slug)),
   );
   const now = new Date().toISOString();
@@ -1802,7 +2259,7 @@ export async function duplicateChapter(bookSlug: string, chapterSlug: string) {
       | null) ??
     "source-serif";
 
-  const nextPath = chapterFilePath(bookSlug, nextSlug, nextOrder);
+  const nextPath = path.join(location.chaptersPath, `${chapterStem(nextOrder, nextSlug)}.md`);
   await fs.writeFile(
     nextPath,
     renderMatter(
@@ -1821,9 +2278,25 @@ export async function duplicateChapter(bookSlug: string, chapterSlug: string) {
     ),
     "utf8",
   );
+  await copyChapterSubtree(
+    location.chaptersPath,
+    existingEntry,
+    location.chaptersPath,
+    nextOrder,
+    nextSlug,
+  );
+  await resetNestedChapterTreeToDraft(
+    chapterChildrenDirectory(location.chaptersPath, nextOrder, nextSlug),
+    bookSlug,
+    now,
+  );
 
   await rebuildIndexes();
-  return parseChapterFile(nextPath, bookSlug);
+  return parseChapterFile(
+    nextPath,
+    bookSlug,
+    [...location.chapterPath.slice(0, -1), nextSlug],
+  );
 }
 
 export async function duplicateNote(slug: string) {
@@ -1876,10 +2349,10 @@ export async function deleteBook(bookSlug: string) {
   }
 
   await createRevision(bookId(bookSlug), await fs.readFile(targetBook.filePath, "utf8"));
-  for (const chapter of await listOrderedChapterFiles(bookSlug)) {
+  for (const chapter of await listChapterEntryLocations(bookSlug)) {
     await createRevision(
-      chapterId(bookSlug, chapter.slug),
-      await fs.readFile(chapter.filePath, "utf8"),
+      chapterIdFromPath(bookSlug, chapter.chapterPath),
+      await fs.readFile(chapter.entry.filePath, "utf8"),
     );
   }
   await fs.rm(bookDirectory(bookSlug), { recursive: true, force: true });
@@ -1903,26 +2376,34 @@ export async function deleteBook(bookSlug: string) {
   await rebuildIndexes();
 }
 
-export async function deleteChapter(bookSlug: string, chapterSlug: string) {
+export async function deleteChapter(bookSlug: string, chapterPathInput: string | string[]) {
   ensureSafeSlugOrThrow(bookSlug);
-  ensureSafeSlugOrThrow(chapterSlug);
+  const chapterPath = normalizeChapterPathInput(chapterPathInput);
+  const locationResolution = await resolveChapterEntryLocation(bookSlug, chapterPath);
+  if (!locationResolution.ok) {
+    if (locationResolution.reason === "ambiguous") {
+      throw new Error("Chapter path is ambiguous");
+    }
+    throw new Error("Chapter not found");
+  }
+  const { location } = locationResolution;
 
-  const currentChaptersPath = path.join(bookDirectory(bookSlug), "chapters");
-  const chapterEntries = await listOrderedChapterFiles(bookSlug);
-
-  const existing = chapterEntries.find((chapter) => chapter.slug === chapterSlug);
+  const currentChaptersPath = location.chaptersPath;
+  const chapterEntries = await listOrderedChapterFilesAtPath(currentChaptersPath);
+  const existing =
+    chapterEntries.find((chapter) => chapter.filePath === location.entry.filePath) ?? null;
   if (!existing?.filePath) {
     throw new Error("Chapter not found");
   }
 
-  const remainingChapters = chapterEntries.filter((chapter) => chapter.slug !== chapterSlug);
-  const bookPath = bookDirectory(bookSlug);
-  const stagingPath = path.join(bookPath, `.chapters-delete-${Date.now()}`);
-  const backupPath = path.join(bookPath, `.chapters-backup-${Date.now()}`);
+  const remainingChapters = chapterEntries.filter((chapter) => chapter.filePath !== existing.filePath);
+  const parentDirectory = path.dirname(currentChaptersPath);
+  const stagingPath = path.join(parentDirectory, `.chapters-delete-${Date.now()}`);
+  const backupPath = path.join(parentDirectory, `.chapters-backup-${Date.now()}`);
   const now = new Date().toISOString();
 
   await createRevision(
-    chapterId(bookSlug, chapterSlug),
+    chapterIdFromPath(bookSlug, location.chapterPath),
     await fs.readFile(existing.filePath, "utf8"),
   );
   await ensureDirectory(stagingPath);
@@ -1930,7 +2411,7 @@ export async function deleteChapter(bookSlug: string, chapterSlug: string) {
   for (const [index, chapter] of remainingChapters.entries()) {
     const nextPath = path.join(
       stagingPath,
-      `${String(index + 1).padStart(3, "0")}-${chapter.slug}.md`,
+      `${chapterStem(index + 1, chapter.slug)}.md`,
     );
     const raw = await fs.readFile(chapter.filePath, "utf8");
     const nextRaw = rewriteFrontMatterScalar(
@@ -1942,6 +2423,13 @@ export async function deleteChapter(bookSlug: string, chapterSlug: string) {
       nextPath,
       nextRaw,
       "utf8",
+    );
+    await copyChapterSubtree(
+      currentChaptersPath,
+      chapter,
+      stagingPath,
+      index + 1,
+      chapter.slug,
     );
   }
 
@@ -2024,14 +2512,15 @@ export async function publishContentById(id: string, published: boolean) {
     });
   }
   if (kind === "chapter") {
-    const [bookSlug, chapterSlug] = location.split("/");
-    const chapter = await getChapter(bookSlug, chapterSlug);
+    const { bookSlug, chapterPath } = chapterPathFromLocation(location);
+    const chapter = await getChapter(bookSlug, chapterPath);
     if (!chapter) {
       throw new Error("Chapter not found");
     }
-    return updateChapter(bookSlug, chapterSlug, {
+    return updateChapter(bookSlug, chapter.path, {
       title: chapter.meta.title,
       slug: chapter.meta.slug,
+      parentChapterPath: chapter.path.slice(0, -1),
       summary: chapter.meta.summary,
       body: chapter.body,
       status: published ? "published" : "draft",
@@ -2053,8 +2542,8 @@ export async function getContentById(id: string) {
     return getBook(location);
   }
   if (kind === "chapter") {
-    const [bookSlug, chapterSlug] = location.split("/");
-    return getChapter(bookSlug, chapterSlug);
+    const { bookSlug, chapterPath } = chapterPathFromLocation(location);
+    return getChapter(bookSlug, chapterPath);
   }
   return null;
 }

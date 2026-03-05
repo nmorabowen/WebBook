@@ -15,14 +15,32 @@ import { extractToc } from "@/lib/markdown/shared";
 
 export const dynamic = "force-dynamic";
 
+function siblingCountForPath(
+  chapters: Awaited<ReturnType<typeof getBook>>["chapters"],
+  parentPath: string[],
+): number {
+  if (!parentPath.length) {
+    return chapters.length;
+  }
+
+  const [head, ...tail] = parentPath;
+  const parent = chapters.find((chapter) => chapter.meta.slug === head);
+  if (!parent) {
+    return 0;
+  }
+  return siblingCountForPath(parent.children, tail);
+}
+
 export default async function AppChapterPage({
   params,
 }: {
-  params: Promise<{ bookSlug: string; chapterSlug: string }>;
+  params: Promise<{ bookSlug: string; chapterPath: string[] }>;
 }) {
   const session = await requireSession();
-  const { bookSlug, chapterSlug } = await params;
-  const loaded = await loadRenderableContent(`chapter:${bookSlug}/${chapterSlug}`);
+  const { bookSlug, chapterPath } = await params;
+  const requestedPath = chapterPath ?? [];
+  const location = requestedPath.join("/");
+  const loaded = await loadRenderableContent(`chapter:${bookSlug}/${location}`);
   if (!loaded || loaded.content.kind !== "chapter") {
     notFound();
   }
@@ -36,24 +54,26 @@ export default async function AppChapterPage({
   ]);
   const toc = extractToc(loaded.content.body);
   const nextChapterOrder =
-    book.chapters.reduce(
+    loaded.content.children.reduce(
       (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
       0,
     ) + 1;
+  const chapterRoutePath = loaded.content.path.join("/");
+  const parentPath = loaded.content.path.slice(0, -1);
 
   return (
     <AppShell
       tree={tree}
-      currentPath={`/app/books/${bookSlug}/chapters/${loaded.content.meta.slug}`}
+      currentPath={`/app/books/${bookSlug}/chapters/${chapterRoutePath}`}
       generalSettings={generalSettings}
       session={session}
       rightPanel={<div id="editor-shell-right-panel-root" />}
     >
       <EditorShell
         mode="chapter"
-        path={`content/books/${bookSlug}/chapters/*-${loaded.content.meta.slug}.md`}
+        path={`content/books/${bookSlug}/chapters/**/${loaded.content.meta.slug}.md`}
         pageId={loaded.content.id}
-        publicRoute={`/books/${bookSlug}/${loaded.content.meta.slug}`}
+        publicRoute={`/books/${bookSlug}/${chapterRoutePath}`}
         manifest={manifest}
         initialValues={{
           title: loaded.content.meta.title,
@@ -68,18 +88,20 @@ export default async function AppChapterPage({
             "source-serif",
           typography: book.meta.typography,
           order: loaded.content.meta.order,
+          parentChapterPath: parentPath,
         }}
         toc={toc}
         backlinks={loaded.backlinks}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
         mediaAssets={mediaAssets}
-        updateEndpoint={`/api/books/${bookSlug}/chapters/${loaded.content.meta.slug}`}
+        updateEndpoint={`/api/books/${bookSlug}/chapters/${chapterRoutePath}`}
         shortcutScopeKey={session.username}
-        chapterCount={book.chapters.length}
+        chapterCount={siblingCountForPath(book.chapters, parentPath)}
         extraActions={
           <CreateChapterPanel
             bookSlug={book.meta.slug}
+            parentChapterPath={loaded.content.path}
             nextOrder={nextChapterOrder}
           />
         }

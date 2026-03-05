@@ -27,8 +27,8 @@ export async function POST(request: Request) {
           return getPublicBook(location);
         }
         if (kind === "chapter") {
-          const [bookSlug, chapterSlug] = location.split("/");
-          const result = await getPublicChapter(bookSlug, chapterSlug);
+          const [bookSlug = "", ...chapterPath] = location.split("/").filter(Boolean);
+          const result = await getPublicChapter(bookSlug, chapterPath);
           return result?.chapter ?? null;
         }
         return null;
