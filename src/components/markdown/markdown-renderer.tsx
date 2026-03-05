@@ -942,6 +942,42 @@ export function MarkdownRenderer({
               {children}
             </ol>
           ),
+          table: ({ node, children, ...props }) => {
+            const line = segmentSourceLine(node);
+            return wrapWithSourceNavigation(
+              line,
+              <div className="markdown-table-wrap" data-source-line={line}>
+                <table data-source-line={line} {...props}>
+                  {children}
+                </table>
+              </div>,
+            );
+          },
+          thead: ({ node, children, ...props }) => (
+            <thead data-source-line={segmentSourceLine(node)} {...props}>
+              {children}
+            </thead>
+          ),
+          tbody: ({ node, children, ...props }) => (
+            <tbody data-source-line={segmentSourceLine(node)} {...props}>
+              {children}
+            </tbody>
+          ),
+          tr: ({ node, children, ...props }) => (
+            <tr data-source-line={segmentSourceLine(node)} {...props}>
+              {children}
+            </tr>
+          ),
+          th: ({ node, children, ...props }) => (
+            <th data-source-line={segmentSourceLine(node)} {...props}>
+              {children}
+            </th>
+          ),
+          td: ({ node, children, ...props }) => (
+            <td data-source-line={segmentSourceLine(node)} {...props}>
+              {children}
+            </td>
+          ),
           li: ({ node, children, ...props }) => (
             <li data-source-line={segmentSourceLine(node)} {...props}>
               {children}
