@@ -62,7 +62,7 @@ export default async function AppBookPage({
           status: loaded.content.meta.status,
           featured: loaded.content.meta.featured ?? false,
           coverColor: loaded.content.meta.coverColor ?? "#292118",
-          fontPreset: loaded.content.meta.fontPreset ?? "source-serif",
+          fontPreset: loaded.content.meta.fontPreset ?? "archivo-narrow",
           typography: loaded.content.meta.typography,
         }}
         toc={toc}

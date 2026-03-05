@@ -473,7 +473,7 @@ export function EditorShell({
   const [coverColor, setCoverColor] = useState(initialValues.coverColor ?? "#292118");
   const [allowExecution, setAllowExecution] = useState(initialValues.allowExecution ?? true);
   const [fontPreset, setFontPreset] = useState<FontPreset>(
-    initialValues.fontPreset ?? "source-serif",
+    initialValues.fontPreset ?? "archivo-narrow",
   );
   const [typography, setTypography] = useState<BookTypography>(
     normalizeBookTypography(

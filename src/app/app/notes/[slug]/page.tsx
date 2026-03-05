@@ -55,7 +55,7 @@ export default async function AppNotePage({
           body: loaded.content.body,
           status: loaded.content.meta.status,
           allowExecution: loaded.content.meta.allowExecution,
-          fontPreset: loaded.content.meta.fontPreset ?? "source-serif",
+          fontPreset: loaded.content.meta.fontPreset ?? "archivo-narrow",
           typography: loaded.content.meta.typography,
         }}
         toc={toc}

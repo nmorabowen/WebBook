@@ -74,7 +74,7 @@ export default async function AppChapterPage({
           fontPreset:
             loaded.content.meta.fontPreset ??
             book.meta.fontPreset ??
-            "source-serif",
+            "archivo-narrow",
           typography: book.meta.typography,
         }}
         toc={toc}

@@ -319,6 +319,7 @@ export function AuthoringSidebar({
   const [collapsedBooks, setCollapsedBooks] = useState<Record<string, boolean>>(() =>
     defaultCollapsedBooks(tree, currentPath, generalSettings),
   );
+  const [collapsedGeneralSettings, setCollapsedGeneralSettings] = useState(true);
   const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
@@ -1010,40 +1011,63 @@ export function AuthoringSidebar({
         <NavLink href="/app" label="Dashboard" active={currentPath === "/app"} />
 
         <div className="grid gap-2">
-          {session?.role === "admin" ? (
-            <NavLink
-              href="/app/settings/general"
-              label="General settings"
-              active={currentPath?.startsWith("/app/settings/") ?? false}
-            />
-          ) : (
-            <p className="paper-label px-3">General settings</p>
-          )}
-
-          <div className="ml-4 grid gap-2">
-            {session?.role === "admin" ? (
-              <NavLink
-                href="/app/settings/errors"
-                label="Errors"
-                active={currentPath === "/app/settings/errors"}
-              />
-            ) : null}
-            <NavLink
-              href="/app/settings/access"
-              label="Access"
-              active={currentPath === "/app/settings/access"}
-            />
-            <NavLink
-              href="/app/settings/shortcuts"
-              label="Shortcuts"
-              active={currentPath === "/app/settings/shortcuts"}
-            />
-            <NavLink
-              href="/app/settings/analytics"
-              label="Analytics"
-              active={currentPath === "/app/settings/analytics"}
-            />
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              {session?.role === "admin" ? (
+                <NavLink
+                  href="/app/settings/general"
+                  label="General settings"
+                  active={currentPath?.startsWith("/app/settings/") ?? false}
+                />
+              ) : (
+                <p className="paper-label px-3">General settings</p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center justify-center rounded-full p-1 text-[var(--paper-muted)] transition hover:text-[var(--paper-ink)]"
+              onClick={() => setCollapsedGeneralSettings((current) => !current)}
+              aria-label={
+                collapsedGeneralSettings
+                  ? "Expand general settings"
+                  : "Collapse general settings"
+              }
+              aria-expanded={!collapsedGeneralSettings}
+            >
+              {collapsedGeneralSettings ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
           </div>
+
+          {!collapsedGeneralSettings ? (
+            <div className="ml-4 grid gap-2">
+              {session?.role === "admin" ? (
+                <NavLink
+                  href="/app/settings/errors"
+                  label="Errors"
+                  active={currentPath === "/app/settings/errors"}
+                />
+              ) : null}
+              <NavLink
+                href="/app/settings/access"
+                label="Access"
+                active={currentPath === "/app/settings/access"}
+              />
+              <NavLink
+                href="/app/settings/shortcuts"
+                label="Shortcuts"
+                active={currentPath === "/app/settings/shortcuts"}
+              />
+              <NavLink
+                href="/app/settings/analytics"
+                label="Analytics"
+                active={currentPath === "/app/settings/analytics"}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
 
