@@ -255,6 +255,12 @@ export const reorderChaptersSchema = z.object({
   chapterSlugs: z.array(z.string().min(1)).min(1),
 });
 
+export const moveChapterSchema = z.object({
+  chapterPath: z.array(z.string().min(1)).min(1),
+  parentChapterPath: z.array(z.string().min(1)).default([]),
+  order: z.number().int().positive().optional(),
+});
+
 export const reorderBooksSchema = z.object({
   bookSlugs: z.array(z.string().min(1)).min(1),
 });

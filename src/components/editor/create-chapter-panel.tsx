@@ -5,21 +5,33 @@ import { useRouter } from "next/navigation";
 
 export function CreateChapterPanel({
   bookSlug,
-  parentChapterPath,
-  nextOrder,
+  rootNextOrder,
+  currentChapterPath = [],
+  subchapterNextOrder,
 }: {
   bookSlug: string;
-  parentChapterPath: string[];
-  nextOrder: number;
+  rootNextOrder: number;
+  currentChapterPath?: string[];
+  subchapterNextOrder?: number;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState("New chapter");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [pendingTarget, setPendingTarget] = useState<"root" | "sub" | null>(null);
+  const canCreateSubchapter =
+    currentChapterPath.length > 0 && typeof subchapterNextOrder === "number";
 
-  const createChapter = () => {
+  const createChapter = (target: "root" | "sub") => {
+    if (target === "sub" && !canCreateSubchapter) {
+      return;
+    }
+    const parentChapterPath = target === "root" ? [] : currentChapterPath;
+    const order = target === "root" ? rootNextOrder : (subchapterNextOrder ?? 1);
+
     startTransition(async () => {
       setErrorMessage(null);
+      setPendingTarget(target);
 
       try {
         const response = await fetch(`/api/books/${bookSlug}/chapters`, {
@@ -35,7 +47,7 @@ export function CreateChapterPanel({
             body: "# New chapter\n\nStart writing here.",
             status: "draft",
             allowExecution: true,
-            order: nextOrder,
+            order,
           }),
         });
         const payload = (await response.json().catch(() => null)) as
@@ -65,6 +77,8 @@ export function CreateChapterPanel({
         setErrorMessage(
           error instanceof Error ? error.message : "Could not create chapter.",
         );
+      } finally {
+        setPendingTarget(null);
       }
     });
   };
@@ -83,8 +97,25 @@ export function CreateChapterPanel({
             {errorMessage}
           </p>
         ) : null}
-        <button type="button" className="paper-button" onClick={createChapter} disabled={isPending}>
-          {isPending ? "Creating..." : `Create chapter ${nextOrder}`}
+        <button
+          type="button"
+          className="paper-button"
+          onClick={() => createChapter("root")}
+          disabled={isPending}
+        >
+          {isPending && pendingTarget === "root"
+            ? "Creating root..."
+            : `Create root chapter ${rootNextOrder}`}
+        </button>
+        <button
+          type="button"
+          className="paper-button"
+          onClick={() => createChapter("sub")}
+          disabled={isPending || !canCreateSubchapter}
+        >
+          {isPending && pendingTarget === "sub"
+            ? "Creating subchapter..."
+            : `Create subchapter ${subchapterNextOrder ?? "-"}`}
         </button>
       </div>
     </div>

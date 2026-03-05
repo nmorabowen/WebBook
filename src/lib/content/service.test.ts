@@ -801,6 +801,126 @@ describe("content service", () => {
     ]);
   });
 
+  it("moves chapters across parents with nested subtree support", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Nested Move",
+      slug: "nested-move",
+      description: "Nested move behavior",
+      body: "# Nested Move",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("nested-move", {
+      title: "Part A",
+      slug: "part-a",
+      summary: "",
+      body: "# Part A",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("nested-move", {
+      title: "Part B",
+      slug: "part-b",
+      summary: "",
+      body: "# Part B",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+    await service.createChapter("nested-move", {
+      title: "Child One",
+      slug: "child-one",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Child One",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("nested-move", {
+      title: "Child Two",
+      slug: "child-two",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Child Two",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+    await service.createChapter("nested-move", {
+      title: "Leaf",
+      slug: "leaf",
+      parentChapterPath: ["part-a", "child-two"],
+      summary: "",
+      body: "# Leaf",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    const moved = await service.moveChapter("nested-move", {
+      chapterPath: ["part-a", "child-two"],
+      parentChapterPath: ["part-b"],
+      order: 1,
+    });
+    expect(moved.path).toEqual(["part-b", "child-two"]);
+
+    const oldPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "nested-move",
+      "chapters",
+      "001-part-a",
+      "chapters",
+      "002-child-two.md",
+    );
+    const newPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "nested-move",
+      "chapters",
+      "002-part-b",
+      "chapters",
+      "001-child-two.md",
+    );
+    const movedLeafPath = path.join(
+      process.cwd(),
+      tempRoot,
+      "books",
+      "nested-move",
+      "chapters",
+      "002-part-b",
+      "chapters",
+      "001-child-two",
+      "chapters",
+      "001-leaf.md",
+    );
+    await expect(fs.access(oldPath)).rejects.toThrow();
+    await expect(fs.access(newPath)).resolves.toBeUndefined();
+    await expect(fs.access(movedLeafPath)).resolves.toBeUndefined();
+
+    const book = await service.getBook("nested-move");
+    const partA = book.chapters.find((chapter) => chapter.meta.slug === "part-a");
+    const partB = book.chapters.find((chapter) => chapter.meta.slug === "part-b");
+    expect(partA?.children.map((chapter) => chapter.meta.slug)).toEqual(["child-one"]);
+    expect(partB?.children.map((chapter) => chapter.meta.slug)).toEqual(["child-two"]);
+    expect(partB?.children[0]?.children[0]?.path).toEqual(["part-b", "child-two", "leaf"]);
+
+    await expect(
+      service.moveChapter("nested-move", {
+        chapterPath: ["part-b", "child-two"],
+        parentChapterPath: ["part-b", "child-two", "leaf"],
+      }),
+    ).rejects.toThrow("Cannot move a chapter into itself or its descendants");
+  });
+
   it("duplicates and deletes nested chapter subtrees while supporting nested content ids", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

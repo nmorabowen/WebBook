@@ -19,6 +19,7 @@ import {
   type NoteRecord,
   type ContentSearchResult,
   noteMetaSchema,
+  moveChapterSchema,
   reorderBooksSchema,
   reorderChaptersSchema,
   reorderNotesSchema,
@@ -918,6 +919,107 @@ function resolveChapterPath(
   }
 
   return { ok: false, reason: "not-found" };
+}
+
+function getChapterSiblingsByParentPath(
+  chapters: BookRecord["chapters"],
+  parentPath: string[],
+): BookRecord["chapters"] | null {
+  if (!parentPath.length) {
+    return chapters;
+  }
+
+  const parent = findChapterByPath(chapters, parentPath);
+  if (!parent) {
+    return null;
+  }
+
+  return parent.children;
+}
+
+function chapterPathsEqual(left: string[], right: string[]) {
+  return (
+    left.length === right.length &&
+    left.every((segment, index) => segment === right[index])
+  );
+}
+
+function chapterPathStartsWith(pathValue: string[], prefix: string[]) {
+  return (
+    prefix.length <= pathValue.length &&
+    prefix.every((segment, index) => pathValue[index] === segment)
+  );
+}
+
+function renumberChapterSiblings(
+  chapters: BookRecord["chapters"],
+  now: string,
+  options?: { touchUpdatedAt?: boolean },
+) {
+  const touchUpdatedAt = options?.touchUpdatedAt ?? true;
+  for (const [index, chapter] of chapters.entries()) {
+    const nextOrder = index + 1;
+    chapter.meta.order = nextOrder;
+    if (touchUpdatedAt) {
+      chapter.meta.updatedAt = now;
+    }
+  }
+}
+
+async function writeChapterTreeToDirectory(
+  chaptersPath: string,
+  chapters: BookRecord["chapters"],
+  bookSlug: string,
+) {
+  for (const chapter of chapters) {
+    const stem = chapterStem(chapter.meta.order, chapter.meta.slug);
+    const filePath = path.join(chaptersPath, `${stem}.md`);
+    await fs.writeFile(
+      filePath,
+      renderMatter(
+        {
+          ...chapter.meta,
+          kind: "chapter",
+          bookSlug,
+          slug: chapter.meta.slug,
+          order: chapter.meta.order,
+        } satisfies ChapterMeta,
+        chapter.body,
+      ),
+      "utf8",
+    );
+
+    if (chapter.children.length) {
+      const childrenPath = path.join(chaptersPath, stem, "chapters");
+      await ensureDirectory(childrenPath);
+      await writeChapterTreeToDirectory(childrenPath, chapter.children, bookSlug);
+    }
+  }
+}
+
+async function replaceBookChaptersDirectory(
+  bookSlug: string,
+  chapters: BookRecord["chapters"],
+) {
+  const chaptersPath = path.join(bookDirectory(bookSlug), "chapters");
+  const bookRoot = bookDirectory(bookSlug);
+  const stagingPath = path.join(bookRoot, `.chapters-write-${Date.now()}`);
+  const backupPath = path.join(bookRoot, `.chapters-backup-${Date.now()}`);
+
+  await ensureDirectory(stagingPath);
+  await writeChapterTreeToDirectory(stagingPath, chapters, bookSlug);
+  await ensureDirectory(chaptersPath);
+  await fs.rename(chaptersPath, backupPath);
+
+  try {
+    await fs.rename(stagingPath, chaptersPath);
+  } catch (error) {
+    await fs.rename(backupPath, chaptersPath).catch(() => undefined);
+    await fs.rm(stagingPath, { recursive: true, force: true });
+    throw error;
+  }
+
+  await fs.rm(backupPath, { recursive: true, force: true });
 }
 
 function recordToMediaReference(record: ContentRecord): MediaReference {
@@ -1859,6 +1961,108 @@ export async function updateChapter(
   await writeFileAtomic(existing.filePath, raw);
   await rebuildIndexes();
   return parseChapterFile(existing.filePath, bookSlug, location.chapterPath);
+}
+
+export async function moveChapter(bookSlug: string, input: unknown) {
+  ensureSafeSlugOrThrow(bookSlug);
+  const data = moveChapterSchema.parse(input);
+  const chapterPath = normalizeChapterPathInput(data.chapterPath);
+  const destinationParentPath = normalizeChapterPathInput(data.parentChapterPath);
+  if (!chapterPath.length) {
+    throw new Error("Chapter path is required");
+  }
+
+  if (chapterPathStartsWith(destinationParentPath, chapterPath)) {
+    throw new Error("Cannot move a chapter into itself or its descendants");
+  }
+
+  const sourceParentPath = chapterPath.slice(0, -1);
+  const movingSlug = chapterPath[chapterPath.length - 1];
+  if (!movingSlug) {
+    throw new Error("Chapter not found");
+  }
+
+  const book = await getBook(bookSlug);
+  const sourceSiblings = getChapterSiblingsByParentPath(book.chapters, sourceParentPath);
+  if (!sourceSiblings) {
+    throw new Error("Chapter not found");
+  }
+
+  const sourceIndex = sourceSiblings.findIndex((chapter) => chapter.meta.slug === movingSlug);
+  if (sourceIndex < 0) {
+    throw new Error("Chapter not found");
+  }
+
+  const destinationSiblingsBeforeMove = getChapterSiblingsByParentPath(
+    book.chapters,
+    destinationParentPath,
+  );
+  if (!destinationSiblingsBeforeMove) {
+    throw new Error("Destination parent chapter not found");
+  }
+
+  const requestedOrder = data.order ?? destinationSiblingsBeforeMove.length + 1;
+  if (requestedOrder < 1 || requestedOrder > destinationSiblingsBeforeMove.length + 1) {
+    throw new Error(
+      `Destination chapter order must be between 1 and ${destinationSiblingsBeforeMove.length + 1}`,
+    );
+  }
+
+  const sameParent = chapterPathsEqual(sourceParentPath, destinationParentPath);
+  if (sameParent && requestedOrder === sourceIndex + 1) {
+    const currentChapter = findChapterByPath(book.chapters, chapterPath);
+    if (!currentChapter) {
+      throw new Error("Chapter not found");
+    }
+    return currentChapter;
+  }
+
+  const revisionCandidates = new Map<string, ChapterRecord>();
+  for (const chapter of sourceSiblings) {
+    revisionCandidates.set(chapter.path.join("/"), chapter);
+  }
+  for (const chapter of destinationSiblingsBeforeMove) {
+    revisionCandidates.set(chapter.path.join("/"), chapter);
+  }
+
+  const [movedChapter] = sourceSiblings.splice(sourceIndex, 1);
+  const destinationSiblingsAfterRemoval = getChapterSiblingsByParentPath(
+    book.chapters,
+    destinationParentPath,
+  );
+  if (!destinationSiblingsAfterRemoval) {
+    throw new Error("Destination parent chapter not found");
+  }
+
+  if (
+    destinationSiblingsAfterRemoval.some((chapter) => chapter.meta.slug === movedChapter.meta.slug)
+  ) {
+    throw new Error("A chapter with that slug already exists in the destination");
+  }
+
+  const insertionIndex = Math.min(requestedOrder - 1, destinationSiblingsAfterRemoval.length);
+  destinationSiblingsAfterRemoval.splice(insertionIndex, 0, movedChapter);
+
+  const now = new Date().toISOString();
+  for (const chapter of revisionCandidates.values()) {
+    await createRevision(chapter.id, chapter.raw);
+  }
+
+  renumberChapterSiblings(sourceSiblings, now);
+  if (destinationSiblingsAfterRemoval !== sourceSiblings) {
+    renumberChapterSiblings(destinationSiblingsAfterRemoval, now);
+  }
+  movedChapter.meta.updatedAt = now;
+
+  await replaceBookChaptersDirectory(bookSlug, book.chapters);
+  await rebuildIndexes();
+
+  const movedPath = [...destinationParentPath, movedChapter.meta.slug];
+  const moved = await getChapter(bookSlug, movedPath);
+  if (!moved) {
+    throw new Error("Chapter move failed");
+  }
+  return moved;
 }
 
 export async function reorderBookChapters(bookSlug: string, input: unknown) {

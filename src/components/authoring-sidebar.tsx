@@ -16,6 +16,7 @@ import {
   GripVertical,
   Home,
   LoaderCircle,
+  MoveRight,
   PenSquare,
   Trash2,
 } from "lucide-react";
@@ -336,6 +337,7 @@ function ActionMenu({
   open,
   busy,
   onToggle,
+  onMove,
   onDuplicate,
   onDelete,
   onDownload,
@@ -343,6 +345,7 @@ function ActionMenu({
   open: boolean;
   busy: boolean;
   onToggle: () => void;
+  onMove?: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onDownload: () => void;
@@ -360,6 +363,12 @@ function ActionMenu({
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-20 mt-2 grid min-w-[160px] gap-1 rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,250,240,0.98)] p-2 shadow-[0_18px_45px_rgba(47,34,21,0.16)]">
+          {onMove ? (
+            <button type="button" className="sidebar-menu-item" onClick={onMove}>
+              <MoveRight className="h-4 w-4" />
+              Move
+            </button>
+          ) : null}
           <button type="button" className="sidebar-menu-item" onClick={onDuplicate}>
             <Copy className="h-4 w-4" />
             Duplicate
@@ -581,7 +590,7 @@ export function AuthoringSidebar({
   const runItemAction = (
     kind: MenuKind,
     slug: string,
-    action: "duplicate" | "delete" | "download",
+    action: "duplicate" | "delete" | "download" | "move",
   ) => {
     const actionId = `${kind}:${slug}:${action}`;
     if (action === "download") {
@@ -591,6 +600,86 @@ export function AuthoringSidebar({
 
     setOpenMenuId(null);
     setActionError(null);
+
+    if (action === "move") {
+      if (kind !== "chapter") {
+        return;
+      }
+
+      const { bookSlug, chapterPath } = decodeChapterActionSlug(slug);
+      const currentParentPath = chapterPath.slice(0, -1);
+      const defaultParentPath = currentParentPath.join("/");
+      const parentPathInput = window.prompt(
+        "Move to parent chapter path (empty = root). Example: parent/child",
+        defaultParentPath,
+      );
+      if (parentPathInput === null) {
+        return;
+      }
+
+      const parentChapterPath = parentPathInput
+        .trim()
+        .replace(/^\/+|\/+$/g, "")
+        .split("/")
+        .filter(Boolean);
+
+      const orderInput = window.prompt(
+        "Destination order (optional). Leave empty to append.",
+        "",
+      );
+      if (orderInput === null) {
+        return;
+      }
+
+      const orderValue = orderInput.trim();
+      let order: number | undefined;
+      if (orderValue.length > 0) {
+        order = Number.parseInt(orderValue, 10);
+        if (!Number.isFinite(order) || order < 1) {
+          setActionError("Destination order must be a positive integer.");
+          return;
+        }
+      }
+
+      setPendingActionId(actionId);
+      startTransition(async () => {
+        try {
+          const response = await fetch(`/api/books/${bookSlug}/chapters/move`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              chapterPath,
+              parentChapterPath,
+              order,
+            }),
+          });
+
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string; path?: string[] }
+            | null;
+
+          if (!response.ok) {
+            setActionError(payload?.error ?? "Unable to move this chapter.");
+            return;
+          }
+
+          setActionError(null);
+          if (payload?.path?.length) {
+            router.push(`/app/books/${bookSlug}/chapters/${payload.path.join("/")}`);
+          }
+          router.refresh();
+        } catch (error) {
+          setActionError(
+            error instanceof Error ? error.message : "Unable to move this chapter.",
+          );
+        } finally {
+          setPendingActionId(null);
+        }
+      });
+      return;
+    }
 
     if (action === "delete") {
       const confirmed = window.confirm(
@@ -968,6 +1057,9 @@ export function AuthoringSidebar({
                           ? null
                           : `chapter:${chapterActionSlug}`,
                       )
+                    }
+                    onMove={() =>
+                      runItemAction("chapter", chapterActionSlug, "move")
                     }
                     onDuplicate={() =>
                       runItemAction("chapter", chapterActionSlug, "duplicate")

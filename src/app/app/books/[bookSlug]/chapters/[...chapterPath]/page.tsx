@@ -53,8 +53,13 @@ export default async function AppChapterPage({
     listMediaForPage(loaded.content.id),
   ]);
   const toc = extractToc(loaded.content.body);
-  const nextChapterOrder =
+  const nextSubchapterOrder =
     loaded.content.children.reduce(
+      (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
+      0,
+    ) + 1;
+  const nextRootChapterOrder =
+    book.chapters.reduce(
       (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
       0,
     ) + 1;
@@ -101,8 +106,9 @@ export default async function AppChapterPage({
         extraActions={
           <CreateChapterPanel
             bookSlug={book.meta.slug}
-            parentChapterPath={loaded.content.path}
-            nextOrder={nextChapterOrder}
+            rootNextOrder={nextRootChapterOrder}
+            currentChapterPath={loaded.content.path}
+            subchapterNextOrder={nextSubchapterOrder}
           />
         }
       />
