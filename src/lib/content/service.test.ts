@@ -1969,6 +1969,139 @@ describe("content service", () => {
     expect(trashEntries.length).toBeGreaterThan(0);
   });
 
+  it("lists referenced media even outside the page folder and marks missing links", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Referenced Media Note",
+      slug: "referenced-media-note",
+      summary: "Mixed media references",
+      body:
+        "![Figure](/media/2026-03-02/figure.png#wb:width=60%25)\n" +
+        "[Manual](/media/docs/manual.pdf?download=1)\n" +
+        "![Missing](/media/missing/not-found.png)",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const figurePath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "2026-03-02",
+      "figure.png",
+    );
+    const manualPath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "docs",
+      "manual.pdf",
+    );
+    await fs.mkdir(path.dirname(figurePath), { recursive: true });
+    await fs.mkdir(path.dirname(manualPath), { recursive: true });
+    await fs.writeFile(figurePath, "image-bytes", "utf8");
+    await fs.writeFile(manualPath, "pdf-bytes", "utf8");
+
+    const listedMedia = await service.listMediaForPage("note:referenced-media-note");
+    expect(listedMedia).toHaveLength(3);
+
+    const figure = listedMedia.find((asset) => asset.url === "/media/2026-03-02/figure.png");
+    const manual = listedMedia.find((asset) => asset.url === "/media/docs/manual.pdf");
+    const missing = listedMedia.find((asset) => asset.url === "/media/missing/not-found.png");
+
+    expect(figure?.missing).toBe(false);
+    expect(figure?.size).not.toBeNull();
+    expect(manual?.missing).toBe(false);
+    expect(missing?.missing).toBe(true);
+    expect(missing?.size).toBeNull();
+    expect(missing?.relativePath).toBeNull();
+    expect(figure?.references[0]?.id).toBe("note:referenced-media-note");
+  });
+
+  it("renames media and rewrites references across content while preserving URL suffixes", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Rename Media A",
+      slug: "rename-media-a",
+      summary: "Reference A",
+      body: "![Figure](/media/notes/rename-media-a/figure.png#wb:width=60%25)",
+      status: "draft",
+      allowExecution: true,
+    });
+    await service.createNote({
+      title: "Rename Media B",
+      slug: "rename-media-b",
+      summary: "Reference B",
+      body: "[Link](/media/notes/rename-media-a/figure.png?download=1)",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const sourceFilePath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "notes",
+      "rename-media-a",
+      "figure.png",
+    );
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, "image-bytes", "utf8");
+
+    const renamed = await service.renameMediaAsset(
+      "/media/notes/rename-media-a/figure.png",
+      "updated-figure",
+    );
+    expect(renamed.newUrl).toBe("/media/notes/rename-media-a/updated-figure.png");
+    expect(renamed.updatedReferences).toBe(2);
+
+    const updatedA = await service.getNote("rename-media-a");
+    const updatedB = await service.getNote("rename-media-b");
+    expect(updatedA?.body).toContain("/media/notes/rename-media-a/updated-figure.png#wb:width=60%25");
+    expect(updatedB?.body).toContain("/media/notes/rename-media-a/updated-figure.png?download=1");
+    expect(updatedA?.body).not.toContain("/media/notes/rename-media-a/figure.png#wb:width=60%25");
+
+    const destinationFilePath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "notes",
+      "rename-media-a",
+      "updated-figure.png",
+    );
+    await expect(fs.access(destinationFilePath)).resolves.toBeUndefined();
+    await expect(fs.access(sourceFilePath)).rejects.toThrow();
+  });
+
+  it("rejects media rename when destination name already exists", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    const uploadsDirectory = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "notes",
+      "conflict",
+    );
+    await fs.mkdir(uploadsDirectory, { recursive: true });
+    await fs.writeFile(path.join(uploadsDirectory, "figure.png"), "a", "utf8");
+    await fs.writeFile(path.join(uploadsDirectory, "target.png"), "b", "utf8");
+
+    await expect(
+      service.renameMediaAsset("/media/notes/conflict/figure.png", "target"),
+    ).rejects.toThrow("A media file with that name already exists");
+  });
+
   it("rejects duplicate slugs, duplicate chapter orders, and unsafe revision paths", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

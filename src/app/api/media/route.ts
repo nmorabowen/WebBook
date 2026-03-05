@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { removeMediaAsset } from "@/lib/content/service";
+import { removeMediaAsset, renameMediaAsset } from "@/lib/content/service";
+
+function statusFromError(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    typeof (error as { status: unknown }).status === "number"
+  ) {
+    return (error as { status: number }).status;
+  }
+
+  return 400;
+}
 
 export async function DELETE(request: Request) {
   await requireSession();
@@ -37,6 +50,38 @@ export async function DELETE(request: Request) {
         error: error instanceof Error ? error.message : "Media removal failed",
       },
       { status: 400 },
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  await requireSession();
+
+  const body = (await request.json().catch(() => null)) as
+    | { url?: string; newBaseName?: string; rewriteReferences?: boolean }
+    | null;
+  const url = body?.url?.trim();
+  const newBaseName = body?.newBaseName?.trim();
+  if (!url || !newBaseName) {
+    return NextResponse.json(
+      { error: "Missing media URL or target name" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await renameMediaAsset(
+      url,
+      newBaseName,
+      body?.rewriteReferences !== false,
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Media rename failed",
+      },
+      { status: statusFromError(error) },
     );
   }
 }

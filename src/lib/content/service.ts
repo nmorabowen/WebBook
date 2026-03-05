@@ -40,10 +40,8 @@ import { env } from "@/lib/env";
 import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
 import { normalizeGeneralSettings } from "@/lib/general-settings";
 import {
-  defaultUploadTargetPath,
   mediaRelativePathToUrl,
   mediaUrlToRelativePath,
-  normalizeMediaTargetPath,
 } from "@/lib/media-paths";
 import { extractToc, headingId, splitWikiTarget } from "@/lib/markdown/shared";
 import { isSafeSlug, safeJsonParse, stripMarkdown, toSlug } from "@/lib/utils";
@@ -1079,24 +1077,73 @@ async function listAllContentRecords() {
   ] satisfies ContentRecord[];
 }
 
-async function listFilesRecursively(directoryPath: string): Promise<string[]> {
-  const entries = await readDirectoryEntries(directoryPath);
-  const nested = await Promise.all(
-    entries.map(async (entry) => {
-      const nextPath = path.join(directoryPath, entry.name);
-      if (entry.isDirectory()) {
-        return listFilesRecursively(nextPath);
-      }
+const mediaUrlPattern = /\/media\/[^\s"'<>`)\]}]+/g;
 
-      if (entry.isFile()) {
-        return [nextPath];
-      }
+function mediaError(message: string, status: number) {
+  const error = new Error(message) as Error & { status: number };
+  error.status = status;
+  return error;
+}
 
-      return [];
-    }),
-  );
+function normalizeMediaBaseName(input: string) {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
-  return nested.flat();
+function splitMediaUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed.startsWith("/media/")) {
+    return null;
+  }
+
+  const queryIndex = trimmed.indexOf("?");
+  const hashIndex = trimmed.indexOf("#");
+  const splitIndex =
+    queryIndex >= 0 && hashIndex >= 0
+      ? Math.min(queryIndex, hashIndex)
+      : Math.max(queryIndex, hashIndex);
+  const canonical =
+    splitIndex >= 0 ? trimmed.slice(0, splitIndex) : trimmed;
+  const suffix = splitIndex >= 0 ? trimmed.slice(splitIndex) : "";
+
+  if (canonical.length <= "/media/".length) {
+    return null;
+  }
+
+  return { canonical, suffix };
+}
+
+function extractMediaUrlsFromBody(body: string) {
+  const urls: string[] = [];
+  for (const match of body.matchAll(mediaUrlPattern)) {
+    const value = match[0];
+    const parts = splitMediaUrl(value);
+    if (!parts) {
+      continue;
+    }
+    urls.push(parts.canonical);
+  }
+  return urls;
+}
+
+function rewriteMediaUrlsInBody(body: string, oldCanonicalUrl: string, newCanonicalUrl: string) {
+  let replacements = 0;
+  const nextBody = body.replace(mediaUrlPattern, (match) => {
+    const parts = splitMediaUrl(match);
+    if (!parts || parts.canonical !== oldCanonicalUrl) {
+      return match;
+    }
+    replacements += 1;
+    return `${newCanonicalUrl}${parts.suffix}`;
+  });
+
+  return {
+    nextBody,
+    replacements,
+  };
 }
 
 async function findMediaReferences(url: string): Promise<MediaReference[]> {
@@ -2848,35 +2895,157 @@ export async function loadRenderableContent(id: string) {
 }
 
 export async function listMediaForPage(pageId: string): Promise<MediaAsset[]> {
-  const relativeFolder = normalizeMediaTargetPath(defaultUploadTargetPath(pageId));
-  const directoryPath = path.join(uploadsRoot, ...relativeFolder.split("/"));
-
-  try {
-    await fs.access(directoryPath);
-  } catch {
+  const content = await getContentById(pageId);
+  if (!content) {
     return [];
   }
 
-  const files = await listFilesRecursively(directoryPath);
+  const seen = new Set<string>();
+  const urls = extractMediaUrlsFromBody(content.body).filter((url) => {
+    if (seen.has(url)) {
+      return false;
+    }
+    seen.add(url);
+    return true;
+  });
+
   const assets = await Promise.all(
-    files.map(async (filePath) => {
-      const relativePath = path.relative(uploadsRoot, filePath).split(path.sep).join("/");
-      const url = mediaRelativePathToUrl(relativePath);
-      const stats = await fs.stat(filePath);
+    urls.map(async (url) => {
+      const references = await findMediaReferences(url);
+      let relativePath: string | null = null;
+      let folder: string | null = null;
+      let size: number | null = null;
+      let modifiedAt: string | null = null;
+      let missing = true;
+      let name = path.posix.basename(url);
+
+      try {
+        const normalizedRelativePath = mediaUrlToRelativePath(url);
+        const resolvedPath = path.resolve(uploadsRoot, ...normalizedRelativePath.split("/"));
+        if (!resolvedPath.startsWith(path.resolve(uploadsRoot))) {
+          throw new Error("Invalid media asset path");
+        }
+
+        const stats = await fs.stat(resolvedPath);
+        relativePath = normalizedRelativePath;
+        folder = path.posix.dirname(normalizedRelativePath);
+        size = stats.size;
+        modifiedAt = stats.mtime.toISOString();
+        missing = false;
+        name = path.basename(resolvedPath);
+      } catch {
+        // Keep unresolved media links visible for cleanup in the editor media tab.
+      }
 
       return {
-        name: path.basename(filePath),
+        name,
         url,
         relativePath,
-        folder: relativeFolder,
-        size: stats.size,
-        modifiedAt: stats.mtime.toISOString(),
-        references: await findMediaReferences(url),
+        folder,
+        size,
+        modifiedAt,
+        missing,
+        references,
       } satisfies MediaAsset;
     }),
   );
 
-  return assets.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  return assets;
+}
+
+export async function renameMediaAsset(
+  url: string,
+  newBaseName: string,
+  rewriteReferences = true,
+) {
+  const parsedUrl = splitMediaUrl(url);
+  if (!parsedUrl) {
+    throw mediaError("Invalid media URL", 400);
+  }
+
+  const normalizedBaseName = normalizeMediaBaseName(newBaseName);
+  if (!normalizedBaseName) {
+    throw mediaError("Invalid media name", 400);
+  }
+
+  const oldRelativePath = mediaUrlToRelativePath(parsedUrl.canonical);
+  const oldResolvedPath = path.resolve(uploadsRoot, ...oldRelativePath.split("/"));
+  if (!oldResolvedPath.startsWith(path.resolve(uploadsRoot))) {
+    throw mediaError("Invalid media asset path", 400);
+  }
+
+  try {
+    await fs.access(oldResolvedPath);
+  } catch {
+    throw mediaError("Media file not found", 404);
+  }
+
+  const extension = path.extname(oldRelativePath);
+  const nextFileName = `${normalizedBaseName}${extension}`;
+  const parentFolder = path.posix.dirname(oldRelativePath);
+  const nextRelativePath =
+    parentFolder === "." ? nextFileName : `${parentFolder}/${nextFileName}`;
+  const newCanonicalUrl = mediaRelativePathToUrl(nextRelativePath);
+
+  if (newCanonicalUrl === parsedUrl.canonical) {
+    return {
+      ok: true as const,
+      oldUrl: parsedUrl.canonical,
+      newUrl: newCanonicalUrl,
+      updatedReferences: 0,
+    };
+  }
+
+  const newResolvedPath = path.resolve(uploadsRoot, ...nextRelativePath.split("/"));
+  if (!newResolvedPath.startsWith(path.resolve(uploadsRoot))) {
+    throw mediaError("Invalid media asset path", 400);
+  }
+
+  try {
+    await fs.access(newResolvedPath);
+    throw mediaError("A media file with that name already exists", 409);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  await fs.rename(oldResolvedPath, newResolvedPath);
+
+  let updatedReferences = 0;
+  if (rewriteReferences) {
+    const records = await listAllContentRecords();
+    const recordsToRewrite = records
+      .map((record) => {
+        const rewritten = rewriteMediaUrlsInBody(
+          record.body,
+          parsedUrl.canonical,
+          newCanonicalUrl,
+        );
+        return {
+          record,
+          rewritten,
+        };
+      })
+      .filter(({ rewritten }) => rewritten.replacements > 0);
+
+    for (const { record, rewritten } of recordsToRewrite) {
+      await createRevision(record.id, record.raw);
+      await writeFileAtomic(record.filePath, renderMatter(record.meta, rewritten.nextBody));
+      updatedReferences += rewritten.replacements;
+    }
+
+    if (recordsToRewrite.length > 0) {
+      await rebuildIndexes();
+    }
+  }
+
+  return {
+    ok: true as const,
+    oldUrl: parsedUrl.canonical,
+    newUrl: newCanonicalUrl,
+    updatedReferences,
+  };
 }
 
 export async function removeMediaAsset(url: string, force = false) {

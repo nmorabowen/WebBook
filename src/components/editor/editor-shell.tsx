@@ -40,6 +40,7 @@ import {
   Save,
   Sigma,
   Sparkles,
+  Pencil,
   Trash2,
   Youtube,
   Columns2,
@@ -441,6 +442,29 @@ function BookIconStripe() {
   return <GripVertical className="h-4 w-4 text-[rgba(247,237,220,0.82)]" />;
 }
 
+function splitMediaName(name: string) {
+  const lastDot = name.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === name.length - 1) {
+    return {
+      baseName: name,
+      extension: "",
+    };
+  }
+
+  return {
+    baseName: name.slice(0, lastDot),
+    extension: name.slice(lastDot),
+  };
+}
+
+function mediaRelativePathFromUrl(url: string) {
+  if (!url.startsWith("/media/")) {
+    return null;
+  }
+
+  return url.slice("/media/".length).replace(/^\/+|\/+$/g, "") || null;
+}
+
 export function EditorShell({
   mode,
   path,
@@ -496,6 +520,7 @@ export function EditorShell({
     defaultEditorShortcuts,
   );
   const [pageMediaAssets, setPageMediaAssets] = useState<MediaAsset[]>(mediaAssets);
+  const [mediaRenamePendingUrl, setMediaRenamePendingUrl] = useState<string | null>(null);
   const [wikiAutocompleteContext, setWikiAutocompleteContext] =
     useState<WikiAutocompleteContext | null>(null);
   const [activeWikiAutocompleteIndex, setActiveWikiAutocompleteIndex] = useState(0);
@@ -1729,7 +1754,11 @@ export function EditorShell({
     setMathAutocompleteContext(null);
   };
 
-  const formatFileSize = (size: number) => {
+  const formatFileSize = (size: number | null) => {
+    if (size === null) {
+      return "Unknown size";
+    }
+
     if (size < 1024) {
       return `${size} B`;
     }
@@ -1739,6 +1768,14 @@ export function EditorShell({
     }
 
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatMediaUpdatedAt = (value: string | null) => {
+    if (!value) {
+      return "unknown date";
+    }
+
+    return formatRelativeDate(value);
   };
 
   const copyMediaLink = async (url: string) => {
@@ -1753,6 +1790,12 @@ export function EditorShell({
   };
 
   const deleteMediaAsset = async (asset: MediaAsset, force = false) => {
+    if (asset.missing) {
+      setSaveState("error");
+      setSaveMessage("Cannot delete missing media file");
+      return;
+    }
+
     const actionLabel = force ? "force delete" : "delete";
     const confirmed = window.confirm(
       force
@@ -1795,10 +1838,93 @@ export function EditorShell({
     }
 
     setPageMediaAssets((current) =>
-      current.filter((currentAsset) => currentAsset.relativePath !== asset.relativePath),
+      current.filter((currentAsset) => currentAsset.url !== asset.url),
     );
     setSaveState("saved");
     setSaveMessage("Media moved to trash");
+  };
+
+  const renameMediaAsset = async (asset: MediaAsset) => {
+    if (asset.missing) {
+      setSaveState("error");
+      setSaveMessage("Cannot rename missing media file");
+      return;
+    }
+
+    const { baseName } = splitMediaName(asset.name);
+    const requestedName = window.prompt("New media name (base name only)", baseName);
+    if (requestedName === null) {
+      return;
+    }
+
+    const trimmed = requestedName.trim();
+    if (!trimmed) {
+      setSaveState("error");
+      setSaveMessage("Media rename cancelled: empty name");
+      return;
+    }
+
+    setMediaRenamePendingUrl(asset.url);
+    setSaveState("saving");
+    setSaveMessage("Renaming media...");
+
+    try {
+      const response = await fetch("/api/media", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url: asset.url,
+          newBaseName: trimmed,
+          rewriteReferences: true,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            oldUrl?: string;
+            newUrl?: string;
+            updatedReferences?: number;
+          }
+        | null;
+
+      if (!response.ok || !payload?.newUrl) {
+        setSaveState("error");
+        setSaveMessage(payload?.error ?? "Media rename failed");
+        return;
+      }
+
+      const nextRelativePath = mediaRelativePathFromUrl(payload.newUrl);
+      const nextName = nextRelativePath ? nextRelativePath.split("/").at(-1) ?? asset.name : asset.name;
+      const nextFolder = nextRelativePath ? nextRelativePath.split("/").slice(0, -1).join("/") || "." : asset.folder;
+
+      setPageMediaAssets((current) =>
+        current.map((currentAsset) =>
+          currentAsset.url === asset.url
+            ? {
+                ...currentAsset,
+                name: nextName,
+                url: payload.newUrl as string,
+                relativePath: nextRelativePath ?? currentAsset.relativePath,
+                folder: nextFolder,
+              }
+            : currentAsset,
+        ),
+      );
+      const oldUrl = payload.oldUrl ?? asset.url;
+      setBody((currentBody) => currentBody.replaceAll(oldUrl, payload.newUrl as string));
+      setSaveState("saved");
+      setSaveMessage(
+        `Media renamed. Updated ${payload.updatedReferences ?? 0} link${(payload.updatedReferences ?? 0) === 1 ? "" : "s"}.`,
+      );
+    } catch {
+      setSaveState("error");
+      setSaveMessage("Media rename failed");
+    } finally {
+      setMediaRenamePendingUrl(null);
+    }
   };
 
   const toolbarActions: Array<{
@@ -2090,7 +2216,7 @@ export function EditorShell({
           {pageMediaAssets.length ? (
             pageMediaAssets.map((asset) => (
               <div
-                key={asset.relativePath}
+                key={asset.url}
                 className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3"
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
@@ -2099,7 +2225,7 @@ export function EditorShell({
                       {asset.name}
                     </p>
                     <p className="truncate text-xs text-[var(--paper-muted)]">
-                      {asset.relativePath}
+                      {asset.relativePath ?? asset.url}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -2136,7 +2262,7 @@ export function EditorShell({
 
                 <div className="grid gap-1 text-xs text-[var(--paper-muted)]">
                   <p>
-                    {formatFileSize(asset.size)} · updated {formatRelativeDate(asset.modifiedAt)}
+                    {formatFileSize(asset.size)} · updated {formatMediaUpdatedAt(asset.modifiedAt)}
                   </p>
                   {asset.references.length ? (
                     <div className="rounded-[14px] border border-[rgba(188,128,53,0.2)] bg-[rgba(188,128,53,0.08)] px-2.5 py-2">
@@ -2559,7 +2685,7 @@ export function EditorShell({
         <div>
           <p className="paper-label mb-1">Media</p>
           <p className="text-sm text-[var(--paper-muted)]">
-            Files stored for this {mode} under its media folder. Deletes move assets to trash.
+            Media links referenced by this {mode}. Missing files are shown so you can repair links.
           </p>
         </div>
         <ChevronDown className="h-4 w-4 text-[var(--paper-muted)]" />
@@ -2580,19 +2706,34 @@ export function EditorShell({
         {pageMediaAssets.length ? (
           pageMediaAssets.map((asset) => (
             <div
-              key={asset.relativePath}
+              key={asset.url}
               className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3"
             >
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[var(--paper-ink)]">
+                  <p className="truncate text-sm font-semibold text-[var(--paper-ink)] flex items-center gap-2">
                     {asset.name}
+                    {asset.missing ? (
+                      <span className="rounded-full border border-[rgba(145,47,47,0.28)] bg-[rgba(145,47,47,0.12)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--paper-danger)]">
+                        Missing
+                      </span>
+                    ) : null}
                   </p>
                   <p className="truncate text-xs text-[var(--paper-muted)]">
-                    {asset.relativePath}
+                    {asset.relativePath ?? asset.url}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="panel-icon-button"
+                    title="Rename media file"
+                    aria-label="Rename media file"
+                    onClick={() => void renameMediaAsset(asset)}
+                    disabled={asset.missing || mediaRenamePendingUrl === asset.url}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                   <button
                     type="button"
                     className="panel-icon-button"
@@ -2602,22 +2743,35 @@ export function EditorShell({
                   >
                     <Copy className="h-4 w-4" />
                   </button>
-                  <a
-                    href={asset.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="panel-icon-button"
-                    title="Open media file"
-                    aria-label="Open media file"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
+                  {asset.missing ? (
+                    <button
+                      type="button"
+                      className="panel-icon-button"
+                      title="Open media file"
+                      aria-label="Open media file"
+                      disabled
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <a
+                      href={asset.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="panel-icon-button"
+                      title="Open media file"
+                      aria-label="Open media file"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  )}
                   <button
                     type="button"
                     className="panel-icon-button text-[var(--paper-danger)]"
                     title={asset.references.length ? "Force delete media" : "Delete media"}
                     aria-label={asset.references.length ? "Force delete media" : "Delete media"}
                     onClick={() => void deleteMediaAsset(asset, asset.references.length > 0)}
+                    disabled={asset.missing}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -2625,7 +2779,12 @@ export function EditorShell({
               </div>
 
               <div className="grid gap-1 text-xs text-[var(--paper-muted)]">
-                <p>{formatFileSize(asset.size)} - updated {formatRelativeDate(asset.modifiedAt)}</p>
+                <p>{formatFileSize(asset.size)} - updated {formatMediaUpdatedAt(asset.modifiedAt)}</p>
+                {asset.missing ? (
+                  <p className="text-[var(--paper-danger)]">
+                    Referenced in content but file is missing on disk.
+                  </p>
+                ) : null}
                 {asset.references.length ? (
                   <div className="rounded-[14px] border border-[rgba(188,128,53,0.2)] bg-[rgba(188,128,53,0.08)] px-2.5 py-2">
                     <p className="font-medium text-[color:var(--paper-accent)]">
@@ -2652,7 +2811,7 @@ export function EditorShell({
           ))
         ) : (
           <p className="text-sm text-[var(--paper-muted)]">
-            No media uploaded for this {mode} yet.
+            No media references detected for this {mode} yet.
           </p>
         )}
       </div>
@@ -3139,3 +3298,4 @@ export function EditorShell({
     </div>
   );
 }
+

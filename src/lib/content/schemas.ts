@@ -200,10 +200,11 @@ export type MediaReference = Pick<ManifestEntry, "id" | "kind" | "title" | "rout
 export type MediaAsset = {
   name: string;
   url: string;
-  relativePath: string;
-  folder: string;
-  size: number;
-  modifiedAt: string;
+  relativePath: string | null;
+  folder: string | null;
+  size: number | null;
+  modifiedAt: string | null;
+  missing: boolean;
   references: MediaReference[];
 };
 
