@@ -82,6 +82,7 @@ export function PageMoveControls(props: PageMoveControlsProps) {
             bookChapters={props.bookChapters}
             initialParentPath={props.chapterPath.slice(0, -1)}
             busy={pendingAction === "move"}
+            errorMessage={errorMessage}
             onClose={() => setIsMoveDialogOpen(false)}
             onSubmit={(input) => {
               setPendingAction("move");

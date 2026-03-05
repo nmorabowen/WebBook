@@ -889,6 +889,7 @@ export function AuthoringSidebar({
           bookChapters={moveTargetBook.chapters}
           initialParentPath={moveTarget.chapterPath.slice(0, -1)}
           busy={pendingActionId?.endsWith(":move") ?? false}
+          errorMessage={actionError}
           onClose={closeMoveDialog}
           onSubmit={submitMoveDialog}
         />

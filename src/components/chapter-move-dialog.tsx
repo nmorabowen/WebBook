@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useMemo, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 import type { ChapterTreeNode } from "@/lib/content/schemas";
@@ -64,6 +65,7 @@ export function ChapterMoveDialog({
   bookChapters,
   initialParentPath,
   busy,
+  errorMessage,
   onClose,
   onSubmit,
 }: {
@@ -72,6 +74,7 @@ export function ChapterMoveDialog({
   bookChapters: ChapterTreeNode[];
   initialParentPath: string[];
   busy: boolean;
+  errorMessage?: string | null;
   onClose: () => void;
   onSubmit: (input: { parentChapterPath: string[]; order?: number }) => void;
 }) {
@@ -79,6 +82,7 @@ export function ChapterMoveDialog({
   const [selectedParentPath, setSelectedParentPath] = useState<string[]>(initialParentPath);
   const [orderValue, setOrderValue] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const currentParentPath = chapterPath.slice(0, -1);
 
   const moveDestinationOptions = useMemo(() => {
     const rootOption: MoveDestinationOption = {
@@ -127,7 +131,20 @@ export function ChapterMoveDialog({
     return findSiblings(bookChapters, selectedParentPath)?.length ?? 0;
   }, [bookChapters, selectedParentPath]);
 
-  return (
+  const sameParentSelection = chapterPathEquals(selectedParentPath, currentParentPath);
+  const maxDestinationOrder = sameParentSelection
+    ? Math.max(1, destinationSiblingCount)
+    : destinationSiblingCount + 1;
+  const isNoopSelection = sameParentSelection && orderValue.trim().length === 0;
+  const selectedParentDisplay = selectedParentPath.length
+    ? `/${selectedParentPath.join("/")}`
+    : "/";
+
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(20,15,12,0.38)] p-4">
       <div className="w-full max-w-2xl rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,250,240,0.98)] p-5 shadow-[0_25px_70px_rgba(27,17,8,0.28)]">
         <div className="flex items-start justify-between gap-3">
@@ -158,8 +175,21 @@ export function ChapterMoveDialog({
               placeholder="Search by title or path"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") {
+                  return;
+                }
+                event.preventDefault();
+                const firstOption = filteredMoveDestinations[0];
+                if (firstOption) {
+                  setSelectedParentPath(firstOption.parentPath);
+                }
+              }}
             />
           </div>
+          <p className="text-xs text-[var(--paper-muted)]">
+            Selected destination: {selectedParentDisplay}
+          </p>
           <div className="max-h-64 overflow-y-auto rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-2">
             {filteredMoveDestinations.length ? (
               <div className="grid gap-1">
@@ -210,13 +240,23 @@ export function ChapterMoveDialog({
             id="chapter-move-order"
             className="paper-input"
             inputMode="numeric"
-            placeholder={`Append at end (max ${destinationSiblingCount + 1})`}
+            placeholder={`Append at end (max ${maxDestinationOrder})`}
             value={orderValue}
             onChange={(event) => setOrderValue(event.target.value)}
           />
           {localError ? (
             <p className="text-sm text-[var(--paper-danger)]" role="alert">
               {localError}
+            </p>
+          ) : null}
+          {!localError && errorMessage ? (
+            <p className="text-sm text-[var(--paper-danger)]" role="alert">
+              {errorMessage}
+            </p>
+          ) : null}
+          {!localError && !errorMessage && isNoopSelection ? (
+            <p className="text-sm text-[var(--paper-muted)]" role="status">
+              Select a different destination or set an order to reorder within the same parent.
             </p>
           ) : null}
         </div>
@@ -242,7 +282,19 @@ export function ChapterMoveDialog({
                   setLocalError("Destination order must be a positive integer.");
                   return;
                 }
+                if (parsed > maxDestinationOrder) {
+                  setLocalError(
+                    `Destination order must be between 1 and ${maxDestinationOrder}.`,
+                  );
+                  return;
+                }
                 order = parsed;
+              }
+              if (sameParentSelection && order === undefined) {
+                setLocalError(
+                  "No move selected. Pick another destination or enter an order.",
+                );
+                return;
               }
               setLocalError(null);
               onSubmit({
@@ -250,12 +302,13 @@ export function ChapterMoveDialog({
                 order,
               });
             }}
-            disabled={busy}
+            disabled={busy || isNoopSelection}
           >
             {busy ? "Moving..." : "Move chapter"}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
