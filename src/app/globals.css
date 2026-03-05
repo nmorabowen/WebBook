@@ -760,21 +760,13 @@ button {
   min-width: 0;
 }
 
-.book-prose [data-section-indented="true"] {
+.book-prose p[data-section-indented="true"] {
   --section-indent-size: calc(
     var(--book-heading-indent-step, 0rem) * var(--section-indent-level, 0)
   );
   margin-left: var(--section-indent-size);
   width: calc(100% - var(--section-indent-size));
   max-width: calc(100% - var(--section-indent-size));
-}
-
-.book-prose ul[data-section-indented="true"],
-.book-prose ol[data-section-indented="true"] {
-  margin-left: 0;
-  width: 100%;
-  max-width: 100%;
-  padding-left: calc(1.45rem + var(--section-indent-size, 0rem));
 }
 
 .source-nav-media {

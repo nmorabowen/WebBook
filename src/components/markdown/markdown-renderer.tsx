@@ -77,24 +77,18 @@ function headingDepthFromTagName(tagName: string) {
 
 function resolveRenderedBlock(
   element: Element,
-): { renderedElement: HTMLElement | null; indentTarget: HTMLElement | null } {
+): { renderedElement: HTMLElement | null } {
   if (!(element instanceof HTMLElement)) {
-    return { renderedElement: null, indentTarget: null };
+    return { renderedElement: null };
   }
 
   if (element.classList.contains("source-nav-block")) {
     const content = element.querySelector(":scope > .source-nav-content");
     const rendered = content?.firstElementChild;
-    return {
-      renderedElement: rendered instanceof HTMLElement ? rendered : null,
-      indentTarget: content instanceof HTMLElement ? content : null,
-    };
+    return { renderedElement: rendered instanceof HTMLElement ? rendered : null };
   }
 
-  return {
-    renderedElement: element,
-    indentTarget: element,
-  };
+  return { renderedElement: element };
 }
 
 function applySectionIndentation(parent: HTMLElement, currentDepth = 1): number {
@@ -113,25 +107,30 @@ function applySectionIndentation(parent: HTMLElement, currentDepth = 1): number 
       continue;
     }
 
-    const { renderedElement, indentTarget } = resolveRenderedBlock(child);
-    if (!renderedElement || !indentTarget) {
+    const { renderedElement } = resolveRenderedBlock(child);
+    if (!renderedElement) {
       continue;
     }
+
+    renderedElement.style.removeProperty("--section-indent-level");
+    renderedElement.removeAttribute("data-section-indented");
 
     const headingDepth = headingDepthFromTagName(renderedElement.tagName);
     if (headingDepth) {
       activeDepth = headingDepth;
-      indentTarget.style.removeProperty("--section-indent-level");
-      indentTarget.removeAttribute("data-section-indented");
+      continue;
+    }
+
+    if (renderedElement.tagName !== "P") {
       continue;
     }
 
     const indentLevel = Math.max(activeDepth - 1, 0);
-    indentTarget.style.setProperty("--section-indent-level", String(indentLevel));
+    renderedElement.style.setProperty("--section-indent-level", String(indentLevel));
     if (indentLevel > 0) {
-      indentTarget.setAttribute("data-section-indented", "true");
+      renderedElement.setAttribute("data-section-indented", "true");
     } else {
-      indentTarget.removeAttribute("data-section-indented");
+      renderedElement.removeAttribute("data-section-indented");
     }
   }
 
