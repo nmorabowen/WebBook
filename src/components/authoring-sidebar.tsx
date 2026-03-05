@@ -14,7 +14,6 @@ import {
   Download,
   Ellipsis,
   FileText,
-  GripVertical,
   Home,
   LoaderCircle,
   MoveRight,
@@ -37,17 +36,6 @@ type AuthoringSidebarProps = {
   currentPath?: string;
   generalSettings?: GeneralSettings;
   session?: SessionPayload | null;
-};
-
-type DropIndicator = {
-  bookSlug: string;
-  chapterPath: string[];
-  position: "before" | "after";
-};
-
-type CollectionDropIndicator = {
-  slug: string;
-  position: "before" | "after";
 };
 
 type MoveDestinationOption = {
@@ -179,63 +167,6 @@ function defaultCollapsedBooks(
   ) as Record<string, boolean>;
 }
 
-function applyChapterOrder(
-  tree: ContentTree,
-  bookSlug: string,
-  parentChapterPath: string[],
-  chapterSlugs: string[],
-): ContentTree {
-  const reorderSiblings = (
-    chapters: ChapterTreeNode[],
-    parentPath: string[],
-  ): ChapterTreeNode[] => {
-    if (parentPath.length === 0) {
-      const chapterMap = new Map(
-        chapters.map((chapter) => [chapter.meta.slug, chapter] as const),
-      );
-      return chapterSlugs.map((slug, index) => {
-        const chapter = chapterMap.get(slug);
-        if (!chapter) {
-          throw new Error(`Missing chapter ${slug}`);
-        }
-        return {
-          ...chapter,
-          meta: {
-            ...chapter.meta,
-            order: index + 1,
-          },
-        };
-      });
-    }
-
-    const [head, ...tail] = parentPath;
-    return chapters.map((chapter) => {
-      if (chapter.meta.slug !== head) {
-        return chapter;
-      }
-
-      return {
-        ...chapter,
-        children: reorderSiblings(chapter.children, tail),
-      };
-    });
-  };
-
-  return {
-    ...tree,
-    books: tree.books.map((book) => {
-      if (book.meta.slug !== bookSlug) {
-        return book;
-      }
-
-      return {
-        ...book,
-        chapters: reorderSiblings(book.chapters, parentChapterPath),
-      };
-    }),
-  };
-}
-
 function chaptersAtPath(
   chapters: ChapterTreeNode[],
   parentPath: string[],
@@ -253,151 +184,31 @@ function chaptersAtPath(
   return chaptersAtPath(parent.children, tail);
 }
 
-function getReorderedSlugs(
-  entries: Array<{ meta: { slug: string } }>,
-  draggedSlug: string,
-  targetSlug: string,
-  position: "before" | "after",
-) {
-  const nextSlugs = entries.map((entry) => entry.meta.slug);
-  const fromIndex = nextSlugs.indexOf(draggedSlug);
-  const targetIndex = nextSlugs.indexOf(targetSlug);
-
-  if (fromIndex < 0 || targetIndex < 0) {
-    return null;
-  }
-
-  let nextIndex = position === "after" ? targetIndex + 1 : targetIndex;
-  if (fromIndex < nextIndex) {
-    nextIndex -= 1;
-  }
-
-  if (fromIndex === nextIndex) {
-    return null;
-  }
-
-  const [movedSlug] = nextSlugs.splice(fromIndex, 1);
-  nextSlugs.splice(nextIndex, 0, movedSlug);
-  return nextSlugs;
-}
-
-function getVerticalDropPosition(event: React.DragEvent<HTMLDivElement>) {
-  const bounds = event.currentTarget.getBoundingClientRect();
-  return event.clientY - bounds.top > bounds.height / 2 ? "after" : "before";
-}
-
-function applyBookOrder(tree: ContentTree, bookSlugs: string[]): ContentTree {
-  const bookMap = new Map(tree.books.map((book) => [book.meta.slug, book] as const));
-  return {
-    ...tree,
-    books: bookSlugs.map((slug, index) => {
-      const book = bookMap.get(slug);
-      if (!book) {
-        throw new Error(`Missing book ${slug}`);
-      }
-
-      return {
-        ...book,
-        meta: {
-          ...book.meta,
-          order: index + 1,
-        },
-      };
-    }),
-  };
-}
-
-function applyNoteOrder(tree: ContentTree, noteSlugs: string[]): ContentTree {
-  const noteMap = new Map(tree.notes.map((note) => [note.meta.slug, note] as const));
-  return {
-    ...tree,
-    notes: noteSlugs.map((slug, index) => {
-      const note = noteMap.get(slug);
-      if (!note) {
-        throw new Error(`Missing note ${slug}`);
-      }
-
-      return {
-        ...note,
-        meta: {
-          ...note.meta,
-          order: index + 1,
-        },
-      };
-    }),
-  };
-}
-
 function NavLink({
   href,
   label,
   active,
   chapter = false,
-  dragHandle,
-  dragging = false,
-  dropIndicator,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDrop,
   trailingAction,
-  draggableItem = false,
 }: {
   href: string;
   label: string;
   active: boolean;
   chapter?: boolean;
-  dragHandle?: React.ReactNode;
-  dragging?: boolean;
-  dropIndicator?: "before" | "after" | null;
-  onDragStart?: React.DragEventHandler<HTMLDivElement>;
-  onDragEnd?: React.DragEventHandler<HTMLDivElement>;
-  onDragOver?: React.DragEventHandler<HTMLDivElement>;
-  onDrop?: React.DragEventHandler<HTMLDivElement>;
   trailingAction?: React.ReactNode;
-  draggableItem?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        chapter && "ml-4",
-        dropIndicator === "before" &&
-          "rounded-[20px] ring-2 ring-[var(--paper-accent)] ring-offset-2 ring-offset-transparent",
-        dropIndicator === "after" &&
-          "rounded-[20px] shadow-[0_2px_0_0_var(--paper-accent)]",
-      )}
-      draggable={draggableItem}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-    >
+    <div className={cn(chapter && "ml-4")}>
       <div className="flex items-center gap-2">
         <Link
           href={href}
-          draggable={false}
           className={cn(
             "paper-nav-link min-w-0 flex-1",
             active && "paper-nav-link-active",
             chapter && "pl-3 text-[0.97rem]",
-            dragging && "opacity-55",
           )}
         >
-          <span className="flex items-start gap-2">
-            {dragHandle ? (
-              <span
-                className={cn(
-                  "inline-flex shrink-0 cursor-grab items-center pt-0.5 text-[var(--paper-muted)]",
-                  dragging && "cursor-grabbing",
-                )}
-                draggable={false}
-                aria-hidden="true"
-              >
-                {dragHandle}
-              </span>
-            ) : null}
-            <span>{label}</span>
-          </span>
+          <span>{label}</span>
         </Link>
         {trailingAction}
       </div>
@@ -475,17 +286,6 @@ export function AuthoringSidebar({
     defaultCollapsedBooks(tree, currentPath, generalSettings),
   );
   const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
-  const [draggedChapter, setDraggedChapter] = useState<{
-    bookSlug: string;
-    chapterPath: string[];
-    parentPath: string[];
-  } | null>(null);
-  const [draggedBookSlug, setDraggedBookSlug] = useState<string | null>(null);
-  const [draggedNoteSlug, setDraggedNoteSlug] = useState<string | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
-  const [bookDropIndicator, setBookDropIndicator] = useState<CollectionDropIndicator | null>(null);
-  const [noteDropIndicator, setNoteDropIndicator] = useState<CollectionDropIndicator | null>(null);
-  const [pendingBookSlug, setPendingBookSlug] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -815,183 +615,6 @@ export function AuthoringSidebar({
     });
   };
 
-  const handleDrop = (
-    bookSlug: string,
-    parentChapterPath: string[],
-    targetSlug: string,
-    position: "before" | "after",
-  ) => {
-    if (
-      !draggedChapter ||
-      draggedChapter.bookSlug !== bookSlug ||
-      draggedChapter.parentPath.join("/") !== parentChapterPath.join("/")
-    ) {
-      setDropIndicator(null);
-      return;
-    }
-
-    const book = localTree.books.find((entry) => entry.meta.slug === bookSlug);
-    if (!book) {
-      setDropIndicator(null);
-      return;
-    }
-
-    const siblings = chaptersAtPath(book.chapters, parentChapterPath);
-    if (!siblings) {
-      setDropIndicator(null);
-      return;
-    }
-
-    const nextChapterSlugs = getReorderedSlugs(
-      siblings,
-      draggedChapter.chapterPath[draggedChapter.chapterPath.length - 1] ?? "",
-      targetSlug,
-      position,
-    );
-
-    setDropIndicator(null);
-    setDraggedChapter(null);
-
-    if (!nextChapterSlugs) {
-      return;
-    }
-
-    const previousTree = localTree;
-    const nextTree = applyChapterOrder(localTree, bookSlug, parentChapterPath, nextChapterSlugs);
-    setLocalTree(nextTree);
-    setPendingBookSlug(bookSlug);
-    setActionError(null);
-
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/books/${bookSlug}/chapters/reorder`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            parentChapterPath,
-            chapterSlugs: nextChapterSlugs,
-          }),
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? "Chapter reorder failed");
-        }
-
-        router.refresh();
-      } catch (error) {
-        setLocalTree(previousTree);
-        setActionError(
-          error instanceof Error ? error.message : "Chapter reorder failed",
-        );
-      } finally {
-        setPendingBookSlug(null);
-      }
-    });
-  };
-
-  const handleBookDrop = (targetSlug: string, position: "before" | "after") => {
-    if (!draggedBookSlug) {
-      setBookDropIndicator(null);
-      return;
-    }
-
-    const nextBookSlugs = getReorderedSlugs(
-      localTree.books,
-      draggedBookSlug,
-      targetSlug,
-      position,
-    );
-
-    setBookDropIndicator(null);
-    setDraggedBookSlug(null);
-
-    if (!nextBookSlugs) {
-      return;
-    }
-
-    const previousTree = localTree;
-    setLocalTree(applyBookOrder(localTree, nextBookSlugs));
-    setActionError(null);
-
-    startTransition(async () => {
-      try {
-        const response = await fetch("/api/books/reorder", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ bookSlugs: nextBookSlugs }),
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? "Book reorder failed");
-        }
-
-        router.refresh();
-      } catch (error) {
-        setLocalTree(previousTree);
-        setActionError(error instanceof Error ? error.message : "Book reorder failed");
-      }
-    });
-  };
-
-  const handleNoteDrop = (targetSlug: string, position: "before" | "after") => {
-    if (!draggedNoteSlug) {
-      setNoteDropIndicator(null);
-      return;
-    }
-
-    const nextNoteSlugs = getReorderedSlugs(
-      localTree.notes,
-      draggedNoteSlug,
-      targetSlug,
-      position,
-    );
-
-    setNoteDropIndicator(null);
-    setDraggedNoteSlug(null);
-
-    if (!nextNoteSlugs) {
-      return;
-    }
-
-    const previousTree = localTree;
-    setLocalTree(applyNoteOrder(localTree, nextNoteSlugs));
-    setActionError(null);
-
-    startTransition(async () => {
-      try {
-        const response = await fetch("/api/notes/reorder", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ noteSlugs: nextNoteSlugs }),
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? "Note reorder failed");
-        }
-
-        router.refresh();
-      } catch (error) {
-        setLocalTree(previousTree);
-        setActionError(error instanceof Error ? error.message : "Note reorder failed");
-      }
-    });
-  };
-
   const toggleBookCollapsed = (bookSlug: string) => {
     setCollapsedBooks((current) => ({
       ...current,
@@ -1145,11 +768,6 @@ export function AuthoringSidebar({
     chapters.map((chapter) => {
       const chapterPath = `/app/books/${bookSlug}/chapters/${chapter.path.join("/")}`;
       const chapterActionSlug = encodeChapterActionSlug(bookSlug, chapter.path);
-      const indicator =
-        dropIndicator?.bookSlug === bookSlug &&
-        dropIndicator.chapterPath.join("/") === chapter.path.join("/")
-          ? dropIndicator.position
-          : null;
       const collapsed = isChapterCollapsed(bookSlug, chapter.path);
 
       return (
@@ -1183,15 +801,6 @@ export function AuthoringSidebar({
                 label={`Chapter ${chapter.meta.order}: ${chapter.meta.title}`}
                 active={currentPath === chapterPath}
                 chapter
-                draggableItem
-                dragging={
-                  draggedChapter?.bookSlug === bookSlug &&
-                  draggedChapter.chapterPath.join("/") === chapter.path.join("/")
-                }
-                dropIndicator={indicator}
-                dragHandle={
-                  <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[var(--paper-muted)]" />
-                }
                 trailingAction={
                   <ActionMenu
                     open={openMenuId === `chapter:${chapterActionSlug}`}
@@ -1217,50 +826,6 @@ export function AuthoringSidebar({
                     }
                   />
                 }
-                onDragStart={(event) => {
-                  setDraggedChapter({
-                    bookSlug,
-                    chapterPath: chapter.path,
-                    parentPath: chapter.path.slice(0, -1),
-                  });
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("text/plain", chapter.path.join("/"));
-                }}
-                onDragEnd={() => {
-                  setDraggedChapter(null);
-                  setDropIndicator(null);
-                }}
-                onDragOver={(event) => {
-                  if (
-                    !draggedChapter ||
-                    draggedChapter.bookSlug !== bookSlug ||
-                    draggedChapter.parentPath.join("/") !==
-                      chapter.path.slice(0, -1).join("/") ||
-                    draggedChapter.chapterPath.join("/") === chapter.path.join("/")
-                  ) {
-                    return;
-                  }
-
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                  const position = getVerticalDropPosition(event);
-
-                  setDropIndicator({
-                    bookSlug,
-                    chapterPath: chapter.path,
-                    position,
-                  });
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const position = getVerticalDropPosition(event);
-                  handleDrop(
-                    bookSlug,
-                    chapter.path.slice(0, -1),
-                    chapter.meta.slug,
-                    position,
-                  );
-                }}
               />
             </div>
           </div>
@@ -1492,57 +1057,11 @@ export function AuthoringSidebar({
                   )}
                 </button>
                 <div className="min-w-0 flex-1">
-                  {(() => {
-                    const indicator =
-                      bookDropIndicator?.slug === book.meta.slug
-                        ? bookDropIndicator.position
-                        : null;
-
-                    return (
                   <NavLink
                     href={`/app/books/${book.meta.slug}`}
                     label={book.meta.title}
                     active={currentPath === `/app/books/${book.meta.slug}`}
-                    dragging={draggedBookSlug === book.meta.slug}
-                    dropIndicator={indicator}
-                    draggableItem
-                    dragHandle={
-                      <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[var(--paper-muted)]" />
-                    }
-                    onDragStart={(event) => {
-                      setDraggedBookSlug(book.meta.slug);
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", book.meta.slug);
-                    }}
-                    onDragEnd={() => {
-                      setDraggedBookSlug(null);
-                      setBookDropIndicator(null);
-                    }}
-                    onDragOver={(event) => {
-                      if (!draggedBookSlug || draggedBookSlug === book.meta.slug) {
-                        return;
-                      }
-
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                      const position = getVerticalDropPosition(event);
-
-                      setBookDropIndicator({
-                        slug: book.meta.slug,
-                        position,
-                      });
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const position = getVerticalDropPosition(event);
-                      handleBookDrop(
-                        book.meta.slug,
-                        position,
-                      );
-                    }}
                   />
-                    );
-                  })()}
                 </div>
                 <ActionMenu
                   open={openMenuId === `book:${book.meta.slug}`}
@@ -1556,11 +1075,6 @@ export function AuthoringSidebar({
                   onDelete={() => runItemAction("book", book.meta.slug, "delete")}
                   onDownload={() => runItemAction("book", book.meta.slug, "download")}
                 />
-                {pendingBookSlug === book.meta.slug ? (
-                  <span className="paper-badge shrink-0 px-2.5 py-1">
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                  </span>
-                ) : null}
               </div>
 
               {!collapsedBooks[book.meta.slug] ? (
@@ -1582,57 +1096,11 @@ export function AuthoringSidebar({
           {localTree.notes.map((note) => (
             <div key={note.meta.slug} className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
-                {(() => {
-                  const indicator =
-                    noteDropIndicator?.slug === note.meta.slug
-                      ? noteDropIndicator.position
-                      : null;
-
-                  return (
                 <NavLink
                   href={`/app/notes/${note.meta.slug}`}
                   label={note.meta.title}
                   active={currentPath === `/app/notes/${note.meta.slug}`}
-                  dragging={draggedNoteSlug === note.meta.slug}
-                  dropIndicator={indicator}
-                  draggableItem
-                  dragHandle={
-                    <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[var(--paper-muted)]" />
-                  }
-                  onDragStart={(event) => {
-                    setDraggedNoteSlug(note.meta.slug);
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", note.meta.slug);
-                  }}
-                  onDragEnd={() => {
-                    setDraggedNoteSlug(null);
-                    setNoteDropIndicator(null);
-                  }}
-                    onDragOver={(event) => {
-                      if (!draggedNoteSlug || draggedNoteSlug === note.meta.slug) {
-                        return;
-                      }
-
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                      const position = getVerticalDropPosition(event);
-
-                      setNoteDropIndicator({
-                        slug: note.meta.slug,
-                        position,
-                    });
-                  }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const position = getVerticalDropPosition(event);
-                      handleNoteDrop(
-                        note.meta.slug,
-                        position,
-                      );
-                    }}
-                  />
-                  );
-                })()}
+                />
               </div>
               <ActionMenu
                 open={openMenuId === `note:${note.meta.slug}`}
