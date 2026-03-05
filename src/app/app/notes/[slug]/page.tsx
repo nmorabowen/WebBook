@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { EditorShell } from "@/components/editor/editor-shell";
+import { PageMoveControls } from "@/components/editor/page-move-controls";
 import { requireSession } from "@/lib/auth";
 import {
   getContentTree,
@@ -64,6 +65,13 @@ export default async function AppNotePage({
         mediaAssets={mediaAssets}
         updateEndpoint={`/api/notes/${loaded.content.meta.slug}`}
         shortcutScopeKey={session.username}
+        extraActions={
+          <PageMoveControls
+            mode="note"
+            slug={loaded.content.meta.slug}
+            orderedSlugs={tree.notes.map((note) => note.meta.slug)}
+          />
+        }
       />
     </AppShell>
   );

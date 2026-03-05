@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CreateChapterPanel } from "@/components/editor/create-chapter-panel";
 import { EditorShell } from "@/components/editor/editor-shell";
+import { PageMoveControls } from "@/components/editor/page-move-controls";
 import { requireSession } from "@/lib/auth";
 import {
   getBook,
@@ -104,12 +105,21 @@ export default async function AppChapterPage({
         shortcutScopeKey={session.username}
         chapterCount={siblingCountForPath(book.chapters, parentPath)}
         extraActions={
-          <CreateChapterPanel
-            bookSlug={book.meta.slug}
-            rootNextOrder={nextRootChapterOrder}
-            currentChapterPath={loaded.content.path}
-            subchapterNextOrder={nextSubchapterOrder}
-          />
+          <>
+            <PageMoveControls
+              mode="chapter"
+              bookSlug={book.meta.slug}
+              chapterPath={loaded.content.path}
+              chapterTitle={loaded.content.meta.title}
+              bookChapters={book.chapters}
+            />
+            <CreateChapterPanel
+              bookSlug={book.meta.slug}
+              rootNextOrder={nextRootChapterOrder}
+              currentChapterPath={loaded.content.path}
+              subchapterNextOrder={nextSubchapterOrder}
+            />
+          </>
         }
       />
     </AppShell>

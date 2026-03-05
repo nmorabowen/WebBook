@@ -921,6 +921,64 @@ describe("content service", () => {
     ).rejects.toThrow("Cannot move a chapter into itself or its descendants");
   });
 
+  it("treats same-parent move without order as a no-op", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Nested Move Noop",
+      slug: "nested-move-noop",
+      description: "No-op move behavior",
+      body: "# Nested Move Noop",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("nested-move-noop", {
+      title: "Part A",
+      slug: "part-a",
+      summary: "",
+      body: "# Part A",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("nested-move-noop", {
+      title: "Child One",
+      slug: "child-one",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Child One",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("nested-move-noop", {
+      title: "Child Two",
+      slug: "child-two",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Child Two",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    const moved = await service.moveChapter("nested-move-noop", {
+      chapterPath: ["part-a", "child-one"],
+      parentChapterPath: ["part-a"],
+    });
+    expect(moved.path).toEqual(["part-a", "child-one"]);
+
+    const book = await service.getBook("nested-move-noop");
+    const partA = book.chapters.find((chapter) => chapter.meta.slug === "part-a");
+    expect(partA?.children.map((chapter) => chapter.meta.slug)).toEqual([
+      "child-one",
+      "child-two",
+    ]);
+    expect(partA?.children.map((chapter) => chapter.meta.order)).toEqual([1, 2]);
+  });
+
   it("duplicates and deletes nested chapter subtrees while supporting nested content ids", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

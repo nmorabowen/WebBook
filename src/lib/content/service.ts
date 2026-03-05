@@ -2001,6 +2001,15 @@ export async function moveChapter(bookSlug: string, input: unknown) {
     throw new Error("Destination parent chapter not found");
   }
 
+  const sameParent = chapterPathsEqual(sourceParentPath, destinationParentPath);
+  if (sameParent && data.order === undefined) {
+    const currentChapter = findChapterByPath(book.chapters, chapterPath);
+    if (!currentChapter) {
+      throw new Error("Chapter not found");
+    }
+    return currentChapter;
+  }
+
   const requestedOrder = data.order ?? destinationSiblingsBeforeMove.length + 1;
   if (requestedOrder < 1 || requestedOrder > destinationSiblingsBeforeMove.length + 1) {
     throw new Error(
@@ -2008,7 +2017,6 @@ export async function moveChapter(bookSlug: string, input: unknown) {
     );
   }
 
-  const sameParent = chapterPathsEqual(sourceParentPath, destinationParentPath);
   if (sameParent && requestedOrder === sourceIndex + 1) {
     const currentChapter = findChapterByPath(book.chapters, chapterPath);
     if (!currentChapter) {

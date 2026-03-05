@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CreateChapterPanel } from "@/components/editor/create-chapter-panel";
 import { EditorShell } from "@/components/editor/editor-shell";
+import { PageMoveControls } from "@/components/editor/page-move-controls";
 import { requireSession } from "@/lib/auth";
 import {
   getContentTree,
@@ -72,10 +73,17 @@ export default async function AppBookPage({
         updateEndpoint={`/api/books/${loaded.content.meta.slug}`}
         shortcutScopeKey={session.username}
         extraActions={
-          <CreateChapterPanel
-            bookSlug={loaded.content.meta.slug}
-            rootNextOrder={nextRootChapterOrder}
-          />
+          <>
+            <PageMoveControls
+              mode="book"
+              slug={loaded.content.meta.slug}
+              orderedSlugs={tree.books.map((book) => book.meta.slug)}
+            />
+            <CreateChapterPanel
+              bookSlug={loaded.content.meta.slug}
+              rootNextOrder={nextRootChapterOrder}
+            />
+          </>
         }
       />
     </AppShell>
