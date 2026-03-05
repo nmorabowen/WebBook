@@ -92,6 +92,8 @@ export default async function AppChapterPage({
               chapterPath={loaded.content.path}
               chapterTitle={loaded.content.meta.title}
               bookChapters={book.chapters}
+              workspaceTree={tree}
+              currentPath={`/app/books/${bookSlug}/chapters/${chapterRoutePath}`}
             />
             <CreateChapterPanel
               bookSlug={book.meta.slug}

@@ -1,65 +1,18 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 import type { ChapterTreeNode } from "@/lib/content/schemas";
+import {
+  saveRecentDestinationPath,
+  useChapterMoveOptions,
+} from "@/components/workspace/use-chapter-move-options";
+import { chapterPathsEqual } from "@/components/workspace/tree-utils";
 import { cn } from "@/lib/utils";
 
-type MoveDestinationOption = {
-  key: string;
-  parentPath: string[];
-  label: string;
-  subtitle: string;
-  depth: number;
-  search: string;
-};
-
-function chapterPathEquals(left: string[], right: string[]) {
-  return (
-    left.length === right.length &&
-    left.every((segment, index) => segment === right[index])
-  );
-}
-
-function chapterPathStartsWith(pathValue: string[], prefix: string[]) {
-  return (
-    prefix.length <= pathValue.length &&
-    prefix.every((segment, index) => pathValue[index] === segment)
-  );
-}
-
-function flattenMoveDestinationOptions(
-  chapters: ChapterTreeNode[],
-  excludedPath: string[],
-  parentPath: string[] = [],
-): MoveDestinationOption[] {
-  const options: MoveDestinationOption[] = [];
-
-  for (const chapter of chapters) {
-    const nextPath = [...parentPath, chapter.meta.slug];
-    if (chapterPathStartsWith(nextPath, excludedPath)) {
-      continue;
-    }
-
-    options.push({
-      key: nextPath.join("/"),
-      parentPath: nextPath,
-      label: chapter.meta.title,
-      subtitle: nextPath.join("/"),
-      depth: nextPath.length,
-      search: `${chapter.meta.title} ${nextPath.join(" ")}`.toLowerCase(),
-    });
-
-    options.push(
-      ...flattenMoveDestinationOptions(chapter.children, excludedPath, nextPath),
-    );
-  }
-
-  return options;
-}
-
 export function ChapterMoveDialog({
+  bookSlug,
   chapterTitle,
   chapterPath,
   bookChapters,
@@ -69,6 +22,7 @@ export function ChapterMoveDialog({
   onClose,
   onSubmit,
 }: {
+  bookSlug: string;
   chapterTitle: string;
   chapterPath: string[];
   bookChapters: ChapterTreeNode[];
@@ -82,23 +36,13 @@ export function ChapterMoveDialog({
   const [selectedParentPath, setSelectedParentPath] = useState<string[]>(initialParentPath);
   const [orderValue, setOrderValue] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [activeOptionIndex, setActiveOptionIndex] = useState(0);
   const currentParentPath = chapterPath.slice(0, -1);
-
-  const moveDestinationOptions = useMemo(() => {
-    const rootOption: MoveDestinationOption = {
-      key: "",
-      parentPath: [],
-      label: "Book root",
-      subtitle: "/",
-      depth: 0,
-      search: "book root /",
-    };
-
-    return [
-      rootOption,
-      ...flattenMoveDestinationOptions(bookChapters, chapterPath),
-    ];
-  }, [bookChapters, chapterPath]);
+  const { options: moveDestinationOptions, recentOptions } = useChapterMoveOptions(
+    bookSlug,
+    bookChapters,
+    chapterPath,
+  );
 
   const filteredMoveDestinations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -110,6 +54,21 @@ export function ChapterMoveDialog({
       (option) => option.search.includes(query) || option.subtitle.includes(query),
     );
   }, [moveDestinationOptions, searchQuery]);
+
+  useEffect(() => {
+    if (!filteredMoveDestinations.length) {
+      setActiveOptionIndex(0);
+      return;
+    }
+
+    setActiveOptionIndex((current) =>
+      Math.max(0, Math.min(filteredMoveDestinations.length - 1, current)),
+    );
+  }, [filteredMoveDestinations]);
+
+  useEffect(() => {
+    setLocalError(null);
+  }, [orderValue, searchQuery, selectedParentPath]);
 
   const destinationSiblingCount = useMemo(() => {
     const findSiblings = (
@@ -131,7 +90,7 @@ export function ChapterMoveDialog({
     return findSiblings(bookChapters, selectedParentPath)?.length ?? 0;
   }, [bookChapters, selectedParentPath]);
 
-  const sameParentSelection = chapterPathEquals(selectedParentPath, currentParentPath);
+  const sameParentSelection = chapterPathsEqual(selectedParentPath, currentParentPath);
   const maxDestinationOrder = sameParentSelection
     ? Math.max(1, destinationSiblingCount)
     : destinationSiblingCount + 1;
@@ -139,6 +98,7 @@ export function ChapterMoveDialog({
   const selectedParentDisplay = selectedParentPath.length
     ? `/${selectedParentPath.join("/")}`
     : "/";
+  const selectedOrderDisplay = orderValue.trim() || "append";
 
   if (typeof document === "undefined") {
     return null;
@@ -176,28 +136,59 @@ export function ChapterMoveDialog({
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key !== "Enter") {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveOptionIndex((current) =>
+                    Math.min(filteredMoveDestinations.length - 1, current + 1),
+                  );
                   return;
                 }
-                event.preventDefault();
-                const firstOption = filteredMoveDestinations[0];
-                if (firstOption) {
-                  setSelectedParentPath(firstOption.parentPath);
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveOptionIndex((current) => Math.max(0, current - 1));
+                  return;
+                }
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  const activeOption = filteredMoveDestinations[activeOptionIndex];
+                  if (activeOption) {
+                    setSelectedParentPath(activeOption.parentPath);
+                  }
                 }
               }}
             />
           </div>
-          <p className="text-xs text-[var(--paper-muted)]">
-            Selected destination: {selectedParentDisplay}
-          </p>
+          <div className="rounded-[14px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.68)] px-3 py-2 text-xs text-[var(--paper-muted)]">
+            <p>
+              Selected destination: <span className="font-semibold">{selectedParentDisplay}</span>
+            </p>
+            <p>
+              Destination order: <span className="font-semibold">{selectedOrderDisplay}</span>
+            </p>
+          </div>
+          {recentOptions.length ? (
+            <div className="grid gap-1">
+              <p className="paper-label">Recent destinations</p>
+              <div className="flex flex-wrap gap-2">
+                {recentOptions.map((option) => (
+                  <button
+                    key={`recent-${option.key || "book-root"}`}
+                    type="button"
+                    className="paper-button paper-button-secondary px-3 py-1.5 text-xs"
+                    onClick={() => setSelectedParentPath(option.parentPath)}
+                  >
+                    {option.subtitle}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="max-h-64 overflow-y-auto rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-2">
             {filteredMoveDestinations.length ? (
               <div className="grid gap-1">
-                {filteredMoveDestinations.map((option) => {
-                  const selected = chapterPathEquals(
-                    option.parentPath,
-                    selectedParentPath,
-                  );
+                {filteredMoveDestinations.map((option, optionIndex) => {
+                  const selected = chapterPathsEqual(option.parentPath, selectedParentPath);
+                  const highlighted = optionIndex === activeOptionIndex;
                   return (
                     <button
                       key={option.key || "book-root"}
@@ -206,10 +197,15 @@ export function ChapterMoveDialog({
                         "flex items-center justify-between gap-3 rounded-[12px] px-3 py-2 text-left transition",
                         selected
                           ? "bg-[var(--paper-accent-soft)] text-[var(--paper-accent)]"
+                          : highlighted
+                            ? "bg-[rgba(132,99,63,0.14)]"
                           : "hover:bg-[rgba(132,99,63,0.12)]",
                       )}
                       style={{ paddingLeft: `${12 + option.depth * 12}px` }}
-                      onClick={() => setSelectedParentPath(option.parentPath)}
+                      onClick={() => {
+                        setSelectedParentPath(option.parentPath);
+                        setActiveOptionIndex(optionIndex);
+                      }}
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold">
@@ -297,6 +293,7 @@ export function ChapterMoveDialog({
                 return;
               }
               setLocalError(null);
+              saveRecentDestinationPath(bookSlug, selectedParentPath);
               onSubmit({
                 parentChapterPath: selectedParentPath,
                 order,

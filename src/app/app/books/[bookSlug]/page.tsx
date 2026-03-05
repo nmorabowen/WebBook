@@ -78,6 +78,8 @@ export default async function AppBookPage({
               mode="book"
               slug={loaded.content.meta.slug}
               orderedSlugs={tree.books.map((book) => book.meta.slug)}
+              workspaceTree={tree}
+              currentPath={`/app/books/${loaded.content.meta.slug}`}
             />
             <CreateChapterPanel
               bookSlug={loaded.content.meta.slug}

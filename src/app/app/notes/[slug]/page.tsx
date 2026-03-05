@@ -70,6 +70,8 @@ export default async function AppNotePage({
             mode="note"
             slug={loaded.content.meta.slug}
             orderedSlugs={tree.notes.map((note) => note.meta.slug)}
+            workspaceTree={tree}
+            currentPath={`/app/notes/${loaded.content.meta.slug}`}
           />
         }
       />

@@ -24,6 +24,7 @@ import {
 import { ChapterMoveDialog } from "@/components/chapter-move-dialog";
 import type { SessionPayload } from "@/lib/auth";
 import { ContentSearchLauncher } from "@/components/content-search-launcher";
+import { WorkspaceOrganizerLauncher } from "@/components/workspace/workspace-organizer-modal";
 import type {
   ChapterTreeNode,
   ContentTree,
@@ -565,12 +566,11 @@ export function AuthoringSidebar({
         return;
       }
 
-      const currentChapter = siblings[currentIndex];
-      const targetOrder =
-        currentChapter.meta.order + (direction === "up" ? -1 : 1);
-      if (targetOrder < 1 || targetOrder > siblings.length) {
+      const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= siblings.length) {
         return;
       }
+      const targetOrder = targetIndex + 1;
 
       setPendingActionId(actionId);
       setActionError(null);
@@ -982,6 +982,14 @@ export function AuthoringSidebar({
         buttonLabel="Search workspace"
         dialogTitle="Search the workspace"
         dialogDescription="Search books, chapters, notes, and drafts from the indexed authoring workspace."
+        workspaceTree={localTree}
+        workspaceCurrentPath={currentPath}
+        buttonClassName="justify-center"
+      />
+      <WorkspaceOrganizerLauncher
+        tree={localTree}
+        currentPath={currentPath}
+        buttonLabel="Organizer"
         buttonClassName="justify-center"
       />
 
@@ -996,6 +1004,7 @@ export function AuthoringSidebar({
 
       {moveTarget && moveTargetBook ? (
         <ChapterMoveDialog
+          bookSlug={moveTarget.bookSlug}
           chapterTitle={moveTarget.chapterTitle}
           chapterPath={moveTarget.chapterPath}
           bookChapters={moveTargetBook.chapters}

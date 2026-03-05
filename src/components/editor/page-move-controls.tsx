@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, MoveRight } from "lucide-react";
 import { ChapterMoveDialog } from "@/components/chapter-move-dialog";
-import type { ChapterTreeNode } from "@/lib/content/schemas";
+import { WorkspaceOrganizerLauncher } from "@/components/workspace/workspace-organizer-modal";
+import type { ChapterTreeNode, ContentTree } from "@/lib/content/schemas";
 
 function moveSlugByStep(slugs: string[], slug: string, direction: "up" | "down") {
   const index = slugs.indexOf(slug);
@@ -44,12 +45,16 @@ type BookMoveControls = {
   mode: "book";
   slug: string;
   orderedSlugs: string[];
+  workspaceTree: Pick<ContentTree, "books" | "notes">;
+  currentPath?: string;
 };
 
 type NoteMoveControls = {
   mode: "note";
   slug: string;
   orderedSlugs: string[];
+  workspaceTree: Pick<ContentTree, "books" | "notes">;
+  currentPath?: string;
 };
 
 type ChapterMoveControls = {
@@ -58,6 +63,8 @@ type ChapterMoveControls = {
   chapterPath: string[];
   chapterTitle: string;
   bookChapters: ChapterTreeNode[];
+  workspaceTree: Pick<ContentTree, "books" | "notes">;
+  currentPath?: string;
 };
 
 type PageMoveControlsProps = BookMoveControls | NoteMoveControls | ChapterMoveControls;
@@ -88,10 +95,11 @@ export function PageMoveControls(props: PageMoveControlsProps) {
         setErrorMessage("Chapter context unavailable for reorder.");
         return;
       }
-      const order = currentChapter.meta.order + (direction === "up" ? -1 : 1);
-      if (order < 1 || order > siblings.length) {
+      const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= siblings.length) {
         return;
       }
+      const order = targetIndex + 1;
 
       setPendingAction(direction);
       setErrorMessage(null);
@@ -164,6 +172,11 @@ export function PageMoveControls(props: PageMoveControlsProps) {
               <MoveRight className="h-4 w-4" />
               Move chapter
             </button>
+            <WorkspaceOrganizerLauncher
+              tree={props.workspaceTree}
+              currentPath={props.currentPath}
+              buttonLabel="Organizer"
+            />
           </div>
           {errorMessage ? (
             <p className="mt-2 text-sm text-[var(--paper-danger)]" role="alert">
@@ -173,6 +186,7 @@ export function PageMoveControls(props: PageMoveControlsProps) {
         </div>
         {isMoveDialogOpen ? (
           <ChapterMoveDialog
+            bookSlug={props.bookSlug}
             chapterTitle={props.chapterTitle}
             chapterPath={props.chapterPath}
             bookChapters={props.bookChapters}
@@ -295,6 +309,11 @@ export function PageMoveControls(props: PageMoveControlsProps) {
           <ArrowDown className="h-4 w-4" />
           Move down
         </button>
+        <WorkspaceOrganizerLauncher
+          tree={props.workspaceTree}
+          currentPath={props.currentPath}
+          buttonLabel="Organizer"
+        />
       </div>
       {errorMessage ? (
         <p className="mt-2 text-sm text-[var(--paper-danger)]" role="alert">
