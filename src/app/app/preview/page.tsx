@@ -4,6 +4,7 @@ import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import { TocPanel } from "@/components/toc-panel";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import { requireSession } from "@/lib/auth";
+import { getChapterNumberByPath } from "@/lib/chapter-numbering";
 import {
   getBacklinks,
   getBook,
@@ -17,7 +18,6 @@ import { extractToc } from "@/lib/markdown/shared";
 type PreviewChapterNode = {
   path: string[];
   title: string;
-  order: number;
   summary?: string;
   children: PreviewChapterNode[];
 };
@@ -28,7 +28,6 @@ function mapPreviewChapters(
   return chapters.map((chapter) => ({
     path: chapter.path,
     title: chapter.meta.title,
-    order: chapter.meta.order,
     summary: chapter.meta.summary,
     children: mapPreviewChapters(chapter.children),
   }));
@@ -155,6 +154,8 @@ export default async function EditorPreviewPage({
   if (loaded.content.kind === "chapter") {
     const chapter = loaded.content;
     const book = await getBook(chapter.meta.bookSlug);
+    const chapterNumber =
+      getChapterNumberByPath(book.chapters, chapter.path) ?? String(chapter.meta.order);
     return (
       <WorkspaceStyleFrame generalSettings={generalSettings}>
         <div
@@ -179,7 +180,7 @@ export default async function EditorPreviewPage({
                 typography={book.meta.typography}
                 generalSettings={generalSettings}
                 bookTitle={book.meta.title}
-                chapterOrder={chapter.meta.order}
+                chapterNumber={chapterNumber}
                 sourceNavigation
                 currentRoute={`/books/${book.meta.slug}/${chapter.path.join("/")}`}
               />

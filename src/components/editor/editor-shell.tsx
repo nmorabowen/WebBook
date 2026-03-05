@@ -95,8 +95,6 @@ type EditorShellProps = {
     allowExecution?: boolean;
     fontPreset?: FontPreset;
     typography?: Partial<BookTypography>;
-    order?: number;
-    parentChapterPath?: string[];
   };
   toc: TocItem[];
   backlinks: ManifestEntry[];
@@ -106,7 +104,6 @@ type EditorShellProps = {
   updateEndpoint: string;
   extraActions?: React.ReactNode;
   shortcutScopeKey?: string;
-  chapterCount?: number;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -459,7 +456,6 @@ export function EditorShell({
   updateEndpoint,
   extraActions,
   shortcutScopeKey = "workspace",
-  chapterCount,
 }: EditorShellProps) {
   const router = useRouter();
   const workspacePanelStyle = {
@@ -485,11 +481,6 @@ export function EditorShell({
       mode === "note" ? defaultNoteTypography : defaultBookTypography,
     ),
   );
-  const [order, setOrder] = useState(initialValues.order ?? 1);
-  const parentChapterPath = useMemo(
-    () => initialValues.parentChapterPath ?? [],
-    [initialValues.parentChapterPath],
-  );
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState<string>("Ready");
   const [imageUploadPending, setImageUploadPending] = useState(false);
@@ -514,7 +505,6 @@ export function EditorShell({
   const [isPending, startTransition] = useTransition();
   const uploadBasePath = useMemo(() => defaultUploadTargetPath(pageId), [pageId]);
   const contentTypographyStyle = bookTypographyStyle(typography);
-  const maxChapterOrder = Math.max(1, chapterCount ?? initialValues.order ?? 1);
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const mathAutocompletePanelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -859,21 +849,17 @@ export function EditorShell({
       description: mode === "book" ? summary : undefined,
       fontPreset,
       typography: mode === "book" || mode === "note" ? typography : undefined,
-      order: mode === "chapter" ? order : undefined,
-      parentChapterPath: mode === "chapter" ? parentChapterPath : undefined,
     }),
     [
       allowExecution,
       body,
       fontPreset,
       mode,
-      order,
       slug,
       status,
       summary,
       title,
       typography,
-      parentChapterPath,
       featured,
       coverColor,
     ],
@@ -899,9 +885,6 @@ export function EditorShell({
         setSaveState("saved");
         setSaveMessage("Autosaved");
         setPreviewVersion((current) => current + 1);
-        if (mode === "chapter" && payload.order !== initialValues.order) {
-          router.refresh();
-        }
       } catch {
         setSaveState("error");
         setSaveMessage("Autosave failed");
@@ -909,7 +892,7 @@ export function EditorShell({
     }, 1400);
 
     return () => clearTimeout(timer);
-  }, [initialValues.order, mode, payload, router, updateEndpoint]);
+  }, [payload, updateEndpoint]);
 
   useLayoutEffect(() => {
     const textarea = sourceRef.current;
@@ -2010,29 +1993,6 @@ export function EditorShell({
               onChange={(event) => setSummary(event.target.value)}
             />
           </div>
-          {mode === "chapter" ? (
-            <div>
-              <label className="paper-label" htmlFor={`${pageId}-order`}>
-                Order
-              </label>
-              <input
-                id={`${pageId}-order`}
-                className="paper-input"
-                type="number"
-                min={1}
-                max={maxChapterOrder}
-                value={order}
-                onChange={(event) =>
-                  setOrder(
-                    Math.min(
-                      maxChapterOrder,
-                      Math.max(1, Number(event.target.value) || 1),
-                    ),
-                  )
-                }
-              />
-            </div>
-          ) : null}
           <div>
             <label className="paper-label" htmlFor={`${pageId}-font-preset`}>
               Page font

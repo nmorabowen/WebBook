@@ -230,13 +230,9 @@ describe("content service", () => {
       order: 3,
     });
 
-    const moved = await service.updateChapter("moveable-chapters", "third-chapter", {
-      title: "Third Chapter",
-      slug: "third-chapter",
-      summary: "",
-      body: "# Third",
-      status: "draft",
-      allowExecution: true,
+    const moved = await service.moveChapter("moveable-chapters", {
+      chapterPath: ["third-chapter"],
+      parentChapterPath: [],
       order: 1,
     });
 
@@ -259,6 +255,129 @@ describe("content service", () => {
       "002-first-chapter.md",
       "003-second-chapter.md",
     ]);
+  });
+
+  it("updates chapter content without changing sibling order", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Content Only Update",
+      slug: "content-only-update",
+      description: "Chapter content-only updates",
+      body: "# Content Only Update",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("content-only-update", {
+      title: "First",
+      slug: "first",
+      summary: "",
+      body: "# First",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("content-only-update", {
+      title: "Second",
+      slug: "second",
+      summary: "",
+      body: "# Second",
+      status: "draft",
+      allowExecution: true,
+      order: 2,
+    });
+
+    const updated = await service.updateChapterContent("content-only-update", ["first"], {
+      title: "First Updated",
+      slug: "first",
+      summary: "Updated",
+      body: "# First Updated",
+      status: "draft",
+      allowExecution: true,
+      fontPreset: "source-serif",
+    });
+
+    expect(updated?.meta.title).toBe("First Updated");
+    expect(updated?.meta.order).toBe(1);
+    const book = await service.getBook("content-only-update");
+    expect(book.chapters.map((chapter) => chapter.meta.slug)).toEqual(["first", "second"]);
+    expect(book.chapters.map((chapter) => chapter.meta.order)).toEqual([1, 2]);
+  });
+
+  it("rejects chapter content updates that include order", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Reject Order Field",
+      slug: "reject-order-field",
+      description: "Reject structural payload fields",
+      body: "# Reject Order Field",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("reject-order-field", {
+      title: "Only Chapter",
+      slug: "only-chapter",
+      summary: "",
+      body: "# Only Chapter",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await expect(
+      service.updateChapterContent("reject-order-field", ["only-chapter"], {
+        title: "Only Chapter",
+        slug: "only-chapter",
+        summary: "",
+        body: "# Only Chapter",
+        status: "draft",
+        allowExecution: true,
+        fontPreset: "source-serif",
+        order: 1,
+      }),
+    ).rejects.toThrow("Use /api/books/{bookSlug}/chapters/move for order/parent changes");
+  });
+
+  it("rejects chapter content updates that include parentChapterPath", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Reject Parent Field",
+      slug: "reject-parent-field",
+      description: "Reject structural payload fields",
+      body: "# Reject Parent Field",
+      status: "draft",
+      theme: "paper",
+    });
+
+    await service.createChapter("reject-parent-field", {
+      title: "Only Chapter",
+      slug: "only-chapter",
+      summary: "",
+      body: "# Only Chapter",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    await expect(
+      service.updateChapterContent("reject-parent-field", ["only-chapter"], {
+        title: "Only Chapter",
+        slug: "only-chapter",
+        summary: "",
+        body: "# Only Chapter",
+        status: "draft",
+        allowExecution: true,
+        fontPreset: "source-serif",
+        parentChapterPath: [],
+      }),
+    ).rejects.toThrow("Use /api/books/{bookSlug}/chapters/move for order/parent changes");
   });
 
   it("creates a chapter for legacy books missing the chapters directory", async () => {
@@ -711,15 +830,13 @@ describe("content service", () => {
       order: 1,
     });
 
-    const moved = await service.updateChapter("nested-reorder", ["part-a", "child-one"], {
+    const moved = await service.updateChapterContent("nested-reorder", ["part-a", "child-one"], {
       title: "Child One Renamed",
       slug: "child-one-renamed",
-      parentChapterPath: ["part-a"],
       summary: "",
       body: "# Child One Renamed",
       status: "draft",
       allowExecution: true,
-      order: 2,
     });
     expect(moved?.path).toEqual(["part-a", "child-one-renamed"]);
 
@@ -731,7 +848,7 @@ describe("content service", () => {
       "chapters",
       "001-part-a",
       "chapters",
-      "002-child-one-renamed.md",
+      "001-child-one-renamed.md",
     );
     const oldChapterPath = path.join(
       process.cwd(),
@@ -751,7 +868,7 @@ describe("content service", () => {
       "chapters",
       "001-part-a",
       "chapters",
-      "002-child-one-renamed",
+      "001-child-one-renamed",
       "chapters",
       "001-leaf.md",
     );
@@ -785,7 +902,7 @@ describe("content service", () => {
         allowExecution: true,
         order: 2,
       }),
-    ).rejects.toThrow("Reparenting chapters is not supported");
+    ).rejects.toThrow("Use /api/books/{bookSlug}/chapters/move for order/parent changes");
 
     const book = await service.getBook("nested-reorder");
     const partA = book.chapters.find((chapter) => chapter.meta.slug === "part-a");
@@ -1241,19 +1358,11 @@ describe("content service", () => {
       "utf8",
     );
 
-    const moved = await service.updateChapter(
-      "move-around-broken-chapter",
-      "healthy-chapter",
-      {
-        title: "Healthy Chapter",
-        slug: "healthy-chapter",
-        summary: "",
-        body: "# Healthy",
-        status: "draft",
-        allowExecution: true,
-        order: 1,
-      },
-    );
+    const moved = await service.moveChapter("move-around-broken-chapter", {
+      chapterPath: ["healthy-chapter"],
+      parentChapterPath: [],
+      order: 1,
+    });
 
     expect(moved?.meta.order).toBe(1);
     const chapterFiles = await fs.readdir(

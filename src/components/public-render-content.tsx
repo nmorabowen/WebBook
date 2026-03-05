@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { MarkdownRenderer } from "@/components/markdown/markdown-renderer";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
+import { nestedChapterNumber } from "@/lib/chapter-numbering";
 import type { GeneralSettings, ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
 import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
@@ -10,7 +11,6 @@ import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
 type PreviewChapterItem = {
   path: string[];
   title: string;
-  order: number;
   summary?: string;
   children: PreviewChapterItem[];
 };
@@ -27,7 +27,7 @@ type PublicRenderContentProps = {
   fontPreset?: FontPreset;
   typography?: Partial<BookTypography>;
   bookTitle?: string;
-  chapterOrder?: number;
+  chapterNumber?: string;
   bookSlug?: string;
   chapters?: PreviewChapterItem[];
   sourceNavigation?: boolean;
@@ -47,7 +47,7 @@ export function PublicRenderContent({
   fontPreset = "source-serif",
   typography,
   bookTitle,
-  chapterOrder,
+  chapterNumber,
   bookSlug,
   chapters = [],
   sourceNavigation = false,
@@ -79,7 +79,7 @@ export function PublicRenderContent({
       >
         <div className="reading-width-frame grid gap-3">
           <span className="paper-badge">
-            Chapter {chapterOrder ?? 1} of {bookTitle ?? "Untitled book"}
+            Chapter {chapterNumber ?? "1"} of {bookTitle ?? "Untitled book"}
           </span>
           <h1 className="chapter-hero-title">{title}</h1>
           {summary ? <p className="chapter-hero-summary">{summary}</p> : null}
@@ -143,34 +143,38 @@ export function PublicRenderContent({
                 const renderChapterCards = (
                   items: PreviewChapterItem[],
                   depth = 0,
+                  parentNumber = "",
                 ): ReactNode =>
-                  items.map((chapter) => (
-                    <div key={chapter.path.join("/")} className="grid gap-2">
-                      <a
-                        href={bookSlug ? `/books/${bookSlug}/${chapter.path.join("/")}` : "#"}
-                        className="rounded-[22px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.52)] px-5 py-4 transition hover:-translate-y-0.5"
-                        style={{
-                          borderRadius: cardRadius,
-                          marginLeft: `${depth * 14}px`,
-                        }}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <h3 className="book-chapter-card-title">
-                            Chapter {chapter.order}: {chapter.title}
-                          </h3>
-                          <span className="paper-badge">Open</span>
-                        </div>
-                        {chapter.summary ? (
-                          <p className="book-chapter-card-summary mt-2">
-                            {chapter.summary}
-                          </p>
-                        ) : null}
-                      </a>
-                      {chapter.children.length
-                        ? renderChapterCards(chapter.children, depth + 1)
-                        : null}
-                    </div>
-                  ));
+                  items.map((chapter, chapterIndex) => {
+                    const chapterNumberValue = nestedChapterNumber(parentNumber, chapterIndex);
+                    return (
+                      <div key={chapter.path.join("/")} className="grid gap-2">
+                        <a
+                          href={bookSlug ? `/books/${bookSlug}/${chapter.path.join("/")}` : "#"}
+                          className="rounded-[22px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.52)] px-5 py-4 transition hover:-translate-y-0.5"
+                          style={{
+                            borderRadius: cardRadius,
+                            marginLeft: `${depth * 14}px`,
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <h3 className="book-chapter-card-title">
+                              Chapter {chapterNumberValue}: {chapter.title}
+                            </h3>
+                            <span className="paper-badge">Open</span>
+                          </div>
+                          {chapter.summary ? (
+                            <p className="book-chapter-card-summary mt-2">
+                              {chapter.summary}
+                            </p>
+                          ) : null}
+                        </a>
+                        {chapter.children.length
+                          ? renderChapterCards(chapter.children, depth + 1, chapterNumberValue)
+                          : null}
+                      </div>
+                    );
+                  });
 
                 return renderChapterCards(chapters);
               })()}

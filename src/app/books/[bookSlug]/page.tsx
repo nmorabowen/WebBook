@@ -17,7 +17,6 @@ import { buildPublicMetadata } from "@/lib/seo";
 type PreviewChapterNode = {
   path: string[];
   title: string;
-  order: number;
   summary?: string;
   children: PreviewChapterNode[];
 };
@@ -28,7 +27,6 @@ function mapPreviewChapters(
   return chapters.map((chapter) => ({
     path: chapter.path,
     title: chapter.meta.title,
-    order: chapter.meta.order,
     summary: chapter.meta.summary,
     children: mapPreviewChapters(chapter.children),
   }));

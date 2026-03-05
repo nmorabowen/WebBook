@@ -16,22 +16,6 @@ import { extractToc } from "@/lib/markdown/shared";
 
 export const dynamic = "force-dynamic";
 
-function siblingCountForPath(
-  chapters: Awaited<ReturnType<typeof getBook>>["chapters"],
-  parentPath: string[],
-): number {
-  if (!parentPath.length) {
-    return chapters.length;
-  }
-
-  const [head, ...tail] = parentPath;
-  const parent = chapters.find((chapter) => chapter.meta.slug === head);
-  if (!parent) {
-    return 0;
-  }
-  return siblingCountForPath(parent.children, tail);
-}
-
 export default async function AppChapterPage({
   params,
 }: {
@@ -65,7 +49,6 @@ export default async function AppChapterPage({
       0,
     ) + 1;
   const chapterRoutePath = loaded.content.path.join("/");
-  const parentPath = loaded.content.path.slice(0, -1);
 
   return (
     <AppShell
@@ -93,8 +76,6 @@ export default async function AppChapterPage({
             book.meta.fontPreset ??
             "source-serif",
           typography: book.meta.typography,
-          order: loaded.content.meta.order,
-          parentChapterPath: parentPath,
         }}
         toc={toc}
         backlinks={loaded.backlinks}
@@ -103,7 +84,6 @@ export default async function AppChapterPage({
         mediaAssets={mediaAssets}
         updateEndpoint={`/api/books/${bookSlug}/chapters/${chapterRoutePath}`}
         shortcutScopeKey={session.username}
-        chapterCount={siblingCountForPath(book.chapters, parentPath)}
         extraActions={
           <>
             <PageMoveControls

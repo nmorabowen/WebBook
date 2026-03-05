@@ -29,6 +29,7 @@ import type {
   ContentTree,
   GeneralSettings,
 } from "@/lib/content/schemas";
+import { nestedChapterNumber } from "@/lib/chapter-numbering";
 import { cn } from "@/lib/utils";
 
 type AuthoringSidebarProps = {
@@ -871,13 +872,19 @@ export function AuthoringSidebar({
     });
   };
 
-  const renderChapterTree = (bookSlug: string, chapters: ChapterTreeNode[], depth = 0) =>
+  const renderChapterTree = (
+    bookSlug: string,
+    chapters: ChapterTreeNode[],
+    depth = 0,
+    parentNumber = "",
+  ) =>
     chapters.map((chapter, chapterIndex) => {
       const chapterPath = `/app/books/${bookSlug}/chapters/${chapter.path.join("/")}`;
       const chapterActionSlug = encodeChapterActionSlug(bookSlug, chapter.path);
       const collapsed = isChapterCollapsed(bookSlug, chapter.path);
       const disableMoveUp = chapterIndex === 0;
       const disableMoveDown = chapterIndex === chapters.length - 1;
+      const chapterNumber = nestedChapterNumber(parentNumber, chapterIndex);
 
       return (
         <div key={chapterPath} className="grid gap-1">
@@ -907,7 +914,7 @@ export function AuthoringSidebar({
             <div className="min-w-0 flex-1">
               <NavLink
                 href={chapterPath}
-                label={`Chapter ${chapter.meta.order}: ${chapter.meta.title}`}
+                label={`Chapter ${chapterNumber}: ${chapter.meta.title}`}
                 active={currentPath === chapterPath}
                 chapter
                 trailingAction={
@@ -948,7 +955,7 @@ export function AuthoringSidebar({
           </div>
           {!collapsed && chapter.children.length ? (
             <div className="grid gap-1 border-l border-[rgba(73,57,38,0.12)] pl-1">
-              {renderChapterTree(bookSlug, chapter.children, depth + 1)}
+              {renderChapterTree(bookSlug, chapter.children, depth + 1, chapterNumber)}
             </div>
           ) : null}
         </div>

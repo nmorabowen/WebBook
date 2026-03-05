@@ -11,6 +11,7 @@ import {
   getPublicChapter,
   getPublicContentTree,
 } from "@/lib/content/service";
+import { getChapterNumberByPath } from "@/lib/chapter-numbering";
 import { extractToc } from "@/lib/markdown/shared";
 import { buildPublicMetadata } from "@/lib/seo";
 
@@ -68,6 +69,8 @@ export default async function ChapterPage({
   ]);
   const toc = extractToc(chapter.body);
   const chapterRoute = `/books/${book.meta.slug}/${chapter.path.join("/")}`;
+  const chapterNumber =
+    getChapterNumberByPath(book.chapters, chapter.path) ?? String(chapter.meta.order);
 
   return (
     <PublicShell
@@ -100,7 +103,7 @@ export default async function ChapterPage({
         typography={book.meta.typography}
         generalSettings={generalSettings}
         bookTitle={book.meta.title}
-        chapterOrder={chapter.meta.order}
+        chapterNumber={chapterNumber}
         currentRoute={chapterRoute}
       />
     </PublicShell>

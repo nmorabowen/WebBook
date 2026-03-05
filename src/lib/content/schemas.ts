@@ -232,17 +232,25 @@ export const saveBookSchema = z.object({
   createRevision: z.boolean().optional(),
 });
 
-export const saveChapterSchema = z.object({
+const chapterContentFields = {
   title: z.string().min(1),
   slug: z.string().min(1),
-  parentChapterPath: z.array(z.string().min(1)).default([]),
   summary: z.string().optional(),
   body: z.string(),
   status: statusSchema.default("draft"),
   allowExecution: z.boolean().default(true),
   fontPreset: fontPresetSchema.default("source-serif"),
-  order: z.number().int().positive(),
   createRevision: z.boolean().optional(),
+} as const;
+
+export const createChapterSchema = z.object({
+  ...chapterContentFields,
+  parentChapterPath: z.array(z.string().min(1)).default([]),
+  order: z.number().int().positive(),
+});
+
+export const updateChapterContentSchema = z.object({
+  ...chapterContentFields,
 });
 
 export const restoreRevisionSchema = z.object({

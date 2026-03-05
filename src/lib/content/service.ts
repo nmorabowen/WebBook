@@ -24,10 +24,11 @@ import {
   reorderChaptersSchema,
   reorderNotesSchema,
   restoreRevisionSchema,
+  createChapterSchema,
   saveBookSchema,
-  saveChapterSchema,
   saveGeneralSettingsSchema,
   saveNoteSchema,
+  updateChapterContentSchema,
   type SearchDocument,
 } from "@/lib/content/schemas";
 import {
@@ -65,6 +66,8 @@ const trashUploadsRoot = path.join(systemRoot, "trash", "uploads");
 const revisionsRoot = path.join(systemRoot, "revisions");
 const indexesRoot = path.join(systemRoot, "indexes");
 const settingsFilePath = path.join(systemRoot, "settings.json");
+const CHAPTER_MOVE_ENDPOINT_HINT =
+  "Use /api/books/{bookSlug}/chapters/move for order/parent changes";
 
 type IndexState = {
   manifest: ManifestEntry[];
@@ -1796,7 +1799,7 @@ export async function updateBook(bookSlug: string, input: unknown) {
 export async function createChapter(bookSlug: string, input: unknown) {
   ensureSafeSlugOrThrow(bookSlug);
   await fs.access(bookFilePath(bookSlug));
-  const data = saveChapterSchema.parse(input);
+  const data = createChapterSchema.parse(input);
   const parentChapterPath = normalizeChapterPathInput(data.parentChapterPath);
   const chaptersPath = await resolveParentChaptersPath(bookSlug, parentChapterPath);
   const slug = toSlug(data.slug);
@@ -1836,12 +1839,23 @@ export async function createChapter(bookSlug: string, input: unknown) {
   return parseChapterFile(filePath, bookSlug, [...parentChapterPath, slug]);
 }
 
-export async function updateChapter(
+function assertChapterContentOnlyUpdate(input: unknown) {
+  if (typeof input !== "object" || input === null) {
+    return;
+  }
+  const payload = input as Record<string, unknown>;
+  if ("order" in payload || "parentChapterPath" in payload) {
+    throw new Error(CHAPTER_MOVE_ENDPOINT_HINT);
+  }
+}
+
+export async function updateChapterContent(
   bookSlug: string,
   chapterPathInput: string | string[],
   input: unknown,
 ) {
   ensureSafeSlugOrThrow(bookSlug);
+  assertChapterContentOnlyUpdate(input);
   const chapterPath = normalizeChapterPathInput(chapterPathInput);
   const locationResolution = await resolveChapterEntryLocation(bookSlug, chapterPath);
   if (!locationResolution.ok) {
@@ -1860,21 +1874,8 @@ export async function updateChapter(
   }
 
   const existing = await parseChapterFile(existingEntry.filePath, bookSlug, location.chapterPath);
-  const hasExplicitParentPath =
-    typeof input === "object" &&
-    input !== null &&
-    Array.isArray((input as { parentChapterPath?: unknown }).parentChapterPath);
-  const data = saveChapterSchema.parse(input);
+  const data = updateChapterContentSchema.parse(input);
   const currentParentPath = location.chapterPath.slice(0, -1);
-  const requestedParentPath = hasExplicitParentPath
-    ? normalizeChapterPathInput(data.parentChapterPath)
-    : currentParentPath;
-  if (
-    requestedParentPath.length !== currentParentPath.length ||
-    requestedParentPath.some((segment, index) => segment !== currentParentPath[index])
-  ) {
-    throw new Error("Reparenting chapters is not supported");
-  }
 
   const now = new Date().toISOString();
   const nextSlug = toSlug(data.slug);
@@ -1887,14 +1888,11 @@ export async function updateChapter(
   ) {
     throw new Error("A chapter with that slug already exists in this book");
   }
-  if (data.order > chapterEntries.length) {
-    throw new Error(`Chapter order must be between 1 and ${chapterEntries.length}`);
-  }
   const nextMeta = {
     ...existing.meta,
     title: data.title,
     slug: nextSlug,
-    order: data.order,
+    order: existingEntry.order,
     summary: data.summary,
     status: data.status,
     allowExecution: data.allowExecution,
@@ -1906,18 +1904,17 @@ export async function updateChapter(
         : undefined,
   } satisfies ChapterMeta;
   const raw = renderMatter(nextMeta, data.body);
-  const requiresReorderOrRename =
-    data.order !== existingEntry.order || nextSlug !== existingEntry.slug;
+  const requiresRename = nextSlug !== existingEntry.slug;
 
-  if (requiresReorderOrRename) {
+  if (requiresRename) {
     const reorderedChapters = chapterEntries.filter(
       (chapter) => chapter.filePath !== existingEntry.filePath,
     );
 
-    reorderedChapters.splice(data.order - 1, 0, {
+    reorderedChapters.splice(existingEntry.order - 1, 0, {
       ...existingEntry,
       slug: nextSlug,
-      order: data.order,
+      order: existingEntry.order,
     });
 
     const parentDirectory = path.dirname(location.chaptersPath);
@@ -1984,7 +1981,7 @@ export async function updateChapter(
     await rebuildIndexes();
     const canonicalPath = [...currentParentPath, nextSlug];
     return parseChapterFile(
-      path.join(currentChaptersPath, `${chapterStem(data.order, nextSlug)}.md`),
+      path.join(currentChaptersPath, `${chapterStem(existingEntry.order, nextSlug)}.md`),
       bookSlug,
       canonicalPath,
     );
@@ -1996,6 +1993,14 @@ export async function updateChapter(
   await writeFileAtomic(existing.filePath, raw);
   await rebuildIndexes();
   return parseChapterFile(existing.filePath, bookSlug, location.chapterPath);
+}
+
+export async function updateChapter(
+  bookSlug: string,
+  chapterPathInput: string | string[],
+  input: unknown,
+) {
+  return updateChapterContent(bookSlug, chapterPathInput, input);
 }
 
 export async function moveChapter(bookSlug: string, input: unknown) {
@@ -2781,16 +2786,14 @@ export async function publishContentById(id: string, published: boolean) {
     if (!chapter) {
       throw new Error("Chapter not found");
     }
-    return updateChapter(bookSlug, chapter.path, {
+    return updateChapterContent(bookSlug, chapter.path, {
       title: chapter.meta.title,
       slug: chapter.meta.slug,
-      parentChapterPath: chapter.path.slice(0, -1),
       summary: chapter.meta.summary,
       body: chapter.body,
       status: published ? "published" : "draft",
       allowExecution: chapter.meta.allowExecution,
       fontPreset: chapter.meta.fontPreset ?? "source-serif",
-      order: chapter.meta.order,
       createRevision: true,
     });
   }

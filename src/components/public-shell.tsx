@@ -14,6 +14,7 @@ import { ContentSearchLauncher } from "@/components/content-search-launcher";
 import { PublicCredit } from "@/components/public-credit";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
+import { nestedChapterNumber } from "@/lib/chapter-numbering";
 import type { FontPreset } from "@/lib/font-presets";
 import {
   DEFAULT_GENERAL_SETTINGS,
@@ -208,11 +209,13 @@ export function PublicShell({
                     const renderChapterTree = (
                       chapters: typeof activeBook.chapters,
                       depth = 0,
+                      parentNumber = "",
                     ): ReactNode =>
-                      chapters.map((chapter) => {
+                      chapters.map((chapter, chapterIndex) => {
                         const chapterRoute = `/books/${activeBook.meta.slug}/${chapter.path.join("/")}`;
                         const chapterKey = chapterPathKey(activeBook.meta.slug, chapter.path);
                         const collapsed = effectiveCollapsedChapters[chapterKey] ?? false;
+                        const chapterNumber = nestedChapterNumber(parentNumber, chapterIndex);
 
                         return (
                           <div key={chapterRoute} className="grid gap-1">
@@ -254,12 +257,12 @@ export function PublicShell({
                                 )}
                               >
                                 <span>{chapter.meta.title}</span>
-                                <span className="text-xs">{chapter.meta.order}</span>
+                                <span className="text-xs">{chapterNumber}</span>
                               </Link>
                             </div>
                             {!collapsed && chapter.children.length ? (
                               <div className="grid gap-1 border-l border-[rgba(73,57,38,0.12)] pl-1">
-                                {renderChapterTree(chapter.children, depth + 1)}
+                                {renderChapterTree(chapter.children, depth + 1, chapterNumber)}
                               </div>
                             ) : null}
                           </div>

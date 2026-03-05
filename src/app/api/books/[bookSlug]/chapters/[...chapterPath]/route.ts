@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { deleteChapter, getChapter, updateChapter } from "@/lib/content/service";
+import { deleteChapter, getChapter, updateChapterContent } from "@/lib/content/service";
 
 export async function GET(
   _request: Request,
@@ -16,10 +16,19 @@ export async function PUT(
   { params }: { params: Promise<{ bookSlug: string; chapterPath: string[] }> },
 ) {
   await requireSession();
-  const { bookSlug, chapterPath } = await params;
-  return NextResponse.json(
-    await updateChapter(bookSlug, chapterPath ?? [], await request.json()),
-  );
+  try {
+    const { bookSlug, chapterPath } = await params;
+    return NextResponse.json(
+      await updateChapterContent(bookSlug, chapterPath ?? [], await request.json()),
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Chapter update failed",
+      },
+      { status: 400 },
+    );
+  }
 }
 
 export async function DELETE(
