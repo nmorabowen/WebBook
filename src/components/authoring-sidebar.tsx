@@ -2,11 +2,12 @@
 
 import JSZip from "jszip";
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart3,
   BookMarked,
+  Check,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -18,6 +19,8 @@ import {
   LoaderCircle,
   MoveRight,
   PenSquare,
+  Search,
+  X,
   Trash2,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
@@ -45,6 +48,15 @@ type DropIndicator = {
 type CollectionDropIndicator = {
   slug: string;
   position: "before" | "after";
+};
+
+type MoveDestinationOption = {
+  key: string;
+  parentPath: string[];
+  label: string;
+  subtitle: string;
+  depth: number;
+  search: string;
 };
 
 type MenuKind = "book" | "chapter" | "note";
@@ -87,6 +99,66 @@ function decodeChapterActionSlug(encoded: string) {
     bookSlug,
     chapterPath: chapterPathRaw.split("/").filter(Boolean),
   };
+}
+
+function chapterPathEquals(left: string[], right: string[]) {
+  return (
+    left.length === right.length &&
+    left.every((segment, index) => segment === right[index])
+  );
+}
+
+function chapterPathStartsWith(pathValue: string[], prefix: string[]) {
+  return (
+    prefix.length <= pathValue.length &&
+    prefix.every((segment, index) => pathValue[index] === segment)
+  );
+}
+
+function findChapterNode(chapters: ChapterTreeNode[], chapterPath: string[]): ChapterTreeNode | null {
+  if (!chapterPath.length) {
+    return null;
+  }
+
+  const [head, ...tail] = chapterPath;
+  const chapter = chapters.find((entry) => entry.meta.slug === head);
+  if (!chapter) {
+    return null;
+  }
+  if (!tail.length) {
+    return chapter;
+  }
+  return findChapterNode(chapter.children, tail);
+}
+
+function flattenMoveDestinationOptions(
+  chapters: ChapterTreeNode[],
+  excludedPath: string[],
+  parentPath: string[] = [],
+): MoveDestinationOption[] {
+  const options: MoveDestinationOption[] = [];
+
+  for (const chapter of chapters) {
+    const nextPath = [...parentPath, chapter.meta.slug];
+    if (chapterPathStartsWith(nextPath, excludedPath)) {
+      continue;
+    }
+
+    options.push({
+      key: nextPath.join("/"),
+      parentPath: nextPath,
+      label: chapter.meta.title,
+      subtitle: nextPath.join("/"),
+      depth: nextPath.length,
+      search: `${chapter.meta.title} ${nextPath.join(" ")}`.toLowerCase(),
+    });
+
+    options.push(
+      ...flattenMoveDestinationOptions(chapter.children, excludedPath, nextPath),
+    );
+  }
+
+  return options;
 }
 
 function defaultCollapsedBooks(
@@ -417,6 +489,14 @@ export function AuthoringSidebar({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<{
+    bookSlug: string;
+    chapterPath: string[];
+    chapterTitle: string;
+  } | null>(null);
+  const [moveSearchQuery, setMoveSearchQuery] = useState("");
+  const [moveSelectedParentPath, setMoveSelectedParentPath] = useState<string[]>([]);
+  const [moveOrderValue, setMoveOrderValue] = useState("");
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -607,77 +687,24 @@ export function AuthoringSidebar({
       }
 
       const { bookSlug, chapterPath } = decodeChapterActionSlug(slug);
-      const currentParentPath = chapterPath.slice(0, -1);
-      const defaultParentPath = currentParentPath.join("/");
-      const parentPathInput = window.prompt(
-        "Move to parent chapter path (empty = root). Example: parent/child",
-        defaultParentPath,
-      );
-      if (parentPathInput === null) {
+      const book = localTree.books.find((entry) => entry.meta.slug === bookSlug);
+      if (!book) {
+        setActionError("Book not found.");
         return;
       }
-
-      const parentChapterPath = parentPathInput
-        .trim()
-        .replace(/^\/+|\/+$/g, "")
-        .split("/")
-        .filter(Boolean);
-
-      const orderInput = window.prompt(
-        "Destination order (optional). Leave empty to append.",
-        "",
-      );
-      if (orderInput === null) {
+      const chapter = findChapterNode(book.chapters, chapterPath);
+      if (!chapter) {
+        setActionError("Chapter not found.");
         return;
       }
-
-      const orderValue = orderInput.trim();
-      let order: number | undefined;
-      if (orderValue.length > 0) {
-        order = Number.parseInt(orderValue, 10);
-        if (!Number.isFinite(order) || order < 1) {
-          setActionError("Destination order must be a positive integer.");
-          return;
-        }
-      }
-
-      setPendingActionId(actionId);
-      startTransition(async () => {
-        try {
-          const response = await fetch(`/api/books/${bookSlug}/chapters/move`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              chapterPath,
-              parentChapterPath,
-              order,
-            }),
-          });
-
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string; path?: string[] }
-            | null;
-
-          if (!response.ok) {
-            setActionError(payload?.error ?? "Unable to move this chapter.");
-            return;
-          }
-
-          setActionError(null);
-          if (payload?.path?.length) {
-            router.push(`/app/books/${bookSlug}/chapters/${payload.path.join("/")}`);
-          }
-          router.refresh();
-        } catch (error) {
-          setActionError(
-            error instanceof Error ? error.message : "Unable to move this chapter.",
-          );
-        } finally {
-          setPendingActionId(null);
-        }
+      setMoveTarget({
+        bookSlug,
+        chapterPath,
+        chapterTitle: chapter.meta.title,
       });
+      setMoveSearchQuery("");
+      setMoveSelectedParentPath(chapterPath.slice(0, -1));
+      setMoveOrderValue("");
       return;
     }
 
@@ -996,6 +1023,124 @@ export function AuthoringSidebar({
     });
   };
 
+  const moveTargetBook = useMemo(
+    () =>
+      moveTarget
+        ? localTree.books.find((book) => book.meta.slug === moveTarget.bookSlug) ?? null
+        : null,
+    [localTree.books, moveTarget],
+  );
+
+  const moveDestinationOptions = useMemo(() => {
+    if (!moveTarget || !moveTargetBook) {
+      return [] as MoveDestinationOption[];
+    }
+
+    const rootOption: MoveDestinationOption = {
+      key: "",
+      parentPath: [],
+      label: "Book root",
+      subtitle: "/",
+      depth: 0,
+      search: "book root /",
+    };
+
+    return [
+      rootOption,
+      ...flattenMoveDestinationOptions(moveTargetBook.chapters, moveTarget.chapterPath),
+    ];
+  }, [moveTarget, moveTargetBook]);
+
+  const filteredMoveDestinations = useMemo(() => {
+    const query = moveSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return moveDestinationOptions;
+    }
+
+    return moveDestinationOptions.filter(
+      (option) => option.search.includes(query) || option.subtitle.includes(query),
+    );
+  }, [moveDestinationOptions, moveSearchQuery]);
+
+  const destinationSiblingCount = useMemo(() => {
+    if (!moveTargetBook) {
+      return 0;
+    }
+    const siblings = chaptersAtPath(moveTargetBook.chapters, moveSelectedParentPath);
+    return siblings?.length ?? 0;
+  }, [moveTargetBook, moveSelectedParentPath]);
+
+  const closeMoveDialog = () => {
+    setMoveTarget(null);
+    setMoveSearchQuery("");
+    setMoveSelectedParentPath([]);
+    setMoveOrderValue("");
+  };
+
+  const submitMoveDialog = () => {
+    if (!moveTarget) {
+      return;
+    }
+
+    const orderInput = moveOrderValue.trim();
+    let order: number | undefined;
+    if (orderInput.length > 0) {
+      order = Number.parseInt(orderInput, 10);
+      if (!Number.isFinite(order) || order < 1) {
+        setActionError("Destination order must be a positive integer.");
+        return;
+      }
+    }
+
+    const chapterActionSlug = encodeChapterActionSlug(
+      moveTarget.bookSlug,
+      moveTarget.chapterPath,
+    );
+    const actionId = `chapter:${chapterActionSlug}:move`;
+
+    setPendingActionId(actionId);
+    setActionError(null);
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/books/${moveTarget.bookSlug}/chapters/move`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            chapterPath: moveTarget.chapterPath,
+            parentChapterPath: moveSelectedParentPath,
+            order,
+          }),
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string; path?: string[] }
+          | null;
+
+        if (!response.ok) {
+          setActionError(payload?.error ?? "Unable to move this chapter.");
+          return;
+        }
+
+        setActionError(null);
+        closeMoveDialog();
+
+        if (payload?.path?.length) {
+          router.push(`/app/books/${moveTarget.bookSlug}/chapters/${payload.path.join("/")}`);
+        }
+        router.refresh();
+      } catch (error) {
+        setActionError(
+          error instanceof Error ? error.message : "Unable to move this chapter.",
+        );
+      } finally {
+        setPendingActionId(null);
+      }
+    });
+  };
+
   const renderChapterTree = (bookSlug: string, chapters: ChapterTreeNode[], depth = 0) =>
     chapters.map((chapter) => {
       const chapterPath = `/app/books/${bookSlug}/chapters/${chapter.path.join("/")}`;
@@ -1156,6 +1301,117 @@ export function AuthoringSidebar({
           role="alert"
         >
           {actionError}
+        </div>
+      ) : null}
+
+      {moveTarget ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(20,15,12,0.38)] p-4">
+          <div className="w-full max-w-2xl rounded-[24px] border border-[var(--paper-border)] bg-[rgba(255,250,240,0.98)] p-5 shadow-[0_25px_70px_rgba(27,17,8,0.28)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="paper-label">Move chapter</p>
+                <h2 className="font-serif text-2xl leading-tight">{moveTarget.chapterTitle}</h2>
+              </div>
+              <button
+                type="button"
+                className="icon-plain-button"
+                onClick={closeMoveDialog}
+                disabled={pendingActionId?.endsWith(":move") ?? false}
+                aria-label="Close move dialog"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <label className="paper-label" htmlFor="chapter-move-search">
+                Destination parent
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--paper-muted)]" />
+                <input
+                  id="chapter-move-search"
+                  className="paper-input pl-9"
+                  placeholder="Search by title or path"
+                  value={moveSearchQuery}
+                  onChange={(event) => setMoveSearchQuery(event.target.value)}
+                />
+              </div>
+              <div className="max-h-64 overflow-y-auto rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-2">
+                {filteredMoveDestinations.length ? (
+                  <div className="grid gap-1">
+                    {filteredMoveDestinations.map((option) => {
+                      const selected = chapterPathEquals(
+                        option.parentPath,
+                        moveSelectedParentPath,
+                      );
+                      return (
+                        <button
+                          key={option.key || "book-root"}
+                          type="button"
+                          className={cn(
+                            "flex items-center justify-between gap-3 rounded-[12px] px-3 py-2 text-left transition",
+                            selected
+                              ? "bg-[var(--paper-accent-soft)] text-[var(--paper-accent)]"
+                              : "hover:bg-[rgba(132,99,63,0.12)]",
+                          )}
+                          style={{ paddingLeft: `${12 + option.depth * 12}px` }}
+                          onClick={() => setMoveSelectedParentPath(option.parentPath)}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold">
+                              {option.label}
+                            </span>
+                            <span className="block truncate text-xs text-[var(--paper-muted)]">
+                              {option.subtitle}
+                            </span>
+                          </span>
+                          {selected ? <Check className="h-4 w-4 shrink-0" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="px-2 py-1 text-sm text-[var(--paper-muted)]">
+                    No destinations match your search.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <label className="paper-label" htmlFor="chapter-move-order">
+                Destination order (optional)
+              </label>
+              <input
+                id="chapter-move-order"
+                className="paper-input"
+                inputMode="numeric"
+                placeholder={`Append at end (max ${destinationSiblingCount + 1})`}
+                value={moveOrderValue}
+                onChange={(event) => setMoveOrderValue(event.target.value)}
+              />
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="paper-button paper-button-secondary"
+                onClick={closeMoveDialog}
+                disabled={pendingActionId?.endsWith(":move") ?? false}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="paper-button"
+                onClick={submitMoveDialog}
+                disabled={pendingActionId?.endsWith(":move") ?? false}
+              >
+                {pendingActionId?.endsWith(":move") ? "Moving..." : "Move chapter"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
