@@ -463,22 +463,45 @@ function readFrontMatterOrder(raw: string) {
 }
 
 function rewriteFrontMatterScalar(raw: string, key: string, value: string | number) {
-  const frontMatterMatch = extractFrontMatter(raw);
-  if (!frontMatterMatch) {
-    throw new Error("Missing front matter block");
+  const rewriteWithRegex = () => {
+    const frontMatterMatch = extractFrontMatter(raw);
+    if (!frontMatterMatch) {
+      throw new Error("Missing front matter block");
+    }
+
+    const frontMatter = frontMatterMatch[1];
+    const pattern = new RegExp(`(^${key}:\\s*).*$`, "m");
+    if (!pattern.test(frontMatter)) {
+      throw new Error(`Missing front matter field: ${key}`);
+    }
+
+    const serializedValue =
+      typeof value === "number" ? String(value) : `'${value.replace(/'/g, "''")}'`;
+    const nextFrontMatter = frontMatter.replace(pattern, `$1${serializedValue}`);
+
+    return `${raw.slice(0, frontMatterMatch.index)}---\n${nextFrontMatter}\n---${frontMatterMatch[2]}${raw.slice(frontMatterMatch.index + frontMatterMatch[0].length)}`;
+  };
+
+  try {
+    const parsed = matter(raw);
+    if (
+      parsed.data &&
+      typeof parsed.data === "object" &&
+      Object.prototype.hasOwnProperty.call(parsed.data, key)
+    ) {
+      return renderMatter(
+        {
+          ...(parsed.data as Record<string, unknown>),
+          [key]: value,
+        },
+        parsed.content,
+      );
+    }
+  } catch {
+    return rewriteWithRegex();
   }
 
-  const frontMatter = frontMatterMatch[1];
-  const pattern = new RegExp(`(^${key}:\\s*).*$`, "m");
-  if (!pattern.test(frontMatter)) {
-    throw new Error(`Missing front matter field: ${key}`);
-  }
-
-  const serializedValue =
-    typeof value === "number" ? String(value) : `'${value.replace(/'/g, "''")}'`;
-  const nextFrontMatter = frontMatter.replace(pattern, `$1${serializedValue}`);
-
-  return `${raw.slice(0, frontMatterMatch.index)}---\n${nextFrontMatter}\n---${frontMatterMatch[2]}${raw.slice(frontMatterMatch.index + frontMatterMatch[0].length)}`;
+  return rewriteWithRegex();
 }
 
 async function listOrderedChapterFilesAtPath(chaptersPath: string) {
