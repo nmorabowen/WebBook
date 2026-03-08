@@ -79,84 +79,86 @@ export function ExecutableCodeBlock({
   };
 
   return (
-    <div className="code-block-shell rounded-[26px]">
-      <div className="code-block-header">
-        <div className="flex items-center gap-3">
-          <span className="code-block-language">{language}</span>
-          {result?.cached ? <span className="code-block-status">cached</span> : null}
-        </div>
-        <div className="flex items-center gap-2">
-          <CopyCodeButton code={code} />
-          {executionEnabled && language === "python" ? (
-            <button
-              type="button"
-              className="paper-button flex items-center gap-2 px-4 py-2 text-sm"
-              onClick={run}
-              disabled={isPending}
-            >
-              {isPending ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              Run Python
-            </button>
-          ) : (
-            <span className="code-block-status">
-              Static block
-            </span>
-          )}
-        </div>
-      </div>
-      <pre className={cn("m-0 rounded-none", !executionEnabled && "opacity-90")}>
-        <HighlightedCode code={code} language={language} />
-      </pre>
-      {result ? (
-        <div className="animate-rise grid gap-4 border-t border-[var(--paper-border)] px-4 py-4">
-          <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.18em] text-[var(--paper-muted)]">
-            <span>{result.durationMs}ms</span>
-            <span>{result.ok ? "completed" : "failed"}</span>
+    <div className="code-block-frame">
+      <div className="code-block-shell rounded-[26px]">
+        <div className="code-block-header">
+          <div className="flex items-center gap-3">
+            <span className="code-block-language">{language}</span>
+            {result?.cached ? <span className="code-block-status">cached</span> : null}
           </div>
-          {result.stdout ? (
-            <div>
-              <p className="paper-label">Stdout</p>
-              <pre className="m-0 rounded-[18px] bg-[rgba(26,23,20,0.96)] p-4 text-[var(--paper-code-text)]">
-                {result.stdout}
-              </pre>
-            </div>
-          ) : null}
-          {result.stderr ? (
-            <div>
-              <p className="paper-label text-[var(--paper-danger)]">Stderr</p>
-              <pre className="m-0 rounded-[18px] bg-[rgba(145,47,47,0.12)] p-4 text-[var(--paper-danger)]">
-                {result.stderr}
-              </pre>
-            </div>
-          ) : null}
-          {result.artifacts.length > 0 ? (
-            <div className="grid gap-3">
-              <p className="paper-label">Artifacts</p>
-              {result.artifacts.map((artifact, index) => (
-                <Image
-                  key={`${artifact.kind}-${index}`}
-                  src={`data:${artifact.kind};base64,${artifact.base64}`}
-                  alt="Python execution artifact"
-                  className="max-w-full rounded-[20px] border border-[var(--paper-border)]"
-                  width={1200}
-                  height={800}
-                  unoptimized
-                />
-              ))}
-            </div>
-          ) : null}
+          <div className="flex items-center gap-2">
+            <CopyCodeButton code={code} />
+            {executionEnabled && language === "python" ? (
+              <button
+                type="button"
+                className="paper-button flex items-center gap-2 px-4 py-2 text-sm"
+                onClick={run}
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                Run Python
+              </button>
+            ) : (
+              <span className="code-block-status">
+                Static block
+              </span>
+            )}
+          </div>
         </div>
-      ) : null}
-      {error ? (
-        <div className="flex items-center gap-2 border-t border-[var(--paper-border)] bg-[rgba(145,47,47,0.09)] px-4 py-3 text-sm text-[var(--paper-danger)]">
-          <TriangleAlert className="h-4 w-4" />
-          {error}
-        </div>
-      ) : null}
+        <pre className={cn("m-0 rounded-none", !executionEnabled && "opacity-90")}>
+          <HighlightedCode code={code} language={language} />
+        </pre>
+        {result ? (
+          <div className="animate-rise grid gap-4 border-t border-[var(--paper-border)] px-4 py-4">
+            <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.18em] text-[var(--paper-muted)]">
+              <span>{result.durationMs}ms</span>
+              <span>{result.ok ? "completed" : "failed"}</span>
+            </div>
+            {result.stdout ? (
+              <div>
+                <p className="paper-label">Stdout</p>
+                <pre className="m-0 rounded-[18px] bg-[rgba(26,23,20,0.96)] p-4 text-[var(--paper-code-text)]">
+                  {result.stdout}
+                </pre>
+              </div>
+            ) : null}
+            {result.stderr ? (
+              <div>
+                <p className="paper-label text-[var(--paper-danger)]">Stderr</p>
+                <pre className="m-0 rounded-[18px] bg-[rgba(145,47,47,0.12)] p-4 text-[var(--paper-danger)]">
+                  {result.stderr}
+                </pre>
+              </div>
+            ) : null}
+            {result.artifacts.length > 0 ? (
+              <div className="grid gap-3">
+                <p className="paper-label">Artifacts</p>
+                {result.artifacts.map((artifact, index) => (
+                  <Image
+                    key={`${artifact.kind}-${index}`}
+                    src={`data:${artifact.kind};base64,${artifact.base64}`}
+                    alt="Python execution artifact"
+                    className="max-w-full rounded-[20px] border border-[var(--paper-border)]"
+                    width={1200}
+                    height={800}
+                    unoptimized
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {error ? (
+          <div className="flex items-center gap-2 border-t border-[var(--paper-border)] bg-[rgba(145,47,47,0.09)] px-4 py-3 text-sm text-[var(--paper-danger)]">
+            <TriangleAlert className="h-4 w-4" />
+            {error}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

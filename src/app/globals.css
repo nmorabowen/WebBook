@@ -990,25 +990,18 @@ button {
   color: inherit;
 }
 
-.code-block-shell {
-  width: max(
-    0px,
-    calc(
-      100% - var(--book-code-inset-left, 0rem) - var(--book-code-inset-right, 0rem)
-    )
-  );
-  max-width: max(
-    0px,
-    calc(
-      100% - var(--book-code-inset-left, 0rem) - var(--book-code-inset-right, 0rem)
-    )
-  );
+.code-block-frame {
   margin-top: var(--book-block-spacing, 1rem);
-  margin-right: var(--book-code-inset-right, 0);
   margin-bottom: var(--book-block-spacing, 1rem);
-  margin-left: var(--book-code-inset-left, 0);
-  overflow: hidden;
   box-sizing: border-box;
+  padding-right: var(--book-code-inset-right, 0);
+  padding-left: var(--book-code-inset-left, 0);
+}
+
+.code-block-shell {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   border-radius: var(--workspace-radius-lg, 24px);
   background: var(--paper-code);
   color: var(--paper-code-text);

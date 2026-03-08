@@ -889,18 +889,20 @@ export function MarkdownRenderer({
 
             return wrapWithSourceNavigation(
               segmentSourceLine(node),
-              <div className="code-block-shell" data-source-line={segmentSourceLine(node)}>
-                <div className="code-block-header">
-                  <span className="code-block-language">{language}</span>
-                  <CopyCodeButton code={value} />
+              <div className="code-block-frame" data-source-line={segmentSourceLine(node)}>
+                <div className="code-block-shell">
+                  <div className="code-block-header">
+                    <span className="code-block-language">{language}</span>
+                    <CopyCodeButton code={value} />
+                  </div>
+                  <pre data-source-line={segmentSourceLine(node)}>
+                    <HighlightedCode
+                      code={value}
+                      language={language}
+                      className={codeClassName}
+                    />
+                  </pre>
                 </div>
-                <pre data-source-line={segmentSourceLine(node)}>
-                  <HighlightedCode
-                    code={value}
-                    language={language}
-                    className={codeClassName}
-                  />
-                </pre>
               </div>,
             );
           },

@@ -3,7 +3,7 @@
 export function PublicCredit() {
   return (
     <footer className="paper-panel public-credit-panel px-5 py-4 text-center text-sm text-[var(--paper-muted)]">
-      Created by Nicolas Mora Bowen and guppy.{" "}
+      Created by Nicolas Mora Bowen and gupi.{" "}
       <a
         href="https://github.com/nmorabowen/"
         target="_blank"
