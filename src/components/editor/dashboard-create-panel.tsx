@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { defaultNoteTypography } from "@/lib/book-typography";
 import type { GeneralSettings } from "@/lib/content/schemas";
 
 type DashboardCreatePanelProps = {
@@ -44,15 +45,7 @@ export function DashboardCreatePanel({
                   body: "# New note\n\nStart writing here.",
                   status: "draft",
                   allowExecution: true,
-                  typography: {
-                    bodyFontSize: 1,
-                    bodyLineHeight: 1,
-                    headingBaseSize: 2.5,
-                    headingScale: 1.25,
-                    headingIndentStep: 0,
-                    paragraphSpacing: 1,
-                    contentWidth: 75,
-                  },
+                  typography: defaultNoteTypography,
                 },
           ),
         });

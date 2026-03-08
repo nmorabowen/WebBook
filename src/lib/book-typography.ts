@@ -32,7 +32,7 @@ export const defaultBookTypography: BookTypography = {
 
 export const defaultNoteTypography: BookTypography = {
   bodyFontSize: 1,
-  bodyLineHeight: 1,
+  bodyLineHeight: 1.05,
   headingBaseSize: 2.5,
   headingScale: 1.25,
   headingIndentStep: 0,
