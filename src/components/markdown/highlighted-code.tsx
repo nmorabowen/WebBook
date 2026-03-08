@@ -142,6 +142,87 @@ const CPP_TYPES = new Set([
   "optional",
 ]);
 
+const BASH_KEYWORDS = new Set([
+  "if",
+  "then",
+  "else",
+  "elif",
+  "fi",
+  "for",
+  "while",
+  "until",
+  "do",
+  "done",
+  "case",
+  "esac",
+  "in",
+  "function",
+  "select",
+  "time",
+  "coproc",
+  "local",
+  "readonly",
+  "declare",
+  "typeset",
+  "export",
+  "unset",
+  "return",
+  "break",
+  "continue",
+  "shift",
+  "source",
+]);
+
+const POWERSHELL_KEYWORDS = new Set([
+  "if",
+  "elseif",
+  "else",
+  "switch",
+  "foreach",
+  "for",
+  "while",
+  "do",
+  "until",
+  "function",
+  "filter",
+  "param",
+  "begin",
+  "process",
+  "end",
+  "return",
+  "break",
+  "continue",
+  "try",
+  "catch",
+  "finally",
+  "trap",
+  "throw",
+  "class",
+  "enum",
+  "in",
+]);
+
+const TCL_KEYWORDS = new Set([
+  "if",
+  "elseif",
+  "else",
+  "then",
+  "for",
+  "foreach",
+  "while",
+  "switch",
+  "proc",
+  "return",
+  "break",
+  "continue",
+  "set",
+  "unset",
+  "global",
+  "variable",
+  "namespace",
+  "expr",
+]);
+
 function normalizeLanguage(language?: string) {
   const normalized = (language ?? "text").toLowerCase();
   if (["python", "py"].includes(normalized)) {
@@ -150,6 +231,18 @@ function normalizeLanguage(language?: string) {
 
   if (["c++", "cpp", "cxx", "cc", "hpp", "hxx"].includes(normalized)) {
     return "cpp";
+  }
+
+  if (["bash", "sh", "shell", "zsh"].includes(normalized)) {
+    return "bash";
+  }
+
+  if (["powershell", "pwsh", "ps1", "psm1"].includes(normalized)) {
+    return "powershell";
+  }
+
+  if (["tcl", "tk"].includes(normalized)) {
+    return "tcl";
   }
 
   return "text";
@@ -183,6 +276,47 @@ function consumeIdentifier(text: string) {
 function consumeNumber(text: string) {
   const match = text.match(/^(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
   return match?.[0] ?? "";
+}
+
+function consumeCommandIdentifier(text: string) {
+  const match = text.match(/^[A-Za-z_][A-Za-z0-9_.:-]*/);
+  return match?.[0] ?? "";
+}
+
+function consumeShellVariable(text: string, language: "bash" | "powershell" | "tcl") {
+  if (language === "powershell") {
+    const braced = text.match(/^\$\{[^}]+\}/)?.[0];
+    if (braced) {
+      return braced;
+    }
+
+    const scoped =
+      text.match(/^\$[A-Za-z_][A-Za-z0-9_]*(?::[A-Za-z_][A-Za-z0-9_]*)?/)?.[0];
+    if (scoped) {
+      return scoped;
+    }
+  }
+
+  if (language === "bash") {
+    const braced = text.match(/^\$\{[^}]+\}/)?.[0];
+    if (braced) {
+      return braced;
+    }
+
+    const positional = text.match(/^\$(?:[#?*!@$0-9]|[A-Za-z_][A-Za-z0-9_]*)/)?.[0];
+    if (positional) {
+      return positional;
+    }
+  }
+
+  if (language === "tcl") {
+    const variable = text.match(/^\$[A-Za-z_][A-Za-z0-9_:]*/)?.[0];
+    if (variable) {
+      return variable;
+    }
+  }
+
+  return "";
 }
 
 function tokenizePythonLine(line: string): Token[] {
@@ -331,6 +465,122 @@ function tokenizeCppLine(line: string): Token[] {
   return tokens;
 }
 
+function tokenizeCommandLine(
+  line: string,
+  language: "bash" | "powershell" | "tcl",
+): Token[] {
+  const tokens: Token[] = [];
+  let cursor = 0;
+  let expectCommand = true;
+  let expectFunction = false;
+  const keywords =
+    language === "bash"
+      ? BASH_KEYWORDS
+      : language === "powershell"
+        ? POWERSHELL_KEYWORDS
+        : TCL_KEYWORDS;
+
+  while (cursor < line.length) {
+    const slice = line.slice(cursor);
+
+    if (slice.startsWith("#")) {
+      tokens.push({ kind: "comment", value: slice });
+      break;
+    }
+
+    if (slice.startsWith('"') || slice.startsWith("'")) {
+      const stringValue = takeQuoted(slice, slice[0]);
+      tokens.push({ kind: "string", value: stringValue });
+      cursor += stringValue.length;
+      expectCommand = false;
+      continue;
+    }
+
+    if (language === "powershell" && slice.startsWith("`")) {
+      const escaped = slice.match(/^`./)?.[0] ?? "`";
+      tokens.push({ kind: "string", value: escaped });
+      cursor += escaped.length;
+      expectCommand = false;
+      continue;
+    }
+
+    const variableValue = consumeShellVariable(slice, language);
+    if (variableValue) {
+      tokens.push({ kind: "type", value: variableValue });
+      cursor += variableValue.length;
+      expectCommand = false;
+      continue;
+    }
+
+    const numberValue = consumeNumber(slice);
+    if (numberValue) {
+      tokens.push({ kind: "number", value: numberValue });
+      cursor += numberValue.length;
+      expectCommand = false;
+      continue;
+    }
+
+    if (
+      slice.startsWith("&&") ||
+      slice.startsWith("||") ||
+      slice.startsWith("|") ||
+      slice.startsWith(";")
+    ) {
+      const operator = slice.startsWith("&&") || slice.startsWith("||") ? slice.slice(0, 2) : slice[0];
+      tokens.push({ kind: "plain", value: operator });
+      cursor += operator.length;
+      expectCommand = true;
+      continue;
+    }
+
+    if (/^\s/.test(slice[0])) {
+      tokens.push({ kind: "plain", value: slice[0] });
+      cursor += 1;
+      continue;
+    }
+
+    if (slice.startsWith("-")) {
+      const option = slice.match(/^-[A-Za-z0-9_.:-]+/)?.[0] ?? "-";
+      tokens.push({ kind: "decorator", value: option });
+      cursor += option.length;
+      expectCommand = false;
+      continue;
+    }
+
+    const identifier = consumeCommandIdentifier(slice) || consumeIdentifier(slice);
+    if (identifier) {
+      if (expectFunction) {
+        tokens.push({ kind: "function", value: identifier });
+        expectFunction = false;
+        cursor += identifier.length;
+        expectCommand = false;
+        continue;
+      }
+
+      if (keywords.has(identifier)) {
+        tokens.push({ kind: "keyword", value: identifier });
+        expectFunction =
+          (language === "bash" && identifier === "function") ||
+          (language === "powershell" && identifier === "function") ||
+          (language === "tcl" && identifier === "proc");
+      } else if (expectCommand) {
+        tokens.push({ kind: "function", value: identifier });
+      } else {
+        tokens.push({ kind: "plain", value: identifier });
+      }
+
+      cursor += identifier.length;
+      expectCommand = false;
+      continue;
+    }
+
+    tokens.push({ kind: "plain", value: slice[0] });
+    cursor += 1;
+  }
+
+  return tokens;
+}
+
 function tokenizeLine(line: string, language: string) {
   if (language === "python") {
     return tokenizePythonLine(line);
@@ -338,6 +588,10 @@ function tokenizeLine(line: string, language: string) {
 
   if (language === "cpp") {
     return tokenizeCppLine(line);
+  }
+
+  if (language === "bash" || language === "powershell" || language === "tcl") {
+    return tokenizeCommandLine(line, language);
   }
 
   return [{ kind: "plain", value: line }];
