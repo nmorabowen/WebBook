@@ -2543,6 +2543,14 @@ export function EditorShell({
             fallback: defaultTypography.contentWidth,
             format: (value) => `${value.toFixed(0)}ch`,
           })}
+          {renderTypographyControl({
+            keyName: "codeBlockFontSize",
+            label: "Code block size",
+            description: "Scales fenced code blocks so command snippets can read tighter or larger.",
+            inputId: `${pageId}-code-block-size`,
+            fallback: defaultTypography.codeBlockFontSize,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
         </div>
       </details>
         );

@@ -8,6 +8,7 @@ export type BookTypography = {
   headingIndentStep: number;
   paragraphSpacing: number;
   contentWidth: number;
+  codeBlockFontSize: number;
 };
 
 export const bookTypographyLimits = {
@@ -18,6 +19,7 @@ export const bookTypographyLimits = {
   headingIndentStep: { min: 0, max: 3, step: 0.05 },
   paragraphSpacing: { min: 0.5, max: 2.4, step: 0.05 },
   contentWidth: { min: 32, max: 180, step: 1 },
+  codeBlockFontSize: { min: 0.6, max: 1.1, step: 0.02 },
 } as const;
 
 export const defaultBookTypography: BookTypography = {
@@ -28,6 +30,7 @@ export const defaultBookTypography: BookTypography = {
   headingIndentStep: 0,
   paragraphSpacing: 1,
   contentWidth: 46,
+  codeBlockFontSize: 0.78,
 };
 
 export const defaultNoteTypography: BookTypography = {
@@ -38,6 +41,7 @@ export const defaultNoteTypography: BookTypography = {
   headingIndentStep: 0,
   paragraphSpacing: 1,
   contentWidth: 75,
+  codeBlockFontSize: 0.78,
 };
 
 export function normalizeBookTypography(
@@ -95,6 +99,13 @@ export function normalizeBookTypography(
         Number.isFinite(contentWidth) ? contentWidth : fallbackTypography.contentWidth,
       ),
     ),
+    codeBlockFontSize: Math.max(
+      bookTypographyLimits.codeBlockFontSize.min,
+      Math.min(
+        bookTypographyLimits.codeBlockFontSize.max,
+        Number(input?.codeBlockFontSize ?? fallbackTypography.codeBlockFontSize),
+      ),
+    ),
   };
 }
 
@@ -117,5 +128,6 @@ export function bookTypographyStyle(
     "--book-heading-indent-step": `${typography.headingIndentStep}rem`,
     "--book-block-spacing": `${typography.paragraphSpacing}rem`,
     "--book-content-width": `${typography.contentWidth}ch`,
+    "--book-code-size": `${typography.codeBlockFontSize}rem`,
   };
 }

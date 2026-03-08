@@ -762,7 +762,13 @@ async function parseBookFile(filePath: string) {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = matter(raw);
-    const meta = bookMetaSchema.parse(parsed.data);
+    const parsedMeta = bookMetaSchema.parse(parsed.data);
+    const meta = {
+      ...parsedMeta,
+      typography: parsedMeta.typography
+        ? normalizeBookTypography(parsedMeta.typography, defaultBookTypography)
+        : undefined,
+    };
     const chaptersDir = path.join(path.dirname(filePath), "chapters");
     const chapters = await parseChapterDirectory(chaptersDir, meta.slug, []);
 
@@ -840,7 +846,13 @@ async function parseNoteFile(filePath: string) {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = matter(raw);
-    const meta = noteMetaSchema.parse(parsed.data);
+    const parsedMeta = noteMetaSchema.parse(parsed.data);
+    const meta = {
+      ...parsedMeta,
+      typography: parsedMeta.typography
+        ? normalizeBookTypography(parsedMeta.typography, defaultNoteTypography)
+        : undefined,
+    };
     return {
       id: noteId(meta.slug),
       kind: "note" as const,

@@ -531,6 +531,7 @@ describe("content service", () => {
         headingIndentStep: 0.45,
         paragraphSpacing: 1.25,
         contentWidth: 52,
+        codeBlockFontSize: 0.76,
       },
     });
 
@@ -554,6 +555,7 @@ describe("content service", () => {
     expect(duplicate?.meta.fontPreset).toBe("oswald");
     expect(duplicate?.meta.typography?.headingIndentStep).toBe(0.45);
     expect(duplicate?.meta.typography?.contentWidth).toBe(52);
+    expect(duplicate?.meta.typography?.codeBlockFontSize).toBe(0.76);
   });
 
   it("keeps draft content out of public manifests, backlinks, and search", async () => {
@@ -1856,6 +1858,7 @@ describe("content service", () => {
         headingIndentStep: 0.6,
         paragraphSpacing: 1.35,
         contentWidth: 64,
+        codeBlockFontSize: 0.8,
       },
     });
 
@@ -1875,6 +1878,7 @@ describe("content service", () => {
         headingIndentStep: 0.5,
         paragraphSpacing: 1.2,
         contentWidth: 58,
+        codeBlockFontSize: 0.74,
       },
     });
 
@@ -1885,10 +1889,13 @@ describe("content service", () => {
     expect(note?.meta.typography?.bodyFontSize).toBe(1.16);
     expect(note?.meta.typography?.headingIndentStep).toBe(0.5);
     expect(note?.meta.typography?.contentWidth).toBe(58);
+    expect(note?.meta.typography?.codeBlockFontSize).toBe(0.74);
     expect(publicNote?.meta.typography?.headingBaseSize).toBe(3.9);
     expect(publicNote?.meta.typography?.paragraphSpacing).toBe(1.2);
+    expect(publicNote?.meta.typography?.codeBlockFontSize).toBe(0.74);
     expect(duplicate?.meta.typography?.bodyLineHeight).toBe(1.95);
     expect(duplicate?.meta.typography?.contentWidth).toBe(58);
+    expect(duplicate?.meta.typography?.codeBlockFontSize).toBe(0.74);
   });
 
   it("keeps at most three featured books and evicts the oldest featured selection", async () => {

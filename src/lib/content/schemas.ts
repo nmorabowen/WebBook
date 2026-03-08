@@ -47,6 +47,11 @@ export const bookTypographySchema = z.object({
     .number()
     .min(bookTypographyLimits.contentWidth.min)
     .max(bookTypographyLimits.contentWidth.max),
+  codeBlockFontSize: z
+    .number()
+    .min(bookTypographyLimits.codeBlockFontSize.min)
+    .max(bookTypographyLimits.codeBlockFontSize.max)
+    .optional(),
 });
 
 export const baseMetaSchema = z.object({
