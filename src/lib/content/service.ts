@@ -309,7 +309,7 @@ async function enforceFeaturedBookLimit() {
   const books = await listBookRecords();
   const now = new Date().toISOString();
   const featuredBooks = books
-    .filter((book): book is BookRecord => book !== null && book.meta.featured === true)
+    .filter((book) => book.meta.featured === true)
     .sort((left, right) => featuredTimestamp(right) - featuredTimestamp(left));
 
   await Promise.all(
@@ -758,12 +758,12 @@ function buildManifestAliasLookup(manifest: ManifestEntry[]) {
   return aliasLookup;
 }
 
-async function parseBookFile(filePath: string) {
+async function parseBookFile(filePath: string): Promise<BookRecord> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = matter(raw);
     const parsedMeta = bookMetaSchema.parse(parsed.data);
-    const meta = {
+    const meta: BookMeta = {
       ...parsedMeta,
       typography: parsedMeta.typography
         ? normalizeBookTypography(parsedMeta.typography, defaultBookTypography)
@@ -842,12 +842,12 @@ async function parseChapterFile(
   }
 }
 
-async function parseNoteFile(filePath: string) {
+async function parseNoteFile(filePath: string): Promise<NoteRecord> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = matter(raw);
     const parsedMeta = noteMetaSchema.parse(parsed.data);
-    const meta = {
+    const meta: NoteMeta = {
       ...parsedMeta,
       typography: parsedMeta.typography
         ? normalizeBookTypography(parsedMeta.typography, defaultNoteTypography)
@@ -867,7 +867,7 @@ async function parseNoteFile(filePath: string) {
   }
 }
 
-async function listBookRecords() {
+async function listBookRecords(): Promise<BookRecord[]> {
   const bookEntries = await readDirectoryEntries(booksRoot);
   const books = (
     await Promise.all(
@@ -889,7 +889,7 @@ async function listBookRecords() {
   );
 }
 
-async function listNoteRecords() {
+async function listNoteRecords(): Promise<NoteRecord[]> {
   const noteEntries = await readDirectoryEntries(notesRoot);
   const notes = (
     await Promise.all(
