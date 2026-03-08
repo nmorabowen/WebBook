@@ -139,9 +139,9 @@ export function PageMoveControls(props: PageMoveControlsProps) {
 
     return (
       <>
-        <div className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-3">
+        <div className="page-move-controls rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-3">
           <p className="paper-label">Move/Reorder</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="page-move-controls-actions mt-2 flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="paper-button paper-button-secondary inline-flex items-center gap-2"
@@ -288,9 +288,9 @@ export function PageMoveControls(props: PageMoveControlsProps) {
   };
 
   return (
-    <div className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-3">
+    <div className="page-move-controls rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-3">
       <p className="paper-label">Move/Reorder</p>
-      <div className="mt-2 flex items-center gap-2">
+      <div className="page-move-controls-actions mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
           className="paper-button paper-button-secondary inline-flex items-center gap-2"

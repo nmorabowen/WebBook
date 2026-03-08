@@ -2081,7 +2081,7 @@ export function EditorShell({
       {extraActions}
 
       <div
-        className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+        className="editor-inspector-card border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
         style={workspacePanelStyle}
       >
         <p className="paper-label">Page settings</p>
@@ -2153,7 +2153,7 @@ export function EditorShell({
 
       {mode === "book" ? (
         <div
-          className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+          className="editor-inspector-card border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
           style={workspacePanelStyle}
         >
           <p className="paper-label">Landing page</p>
@@ -2171,19 +2171,19 @@ export function EditorShell({
       ) : null}
 
       <div
-        className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
+        className="editor-inspector-card border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
         style={workspacePanelStyle}
       >
         <p className="paper-label">Context</p>
         <div className="grid gap-3">
           <div className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3">
             <p className="text-xs uppercase tracking-[0.18em] text-[var(--paper-muted)]">Path</p>
-            <p className="mt-1 text-sm font-medium">{path}</p>
+            <p className="mt-1 break-words text-sm font-medium">{path}</p>
           </div>
           {publicRoute ? (
             <Link
               href={publicRoute}
-              className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3 text-sm text-[var(--paper-muted)] transition hover:text-[var(--paper-ink)]"
+              className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3 text-sm text-[var(--paper-muted)] transition hover:text-[var(--paper-ink)] break-words"
             >
               Public route: {publicRoute}
             </Link>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, PanelLeft } from "lucide-react";
 import { AuthoringSidebar } from "@/components/authoring-sidebar";
 import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import type { SessionPayload } from "@/lib/auth";
@@ -9,6 +9,7 @@ import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
 import { cn } from "@/lib/utils";
 
 const RIGHT_PANEL_STORAGE_KEY = "webbook.app-shell.right-panel-collapsed";
+const LEFT_PANEL_STORAGE_KEY = "webbook.app-shell.left-panel-collapsed";
 
 type AppShellProps = {
   tree: ContentTree;
@@ -36,11 +37,30 @@ export function AppShell({
 
     return window.localStorage.getItem(RIGHT_PANEL_STORAGE_KEY) === "true";
   });
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    const stored = window.localStorage.getItem(LEFT_PANEL_STORAGE_KEY);
+    if (stored !== null) {
+      return stored === "true";
+    }
+
+    return window.innerWidth < 900;
+  });
 
   const toggleRightPanel = () => {
     setIsRightPanelCollapsed((current) => {
       const next = !current;
       window.localStorage.setItem(RIGHT_PANEL_STORAGE_KEY, String(next));
+      return next;
+    });
+  };
+  const toggleLeftPanel = () => {
+    setIsLeftPanelCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(LEFT_PANEL_STORAGE_KEY, String(next));
       return next;
     });
   };
@@ -56,7 +76,10 @@ export function AppShell({
           style={{ gap: "var(--workspace-tile-spacing)" }}
         >
           <aside
-            className="paper-panel paper-panel-strong flex flex-col gap-6 p-6"
+            className={cn(
+              "paper-panel paper-panel-strong app-shell-sidebar flex flex-col gap-6 p-6",
+              isLeftPanelCollapsed && "is-collapsed",
+            )}
             style={{ borderRadius: "var(--workspace-corner-radius)" }}
           >
             <AuthoringSidebar
@@ -71,8 +94,17 @@ export function AppShell({
             className="paper-panel paper-panel-strong p-5 md:p-7"
             style={{ borderRadius: "var(--workspace-corner-radius)" }}
           >
+            <button
+              type="button"
+              className="app-shell-panel-toggle app-shell-mobile-toggle mb-5"
+              onClick={toggleLeftPanel}
+              aria-expanded={!isLeftPanelCollapsed}
+              aria-label={isLeftPanelCollapsed ? "Show authoring sidebar" : "Hide authoring sidebar"}
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
             {rightPanel ? (
-              <div className="mb-5 flex justify-end">
+              <div className="mb-5 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   className="app-shell-panel-toggle"
@@ -97,7 +129,7 @@ export function AppShell({
             style={{ borderRadius: "var(--workspace-corner-radius)" }}
           >
             {rightPanel ? (
-              <div className={cn("grid gap-5", rightPanelClassName)}>
+              <div className={cn("app-shell-inspector-stack grid gap-5", rightPanelClassName)}>
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -114,6 +146,12 @@ export function AppShell({
             ) : null}
           </aside>
         </div>
+        <button
+          type="button"
+          className={cn("app-shell-backdrop", isLeftPanelCollapsed && "is-hidden")}
+          aria-label="Close authoring sidebar"
+          onClick={toggleLeftPanel}
+        />
       </div>
     </WorkspaceStyleFrame>
   );

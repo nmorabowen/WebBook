@@ -146,7 +146,15 @@ export function WorkspaceStyleFrame({
     "--workspace-math-inline-vertical-align": `${resolvedSettings.mathInlineVerticalAlign}em`,
     "--workspace-math-inline-translate-y": `${resolvedSettings.mathInlineTranslateY}em`,
     "--workspace-app-sidebar-width": `${resolvedSettings.appSidebarWidth}px`,
+    "--workspace-app-sidebar-width-effective": `clamp(240px, 20vw, ${Math.max(
+      resolvedSettings.appSidebarWidth,
+      260,
+    )}px)`,
     "--workspace-app-inspector-width": `${resolvedSettings.appInspectorWidth}px`,
+    "--workspace-app-inspector-width-effective": `clamp(320px, 24vw, ${Math.max(
+      resolvedSettings.appInspectorWidth,
+      360,
+    )}px)`,
     "--workspace-public-left-panel-width": `${resolvedSettings.publicLeftPanelWidth}px`,
     "--workspace-public-right-panel-width": `${resolvedSettings.publicRightPanelWidth}px`,
   } as CSSProperties;
