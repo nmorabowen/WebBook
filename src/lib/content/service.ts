@@ -309,7 +309,7 @@ async function enforceFeaturedBookLimit() {
   const books = await listBookRecords();
   const now = new Date().toISOString();
   const featuredBooks = books
-    .filter((book) => book.meta.featured === true)
+    .filter((book): book is BookRecord => book !== null && book.meta.featured === true)
     .sort((left, right) => featuredTimestamp(right) - featuredTimestamp(left));
 
   await Promise.all(
