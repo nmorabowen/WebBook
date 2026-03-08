@@ -17,6 +17,12 @@ describe("typography defaults", () => {
     expect(defaultBookTypography.codeBlockFontSize).toBeGreaterThanOrEqual(
       bookTypographyLimits.codeBlockFontSize.min,
     );
+    expect(defaultBookTypography.codeBlockPaddingY).toBeGreaterThanOrEqual(
+      bookTypographyLimits.codeBlockPaddingY.min,
+    );
+    expect(defaultBookTypography.codeBlockPaddingX).toBeGreaterThanOrEqual(
+      bookTypographyLimits.codeBlockPaddingX.min,
+    );
   });
 
   it("keeps default note typography inside validation limits", () => {
@@ -29,6 +35,12 @@ describe("typography defaults", () => {
     expect(defaultNoteTypography.codeBlockFontSize).toBeGreaterThanOrEqual(
       bookTypographyLimits.codeBlockFontSize.min,
     );
+    expect(defaultNoteTypography.codeBlockInsetLeft).toBeGreaterThanOrEqual(
+      bookTypographyLimits.codeBlockInsetLeft.min,
+    );
+    expect(defaultNoteTypography.codeBlockInsetRight).toBeGreaterThanOrEqual(
+      bookTypographyLimits.codeBlockInsetRight.min,
+    );
   });
 
   it("fills in missing code block typography from the fallback", () => {
@@ -40,6 +52,10 @@ describe("typography defaults", () => {
       headingIndentStep: 0,
       paragraphSpacing: 1,
       contentWidth: 46,
+      codeBlockPaddingY: 0.55,
+      codeBlockPaddingX: 0.9,
+      codeBlockInsetLeft: 0,
+      codeBlockInsetRight: 0,
     });
 
     expect(typography.codeBlockFontSize).toBe(defaultBookTypography.codeBlockFontSize);

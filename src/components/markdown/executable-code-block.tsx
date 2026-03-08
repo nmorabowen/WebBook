@@ -79,7 +79,7 @@ export function ExecutableCodeBlock({
   };
 
   return (
-    <div className="my-5 overflow-hidden rounded-[26px] bg-[var(--paper-code)] text-[var(--paper-code-text)]">
+    <div className="code-block-shell rounded-[26px]">
       <div className="code-block-header">
         <div className="flex items-center gap-3">
           <span className="code-block-language">{language}</span>

@@ -9,6 +9,10 @@ export type BookTypography = {
   paragraphSpacing: number;
   contentWidth: number;
   codeBlockFontSize: number;
+  codeBlockPaddingY: number;
+  codeBlockPaddingX: number;
+  codeBlockInsetLeft: number;
+  codeBlockInsetRight: number;
 };
 
 export const bookTypographyLimits = {
@@ -20,6 +24,10 @@ export const bookTypographyLimits = {
   paragraphSpacing: { min: 0.5, max: 2.4, step: 0.05 },
   contentWidth: { min: 32, max: 180, step: 1 },
   codeBlockFontSize: { min: 0.6, max: 1.1, step: 0.02 },
+  codeBlockPaddingY: { min: 0, max: 2, step: 0.05 },
+  codeBlockPaddingX: { min: 0.3, max: 2.4, step: 0.05 },
+  codeBlockInsetLeft: { min: 0, max: 4, step: 0.05 },
+  codeBlockInsetRight: { min: 0, max: 4, step: 0.05 },
 } as const;
 
 export const defaultBookTypography: BookTypography = {
@@ -31,6 +39,10 @@ export const defaultBookTypography: BookTypography = {
   paragraphSpacing: 1,
   contentWidth: 46,
   codeBlockFontSize: 0.78,
+  codeBlockPaddingY: 0.55,
+  codeBlockPaddingX: 0.9,
+  codeBlockInsetLeft: 0,
+  codeBlockInsetRight: 0,
 };
 
 export const defaultNoteTypography: BookTypography = {
@@ -42,6 +54,10 @@ export const defaultNoteTypography: BookTypography = {
   paragraphSpacing: 1,
   contentWidth: 75,
   codeBlockFontSize: 0.78,
+  codeBlockPaddingY: 0.55,
+  codeBlockPaddingX: 0.9,
+  codeBlockInsetLeft: 0,
+  codeBlockInsetRight: 0,
 };
 
 export function normalizeBookTypography(
@@ -106,6 +122,34 @@ export function normalizeBookTypography(
         Number(input?.codeBlockFontSize ?? fallbackTypography.codeBlockFontSize),
       ),
     ),
+    codeBlockPaddingY: Math.max(
+      bookTypographyLimits.codeBlockPaddingY.min,
+      Math.min(
+        bookTypographyLimits.codeBlockPaddingY.max,
+        Number(input?.codeBlockPaddingY ?? fallbackTypography.codeBlockPaddingY),
+      ),
+    ),
+    codeBlockPaddingX: Math.max(
+      bookTypographyLimits.codeBlockPaddingX.min,
+      Math.min(
+        bookTypographyLimits.codeBlockPaddingX.max,
+        Number(input?.codeBlockPaddingX ?? fallbackTypography.codeBlockPaddingX),
+      ),
+    ),
+    codeBlockInsetLeft: Math.max(
+      bookTypographyLimits.codeBlockInsetLeft.min,
+      Math.min(
+        bookTypographyLimits.codeBlockInsetLeft.max,
+        Number(input?.codeBlockInsetLeft ?? fallbackTypography.codeBlockInsetLeft),
+      ),
+    ),
+    codeBlockInsetRight: Math.max(
+      bookTypographyLimits.codeBlockInsetRight.min,
+      Math.min(
+        bookTypographyLimits.codeBlockInsetRight.max,
+        Number(input?.codeBlockInsetRight ?? fallbackTypography.codeBlockInsetRight),
+      ),
+    ),
   };
 }
 
@@ -129,5 +173,9 @@ export function bookTypographyStyle(
     "--book-block-spacing": `${typography.paragraphSpacing}rem`,
     "--book-content-width": `${typography.contentWidth}ch`,
     "--book-code-size": `${typography.codeBlockFontSize}rem`,
+    "--book-code-pad-y": `${typography.codeBlockPaddingY}rem`,
+    "--book-code-pad-x": `${typography.codeBlockPaddingX}rem`,
+    "--book-code-inset-left": `${typography.codeBlockInsetLeft}rem`,
+    "--book-code-inset-right": `${typography.codeBlockInsetRight}rem`,
   };
 }

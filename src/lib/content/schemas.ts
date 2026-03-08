@@ -52,6 +52,26 @@ export const bookTypographySchema = z.object({
     .min(bookTypographyLimits.codeBlockFontSize.min)
     .max(bookTypographyLimits.codeBlockFontSize.max)
     .optional(),
+  codeBlockPaddingY: z
+    .number()
+    .min(bookTypographyLimits.codeBlockPaddingY.min)
+    .max(bookTypographyLimits.codeBlockPaddingY.max)
+    .optional(),
+  codeBlockPaddingX: z
+    .number()
+    .min(bookTypographyLimits.codeBlockPaddingX.min)
+    .max(bookTypographyLimits.codeBlockPaddingX.max)
+    .optional(),
+  codeBlockInsetLeft: z
+    .number()
+    .min(bookTypographyLimits.codeBlockInsetLeft.min)
+    .max(bookTypographyLimits.codeBlockInsetLeft.max)
+    .optional(),
+  codeBlockInsetRight: z
+    .number()
+    .min(bookTypographyLimits.codeBlockInsetRight.min)
+    .max(bookTypographyLimits.codeBlockInsetRight.max)
+    .optional(),
 });
 
 export const baseMetaSchema = z.object({

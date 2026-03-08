@@ -2551,6 +2551,38 @@ export function EditorShell({
             fallback: defaultTypography.codeBlockFontSize,
             format: (value) => `${value.toFixed(2)}rem`,
           })}
+          {renderTypographyControl({
+            keyName: "codeBlockPaddingY",
+            label: "Code padding Y",
+            description: "Controls the top and bottom inset between the code text and the block edge.",
+            inputId: `${pageId}-code-padding-y`,
+            fallback: defaultTypography.codeBlockPaddingY,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
+          {renderTypographyControl({
+            keyName: "codeBlockPaddingX",
+            label: "Code padding X",
+            description: "Controls the left and right inset between the code text and the block edge.",
+            inputId: `${pageId}-code-padding-x`,
+            fallback: defaultTypography.codeBlockPaddingX,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
+          {renderTypographyControl({
+            keyName: "codeBlockInsetLeft",
+            label: "Code inset left",
+            description: "Pulls the full code block inward from the left edge of the reading column.",
+            inputId: `${pageId}-code-inset-left`,
+            fallback: defaultTypography.codeBlockInsetLeft,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
+          {renderTypographyControl({
+            keyName: "codeBlockInsetRight",
+            label: "Code inset right",
+            description: "Pulls the full code block inward from the right edge of the reading column.",
+            inputId: `${pageId}-code-inset-right`,
+            fallback: defaultTypography.codeBlockInsetRight,
+            format: (value) => `${value.toFixed(2)}rem`,
+          })}
         </div>
       </details>
         );

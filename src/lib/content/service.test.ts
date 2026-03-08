@@ -532,6 +532,10 @@ describe("content service", () => {
         paragraphSpacing: 1.25,
         contentWidth: 52,
         codeBlockFontSize: 0.76,
+        codeBlockPaddingY: 0.4,
+        codeBlockPaddingX: 0.8,
+        codeBlockInsetLeft: 0.3,
+        codeBlockInsetRight: 0.15,
       },
     });
 
@@ -556,6 +560,8 @@ describe("content service", () => {
     expect(duplicate?.meta.typography?.headingIndentStep).toBe(0.45);
     expect(duplicate?.meta.typography?.contentWidth).toBe(52);
     expect(duplicate?.meta.typography?.codeBlockFontSize).toBe(0.76);
+    expect(duplicate?.meta.typography?.codeBlockInsetLeft).toBe(0.3);
+    expect(duplicate?.meta.typography?.codeBlockInsetRight).toBe(0.15);
   });
 
   it("keeps draft content out of public manifests, backlinks, and search", async () => {
@@ -1859,6 +1865,10 @@ describe("content service", () => {
         paragraphSpacing: 1.35,
         contentWidth: 64,
         codeBlockFontSize: 0.8,
+        codeBlockPaddingY: 0.45,
+        codeBlockPaddingX: 0.85,
+        codeBlockInsetLeft: 0.2,
+        codeBlockInsetRight: 0.2,
       },
     });
 
@@ -1879,6 +1889,10 @@ describe("content service", () => {
         paragraphSpacing: 1.2,
         contentWidth: 58,
         codeBlockFontSize: 0.74,
+        codeBlockPaddingY: 0.35,
+        codeBlockPaddingX: 0.75,
+        codeBlockInsetLeft: 0.25,
+        codeBlockInsetRight: 0.1,
       },
     });
 
@@ -1890,12 +1904,16 @@ describe("content service", () => {
     expect(note?.meta.typography?.headingIndentStep).toBe(0.5);
     expect(note?.meta.typography?.contentWidth).toBe(58);
     expect(note?.meta.typography?.codeBlockFontSize).toBe(0.74);
+    expect(note?.meta.typography?.codeBlockPaddingX).toBe(0.75);
+    expect(note?.meta.typography?.codeBlockInsetLeft).toBe(0.25);
     expect(publicNote?.meta.typography?.headingBaseSize).toBe(3.9);
     expect(publicNote?.meta.typography?.paragraphSpacing).toBe(1.2);
     expect(publicNote?.meta.typography?.codeBlockFontSize).toBe(0.74);
+    expect(publicNote?.meta.typography?.codeBlockPaddingY).toBe(0.35);
     expect(duplicate?.meta.typography?.bodyLineHeight).toBe(1.95);
     expect(duplicate?.meta.typography?.contentWidth).toBe(58);
     expect(duplicate?.meta.typography?.codeBlockFontSize).toBe(0.74);
+    expect(duplicate?.meta.typography?.codeBlockInsetRight).toBe(0.1);
   });
 
   it("keeps at most three featured books and evicts the oldest featured selection", async () => {
