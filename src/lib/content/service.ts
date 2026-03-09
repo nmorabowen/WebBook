@@ -73,6 +73,7 @@ const CHAPTER_MOVE_ENDPOINT_HINT =
 const INDEXES_TAG = "webbook-indexes";
 const PUBLIC_INDEXES_TAG = "webbook-public-indexes";
 const SETTINGS_TAG = "webbook-settings";
+let ensureContentScaffoldPromise: Promise<void> | null = null;
 
 type IndexState = {
   manifest: ManifestEntry[];
@@ -404,7 +405,7 @@ async function validateImportedWorkspace(contentPath: string) {
 }
 
 async function writeFileAtomic(filePath: string, content: string) {
-  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
   await fs.writeFile(tempPath, content, "utf8");
   await fs.rename(tempPath, filePath);
 }
@@ -2102,128 +2103,141 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
 }
 
 export async function ensureContentScaffold() {
-  await Promise.all([
-    ensureDirectory(booksRoot),
-    ensureDirectory(notesRoot),
-    ensureDirectory(revisionsRoot),
-    ensureDirectory(indexesRoot),
-    ensureDirectory(systemRoot),
-  ]);
-  await ensureSettingsFile();
-
-  const existingBooks = await readDirectoryEntries(booksRoot);
-  const existingNotes = await readDirectoryEntries(notesRoot);
-
-  if (existingBooks.length === 0 && existingNotes.length === 0) {
-    const now = new Date().toISOString();
-    const sampleBookSlug = "webbook-handbook";
-    const sampleBookDirectory = bookDirectory(sampleBookSlug);
-    await ensureDirectory(path.join(sampleBookDirectory, "chapters"));
-
-    const sampleBook = renderMatter(
-      {
-        id: nextContentId(),
-        kind: "book",
-        title: "WebBook Handbook",
-        slug: sampleBookSlug,
-        routeAliases: [],
-        description: "An example book blending math, prose, and live code.",
-        order: 1,
-        status: "published",
-        featured: true,
-        coverColor: "#292118",
-        theme: "paper",
-        fontPreset: "source-serif",
-        typography: defaultBookTypography,
-        featuredAt: now,
-        createdAt: now,
-        updatedAt: now,
-        publishedAt: now,
-      } satisfies BookMeta,
-      [
-        "# Welcome to WebBook",
-        "",
-        "This sample book demonstrates a warm, book-like layout with math such as $e^{i\\pi} + 1 = 0$ and wiki links like [[webbook-notes]].",
-        "",
-        "Move into the first chapter to see runnable Python and a longer editorial page.",
-      ].join("\n"),
-    );
-
-    const sampleChapter = renderMatter(
-      {
-        id: nextContentId(),
-        kind: "chapter",
-        bookSlug: sampleBookSlug,
-        title: "Computational Chapter",
-        slug: "computational-chapter",
-        routeAliases: [],
-        order: 1,
-        summary: "A sample chapter that mixes prose, equations, and executable Python.",
-        status: "published",
-        allowExecution: true,
-        fontPreset: "source-serif",
-        createdAt: now,
-        updatedAt: now,
-        publishedAt: now,
-      } satisfies ChapterMeta,
-      [
-        "# Computational Chapter",
-        "",
-        "Here is a matrix identity:",
-        "",
-        "$$A^T A \\succeq 0$$",
-        "",
-        "And here is a live Python cell:",
-        "",
-        "```python exec id=sample-cell",
-        "import sympy as sp",
-        "x = sp.symbols('x')",
-        "print(sp.integrate(x**2, x))",
-        "```",
-      ].join("\n"),
-    );
-
-    const sampleNote = renderMatter(
-      {
-        id: nextContentId(),
-        kind: "note",
-        title: "WebBook Notes",
-        slug: "webbook-notes",
-        routeAliases: [],
-        summary: "Standalone notes can publish outside a book.",
-        order: 1,
-        status: "published",
-        allowExecution: true,
-        fontPreset: "source-serif",
-        typography: defaultNoteTypography,
-        createdAt: now,
-        updatedAt: now,
-        publishedAt: now,
-      } satisfies NoteMeta,
-      [
-        "# WebBook Notes",
-        "",
-        "This standalone note links back to [[webbook-handbook/computational-chapter]].",
-        "",
-        "```python exec id=note-cell",
-        "import math",
-        "print(round(math.pi, 4))",
-        "```",
-      ].join("\n"),
-    );
-
-    await fs.writeFile(bookFilePath(sampleBookSlug), sampleBook);
-    await fs.writeFile(
-      chapterFilePath(sampleBookSlug, "computational-chapter", 1),
-      sampleChapter,
-    );
-    await fs.writeFile(noteFilePath("webbook-notes"), sampleNote);
-    await rebuildIndexes();
+  if (ensureContentScaffoldPromise) {
+    await ensureContentScaffoldPromise;
     return;
   }
 
-  if (!(await indexesExist())) {
-    await rebuildIndexes();
+  ensureContentScaffoldPromise = (async () => {
+    await Promise.all([
+      ensureDirectory(booksRoot),
+      ensureDirectory(notesRoot),
+      ensureDirectory(revisionsRoot),
+      ensureDirectory(indexesRoot),
+      ensureDirectory(systemRoot),
+    ]);
+    await ensureSettingsFile();
+
+    const existingBooks = await readDirectoryEntries(booksRoot);
+    const existingNotes = await readDirectoryEntries(notesRoot);
+
+    if (existingBooks.length === 0 && existingNotes.length === 0) {
+      const now = new Date().toISOString();
+      const sampleBookSlug = "webbook-handbook";
+      const sampleBookDirectory = bookDirectory(sampleBookSlug);
+      await ensureDirectory(path.join(sampleBookDirectory, "chapters"));
+
+      const sampleBook = renderMatter(
+        {
+          id: nextContentId(),
+          kind: "book",
+          title: "WebBook Handbook",
+          slug: sampleBookSlug,
+          routeAliases: [],
+          description: "An example book blending math, prose, and live code.",
+          order: 1,
+          status: "published",
+          featured: true,
+          coverColor: "#292118",
+          theme: "paper",
+          fontPreset: "source-serif",
+          typography: defaultBookTypography,
+          featuredAt: now,
+          createdAt: now,
+          updatedAt: now,
+          publishedAt: now,
+        } satisfies BookMeta,
+        [
+          "# Welcome to WebBook",
+          "",
+          "This sample book demonstrates a warm, book-like layout with math such as $e^{i\\pi} + 1 = 0$ and wiki links like [[webbook-notes]].",
+          "",
+          "Move into the first chapter to see runnable Python and a longer editorial page.",
+        ].join("\n"),
+      );
+
+      const sampleChapter = renderMatter(
+        {
+          id: nextContentId(),
+          kind: "chapter",
+          bookSlug: sampleBookSlug,
+          title: "Computational Chapter",
+          slug: "computational-chapter",
+          routeAliases: [],
+          order: 1,
+          summary: "A sample chapter that mixes prose, equations, and executable Python.",
+          status: "published",
+          allowExecution: true,
+          fontPreset: "source-serif",
+          createdAt: now,
+          updatedAt: now,
+          publishedAt: now,
+        } satisfies ChapterMeta,
+        [
+          "# Computational Chapter",
+          "",
+          "Here is a matrix identity:",
+          "",
+          "$$A^T A \\succeq 0$$",
+          "",
+          "And here is a live Python cell:",
+          "",
+          "```python exec id=sample-cell",
+          "import sympy as sp",
+          "x = sp.symbols('x')",
+          "print(sp.integrate(x**2, x))",
+          "```",
+        ].join("\n"),
+      );
+
+      const sampleNote = renderMatter(
+        {
+          id: nextContentId(),
+          kind: "note",
+          title: "WebBook Notes",
+          slug: "webbook-notes",
+          routeAliases: [],
+          summary: "Standalone notes can publish outside a book.",
+          order: 1,
+          status: "published",
+          allowExecution: true,
+          fontPreset: "source-serif",
+          typography: defaultNoteTypography,
+          createdAt: now,
+          updatedAt: now,
+          publishedAt: now,
+        } satisfies NoteMeta,
+        [
+          "# WebBook Notes",
+          "",
+          "This standalone note links back to [[webbook-handbook/computational-chapter]].",
+          "",
+          "```python exec id=note-cell",
+          "import math",
+          "print(round(math.pi, 4))",
+          "```",
+        ].join("\n"),
+      );
+
+      await fs.writeFile(bookFilePath(sampleBookSlug), sampleBook);
+      await fs.writeFile(
+        chapterFilePath(sampleBookSlug, "computational-chapter", 1),
+        sampleChapter,
+      );
+      await fs.writeFile(noteFilePath("webbook-notes"), sampleNote);
+      await rebuildIndexes();
+      return;
+    }
+
+    if (!(await indexesExist())) {
+      await rebuildIndexes();
+    }
+  })();
+
+  try {
+    await ensureContentScaffoldPromise;
+  } finally {
+    ensureContentScaffoldPromise = null;
   }
 }
 
