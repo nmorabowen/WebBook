@@ -157,10 +157,11 @@ export function useWorkspaceTreeActions(currentPath?: string) {
     async (
       bookSlug: string,
       chapterPath: string[],
+      destinationBookSlug: string,
       parentChapterPath: string[],
       order?: number,
     ) => {
-      const payload = await requestJson<{ path?: string[] }>(
+      const payload = await requestJson<{ path?: string[]; meta?: { bookSlug?: string } }>(
         `/api/books/${bookSlug}/chapters/move`,
         {
           method: "POST",
@@ -169,6 +170,7 @@ export function useWorkspaceTreeActions(currentPath?: string) {
           },
           body: JSON.stringify({
             chapterPath,
+            destinationBookSlug,
             parentChapterPath,
             order,
           }),
@@ -177,7 +179,7 @@ export function useWorkspaceTreeActions(currentPath?: string) {
       );
 
       if (payload?.path?.length) {
-        router.push(chapterRoute(bookSlug, payload.path));
+        router.push(chapterRoute(payload.meta?.bookSlug ?? destinationBookSlug, payload.path));
       }
       router.refresh();
 
@@ -218,6 +220,7 @@ export function useWorkspaceTreeActions(currentPath?: string) {
       const payload = await moveChapter(
         bookSlug,
         chapterPath,
+        bookSlug,
         parentChapterPath,
         targetIndex + 1,
       );

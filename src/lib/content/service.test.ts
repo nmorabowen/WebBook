@@ -295,6 +295,138 @@ describe("content service", () => {
     ]);
   });
 
+  it("moves a chapter subtree into another book and preserves redirects, media, and descendant book slugs", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Source Book",
+      slug: "source-book",
+      description: "Source",
+      body: "# Source",
+      status: "published",
+      theme: "paper",
+    });
+    await service.createBook({
+      title: "Destination Book",
+      slug: "destination-book",
+      description: "Destination",
+      body: "# Destination",
+      status: "published",
+      theme: "paper",
+    });
+
+    await service.createChapter("source-book", {
+      title: "Part A",
+      slug: "part-a",
+      summary: "",
+      body: "# Part A",
+      status: "published",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("source-book", {
+      title: "Leaf",
+      slug: "leaf",
+      parentChapterPath: ["part-a"],
+      summary: "",
+      body: "# Leaf",
+      status: "published",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("destination-book", {
+      title: "Section",
+      slug: "section",
+      summary: "",
+      body: "# Section",
+      status: "published",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createNote({
+      title: "Cross-book referrer",
+      slug: "cross-book-referrer",
+      summary: "Refers to moved chapters",
+      body: [
+        "[[source-book/part-a]]",
+        "[[source-book/part-a/leaf]]",
+        "/media/books/source-book/chapters/part-a/figure.png",
+      ].join("\n"),
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const oldMediaPath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "books",
+      "source-book",
+      "chapters",
+      "part-a",
+      "figure.png",
+    );
+    await fs.mkdir(path.dirname(oldMediaPath), { recursive: true });
+    await fs.writeFile(oldMediaPath, "image", "utf8");
+
+    const moved = await service.moveChapter("source-book", {
+      chapterPath: ["part-a"],
+      destinationBookSlug: "destination-book",
+      parentChapterPath: ["section"],
+      order: 1,
+    });
+
+    expect(moved.meta.bookSlug).toBe("destination-book");
+    expect(moved.path).toEqual(["section", "part-a"]);
+    expect(moved.children[0]?.meta.bookSlug).toBe("destination-book");
+    expect(moved.meta.routeAliases).toContainEqual({
+      kind: "chapter",
+      location: "source-book/part-a",
+    });
+
+    const oldRootRoute = await service.resolveWorkspaceChapterRoute("source-book", ["part-a"]);
+    expect(oldRootRoute?.aliased).toBe(true);
+    expect(oldRootRoute?.workspaceRoute).toBe(
+      "/app/books/destination-book/chapters/section/part-a",
+    );
+
+    const oldLeafRoute = await service.resolveWorkspaceChapterRoute("source-book", [
+      "part-a",
+      "leaf",
+    ]);
+    expect(oldLeafRoute?.aliased).toBe(true);
+    expect(oldLeafRoute?.workspaceRoute).toBe(
+      "/app/books/destination-book/chapters/section/part-a/leaf",
+    );
+
+    const referrer = await service.getNote("cross-book-referrer");
+    expect(referrer?.body).toContain("[[destination-book/section/part-a]]");
+    expect(referrer?.body).toContain("[[destination-book/section/part-a/leaf]]");
+    expect(referrer?.body).toContain(
+      "/media/books/destination-book/chapters/section/part-a/figure.png",
+    );
+
+    await expect(fs.access(oldMediaPath)).rejects.toThrow();
+    await expect(
+      fs.access(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          ".webbook",
+          "uploads",
+          "books",
+          "destination-book",
+          "chapters",
+          "section",
+          "part-a",
+          "figure.png",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it("updates chapter content without changing sibling order", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

@@ -189,7 +189,7 @@ export function PageMoveControls(props: PageMoveControlsProps) {
             bookSlug={props.bookSlug}
             chapterTitle={props.chapterTitle}
             chapterPath={props.chapterPath}
-            bookChapters={props.bookChapters}
+            books={props.workspaceTree.books}
             initialParentPath={props.chapterPath.slice(0, -1)}
             busy={pendingAction === "move"}
             errorMessage={errorMessage}
@@ -208,13 +208,14 @@ export function PageMoveControls(props: PageMoveControlsProps) {
                       },
                       body: JSON.stringify({
                         chapterPath: props.chapterPath,
+                        destinationBookSlug: input.destinationBookSlug,
                         parentChapterPath: input.parentChapterPath,
                         order: input.order,
                       }),
                     },
                   );
                   const payload = (await response.json().catch(() => null)) as
-                    | { error?: string; path?: string[] }
+                    | { error?: string; path?: string[]; meta?: { bookSlug?: string } }
                     | null;
                   if (!response.ok) {
                     throw new Error(payload?.error ?? "Unable to move this chapter.");
@@ -222,7 +223,9 @@ export function PageMoveControls(props: PageMoveControlsProps) {
 
                   setIsMoveDialogOpen(false);
                   if (payload?.path?.length) {
-                    router.push(`/app/books/${props.bookSlug}/chapters/${payload.path.join("/")}`);
+                    router.push(
+                      `/app/books/${payload.meta?.bookSlug ?? input.destinationBookSlug}/chapters/${payload.path.join("/")}`,
+                    );
                   }
                   router.refresh();
                 } catch (error) {

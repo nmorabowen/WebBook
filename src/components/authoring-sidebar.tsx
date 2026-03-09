@@ -819,7 +819,11 @@ export function AuthoringSidebar({
     setMoveTarget(null);
   };
 
-  const submitMoveDialog = (input: { parentChapterPath: string[]; order?: number }) => {
+  const submitMoveDialog = (input: {
+    destinationBookSlug: string;
+    parentChapterPath: string[];
+    order?: number;
+  }) => {
     if (!moveTarget || !moveTargetBook) {
       return;
     }
@@ -842,13 +846,14 @@ export function AuthoringSidebar({
           },
           body: JSON.stringify({
             chapterPath: moveTarget.chapterPath,
+            destinationBookSlug: input.destinationBookSlug,
             parentChapterPath: input.parentChapterPath,
             order: input.order,
           }),
         });
 
         const payload = (await response.json().catch(() => null)) as
-          | { error?: string; path?: string[] }
+          | { error?: string; path?: string[]; meta?: { bookSlug?: string } }
           | null;
 
         if (!response.ok) {
@@ -860,7 +865,9 @@ export function AuthoringSidebar({
         closeMoveDialog();
 
         if (payload?.path?.length) {
-          router.push(`/app/books/${moveTarget.bookSlug}/chapters/${payload.path.join("/")}`);
+          router.push(
+            `/app/books/${payload.meta?.bookSlug ?? input.destinationBookSlug}/chapters/${payload.path.join("/")}`,
+          );
         }
         router.refresh();
       } catch (error) {
@@ -1007,7 +1014,7 @@ export function AuthoringSidebar({
           bookSlug={moveTarget.bookSlug}
           chapterTitle={moveTarget.chapterTitle}
           chapterPath={moveTarget.chapterPath}
-          bookChapters={moveTargetBook.chapters}
+          books={tree.books}
           initialParentPath={moveTarget.chapterPath.slice(0, -1)}
           busy={pendingActionId?.endsWith(":move") ?? false}
           errorMessage={actionError}

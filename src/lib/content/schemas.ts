@@ -307,6 +307,7 @@ export const reorderChaptersSchema = z.object({
 
 export const moveChapterSchema = z.object({
   chapterPath: z.array(z.string().min(1)).min(1),
+  destinationBookSlug: z.string().min(1).optional(),
   parentChapterPath: z.array(z.string().min(1)).default([]),
   order: z.number().int().positive().optional(),
 });

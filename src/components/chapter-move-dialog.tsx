@@ -3,10 +3,11 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import { Check, Search, X } from "lucide-react";
-import type { ChapterTreeNode } from "@/lib/content/schemas";
+import type { ChapterTreeNode, ContentTree } from "@/lib/content/schemas";
 import {
+  buildChapterMoveDestinationOptions,
+  loadRecentDestinationPaths,
   saveRecentDestinationPath,
-  useChapterMoveOptions,
 } from "@/components/workspace/use-chapter-move-options";
 import { chapterPathsEqual } from "@/components/workspace/tree-utils";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ export function ChapterMoveDialog({
   bookSlug,
   chapterTitle,
   chapterPath,
-  bookChapters,
+  books,
   initialParentPath,
   busy,
   errorMessage,
@@ -25,24 +26,54 @@ export function ChapterMoveDialog({
   bookSlug: string;
   chapterTitle: string;
   chapterPath: string[];
-  bookChapters: ChapterTreeNode[];
+  books: Pick<ContentTree, "books">["books"];
   initialParentPath: string[];
   busy: boolean;
   errorMessage?: string | null;
   onClose: () => void;
-  onSubmit: (input: { parentChapterPath: string[]; order?: number }) => void;
+  onSubmit: (input: {
+    destinationBookSlug: string;
+    parentChapterPath: string[];
+    order?: number;
+  }) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBookSlug, setSelectedBookSlug] = useState(bookSlug);
   const [selectedParentPath, setSelectedParentPath] = useState<string[]>(initialParentPath);
   const [orderValue, setOrderValue] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [activeOptionIndex, setActiveOptionIndex] = useState(0);
   const currentParentPath = chapterPath.slice(0, -1);
-  const { options: moveDestinationOptions, recentOptions } = useChapterMoveOptions(
-    bookSlug,
-    bookChapters,
-    chapterPath,
+  const selectedBook =
+    books.find((book) => book.meta.slug === selectedBookSlug) ??
+    books.find((book) => book.meta.slug === bookSlug) ??
+    null;
+  const moveDestinationOptions = useMemo(
+    () =>
+      selectedBook
+        ? buildChapterMoveDestinationOptions(
+            selectedBook.chapters,
+            selectedBookSlug === bookSlug ? chapterPath : [],
+          )
+        : [],
+    [bookSlug, chapterPath, selectedBook, selectedBookSlug],
   );
+  const recentOptions = useMemo(() => {
+    if (!selectedBook) {
+      return [];
+    }
+    const recentPaths = loadRecentDestinationPaths(selectedBook.meta.slug);
+    const optionMap = new Map(moveDestinationOptions.map((option) => [option.key, option] as const));
+    return recentPaths
+      .map((path) => optionMap.get(path.join("/")) ?? null)
+      .filter((option): option is (typeof moveDestinationOptions)[number] => option !== null);
+  }, [moveDestinationOptions, selectedBook]);
+
+  useEffect(() => {
+    setSelectedParentPath(selectedBookSlug === bookSlug ? initialParentPath : []);
+    setSearchQuery("");
+    setOrderValue("");
+  }, [bookSlug, initialParentPath, selectedBookSlug]);
 
   const filteredMoveDestinations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -87,17 +118,18 @@ export function ChapterMoveDialog({
       return findSiblings(parent.children, tail);
     };
 
-    return findSiblings(bookChapters, selectedParentPath)?.length ?? 0;
-  }, [bookChapters, selectedParentPath]);
+    return findSiblings(selectedBook?.chapters ?? [], selectedParentPath)?.length ?? 0;
+  }, [selectedBook, selectedParentPath]);
 
-  const sameParentSelection = chapterPathsEqual(selectedParentPath, currentParentPath);
+  const sameParentSelection =
+    selectedBookSlug === bookSlug && chapterPathsEqual(selectedParentPath, currentParentPath);
   const maxDestinationOrder = sameParentSelection
     ? Math.max(1, destinationSiblingCount)
     : destinationSiblingCount + 1;
   const isNoopSelection = sameParentSelection && orderValue.trim().length === 0;
   const selectedParentDisplay = selectedParentPath.length
-    ? `/${selectedParentPath.join("/")}`
-    : "/";
+    ? `${selectedBookSlug}:/${selectedParentPath.join("/")}`
+    : `${selectedBookSlug}:/`;
   const selectedOrderDisplay = orderValue.trim() || "append";
 
   if (typeof document === "undefined") {
@@ -124,6 +156,21 @@ export function ChapterMoveDialog({
         </div>
 
         <div className="mt-4 grid gap-2">
+          <label className="paper-label" htmlFor="chapter-move-book">
+            Destination book
+          </label>
+          <select
+            id="chapter-move-book"
+            className="paper-select"
+            value={selectedBookSlug}
+            onChange={(event) => setSelectedBookSlug(event.target.value)}
+          >
+            {books.map((book) => (
+              <option key={book.meta.slug} value={book.meta.slug}>
+                {book.meta.title}
+              </option>
+            ))}
+          </select>
           <label className="paper-label" htmlFor="chapter-move-search">
             Destination parent
           </label>
@@ -287,17 +334,18 @@ export function ChapterMoveDialog({
                 order = parsed;
               }
               if (sameParentSelection && order === undefined) {
-                setLocalError(
-                  "No move selected. Pick another destination or enter an order.",
-                );
-                return;
-              }
-              setLocalError(null);
-              saveRecentDestinationPath(bookSlug, selectedParentPath);
-              onSubmit({
-                parentChapterPath: selectedParentPath,
-                order,
-              });
+              setLocalError(
+                "No move selected. Pick another destination or enter an order.",
+              );
+              return;
+            }
+            setLocalError(null);
+            saveRecentDestinationPath(selectedBookSlug, selectedParentPath);
+            onSubmit({
+              destinationBookSlug: selectedBookSlug,
+              parentChapterPath: selectedParentPath,
+              order,
+            });
             }}
             disabled={busy || isNoopSelection}
           >

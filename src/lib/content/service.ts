@@ -1274,6 +1274,45 @@ async function replaceBookChaptersDirectoryFromFileTree(
   await fs.rm(backupPath, { recursive: true, force: true });
 }
 
+function rewriteMovedChapterTree(
+  chapter: ChapterFileNode,
+  sourceBookSlug: string,
+  destinationBookSlug: string,
+  now: string,
+) {
+  const visit = (node: ChapterFileNode, isRoot: boolean) => {
+    const parsed = matter(node.raw);
+    const parsedMeta = chapterMetaSchema.parse({
+      ...parsed.data,
+      bookSlug: sourceBookSlug,
+      slug: node.slug,
+      order: node.order,
+    });
+    const normalizedAliases = normalizeRouteAliases(parsedMeta.routeAliases);
+    const nextMeta: ChapterMeta = {
+      ...parsedMeta,
+      id: recordId("chapter", parsedMeta.id, chapterLocation(sourceBookSlug, node.path)),
+      routeAliases: isRoot
+        ? withRouteAlias(
+            { routeAliases: normalizedAliases },
+            {
+              kind: "chapter",
+              location: chapterLocation(sourceBookSlug, node.path),
+            },
+          ).routeAliases
+        : normalizedAliases,
+      bookSlug: destinationBookSlug,
+      updatedAt: now,
+    };
+    node.raw = renderMatter(nextMeta, parsed.content.trim());
+    for (const child of node.children) {
+      visit(child, false);
+    }
+  };
+
+  visit(chapter, true);
+}
+
 function recordToMediaReference(record: ContentRecord): MediaReference {
   return {
     id: record.id,
@@ -2739,6 +2778,8 @@ export async function moveChapter(bookSlug: string, input: unknown) {
   ensureSafeSlugOrThrow(bookSlug);
   const data = moveChapterSchema.parse(input);
   const chapterPath = normalizeChapterPathInput(data.chapterPath);
+  const requestedDestinationBookSlug = toSlug(data.destinationBookSlug ?? bookSlug);
+  ensureSafeSlugOrThrow(requestedDestinationBookSlug);
   const destinationParentPath = normalizeChapterPathInput(data.parentChapterPath);
   const sourceResolution = await resolveChapterEntryLocation(bookSlug, chapterPath);
   if (!sourceResolution.ok) {
@@ -2748,11 +2789,16 @@ export async function moveChapter(bookSlug: string, input: unknown) {
     throw new Error("Chapter not found");
   }
   const canonicalBookSlug = sourceResolution.canonicalBookSlug;
+  const destinationBookResolution = await resolveBookRecord(requestedDestinationBookSlug);
+  if (!destinationBookResolution) {
+    throw new Error("Destination book not found");
+  }
+  const destinationBookSlug = destinationBookResolution.record.meta.slug;
   const canonicalChapterPath = sourceResolution.location.chapterPath;
   const canonicalDestinationParentPath = destinationParentPath.length
     ? await (async () => {
         const destinationResolution = await resolveChapterEntryLocation(
-          canonicalBookSlug,
+          destinationBookSlug,
           destinationParentPath,
         );
         if (!destinationResolution.ok) {
@@ -2765,7 +2811,7 @@ export async function moveChapter(bookSlug: string, input: unknown) {
       })()
     : [];
   const loadChapterByPath = async (pathInput: string[]) => {
-    const resolution = await resolveChapterEntryLocation(canonicalBookSlug, pathInput);
+    const resolution = await resolveChapterEntryLocation(destinationBookSlug, pathInput);
     if (!resolution.ok) {
       if (resolution.reason === "ambiguous") {
         throw new Error("Chapter path is ambiguous");
@@ -2782,20 +2828,36 @@ export async function moveChapter(bookSlug: string, input: unknown) {
     throw new Error("Chapter path is required");
   }
 
-  if (chapterPathStartsWith(canonicalDestinationParentPath, canonicalChapterPath)) {
+  if (
+    canonicalBookSlug === destinationBookSlug &&
+    chapterPathStartsWith(canonicalDestinationParentPath, canonicalChapterPath)
+  ) {
     throw new Error("Cannot move a chapter into itself or its descendants");
   }
 
+  const existingChapter = await parseChapterFile(
+    sourceResolution.location.entry.filePath,
+    canonicalBookSlug,
+    canonicalChapterPath,
+  );
   const sourceParentPath = canonicalChapterPath.slice(0, -1);
   const movingSlug = canonicalChapterPath[canonicalChapterPath.length - 1];
   if (!movingSlug) {
     throw new Error("Chapter not found");
   }
 
-  const rootChaptersPath = path.join(bookDirectory(canonicalBookSlug), "chapters");
-  const chapterTree = await loadChapterFileTree(rootChaptersPath, []);
+  const sourceRootChaptersPath = path.join(bookDirectory(canonicalBookSlug), "chapters");
+  const destinationRootChaptersPath = path.join(bookDirectory(destinationBookSlug), "chapters");
+  const sourceChapterTree = await loadChapterFileTree(sourceRootChaptersPath, []);
+  const destinationChapterTree =
+    canonicalBookSlug === destinationBookSlug
+      ? sourceChapterTree
+      : await loadChapterFileTree(destinationRootChaptersPath, []);
 
-  const sourceSiblings = findChapterFileSiblingsByParentPath(chapterTree, sourceParentPath);
+  const sourceSiblings = findChapterFileSiblingsByParentPath(
+    sourceChapterTree,
+    sourceParentPath,
+  );
   if (!sourceSiblings) {
     throw new Error("Chapter not found");
   }
@@ -2806,14 +2868,16 @@ export async function moveChapter(bookSlug: string, input: unknown) {
   }
 
   const destinationSiblingsBeforeMove = findChapterFileSiblingsByParentPath(
-    chapterTree,
+    destinationChapterTree,
     canonicalDestinationParentPath,
   );
   if (!destinationSiblingsBeforeMove) {
     throw new Error("Destination parent chapter not found");
   }
 
-  const sameParent = chapterPathsEqual(sourceParentPath, canonicalDestinationParentPath);
+  const sameParent =
+    canonicalBookSlug === destinationBookSlug &&
+    chapterPathsEqual(sourceParentPath, canonicalDestinationParentPath);
   if (sameParent && data.order === undefined) {
     const currentChapter = await loadChapterByPath(canonicalChapterPath);
     if (!currentChapter) {
@@ -2844,20 +2908,26 @@ export async function moveChapter(bookSlug: string, input: unknown) {
       chapter.raw,
       chapterLocation(canonicalBookSlug, chapter.path),
     );
-    revisionCandidates.set(chapter.path.join("/"), { id: chapterId, raw: chapter.raw });
+    revisionCandidates.set(
+      `${canonicalBookSlug}:${chapter.path.join("/")}`,
+      { id: chapterId, raw: chapter.raw },
+    );
   }
   for (const chapter of destinationSiblingsBeforeMove) {
     const chapterId = contentIdFromRaw(
       "chapter",
       chapter.raw,
-      chapterLocation(canonicalBookSlug, chapter.path),
+      chapterLocation(destinationBookSlug, chapter.path),
     );
-    revisionCandidates.set(chapter.path.join("/"), { id: chapterId, raw: chapter.raw });
+    revisionCandidates.set(
+      `${destinationBookSlug}:${chapter.path.join("/")}`,
+      { id: chapterId, raw: chapter.raw },
+    );
   }
 
   const [movedChapter] = sourceSiblings.splice(sourceIndex, 1);
   const destinationSiblingsAfterRemoval = findChapterFileSiblingsByParentPath(
-    chapterTree,
+    destinationChapterTree,
     canonicalDestinationParentPath,
   );
   if (!destinationSiblingsAfterRemoval) {
@@ -2874,8 +2944,15 @@ export async function moveChapter(bookSlug: string, input: unknown) {
   destinationSiblingsAfterRemoval.splice(insertionIndex, 0, movedChapter);
 
   const now = new Date().toISOString();
+  const routeChanged =
+    canonicalBookSlug !== destinationBookSlug ||
+    !chapterPathsEqual(sourceParentPath, canonicalDestinationParentPath);
   for (const chapter of revisionCandidates.values()) {
     await createRevision(chapter.id, chapter.raw);
+  }
+
+  if (routeChanged || canonicalBookSlug !== destinationBookSlug) {
+    rewriteMovedChapterTree(movedChapter, canonicalBookSlug, destinationBookSlug, now);
   }
 
   renumberChapterFileSiblings(sourceSiblings, now);
@@ -2883,10 +2960,37 @@ export async function moveChapter(bookSlug: string, input: unknown) {
     renumberChapterFileSiblings(destinationSiblingsAfterRemoval, now);
   }
 
-  await replaceBookChaptersDirectoryFromFileTree(canonicalBookSlug, chapterTree);
-  await rebuildIndexes();
-
   const movedPath = [...canonicalDestinationParentPath, movedChapter.slug];
+  await replaceBookChaptersDirectoryFromFileTree(canonicalBookSlug, sourceChapterTree);
+  if (destinationChapterTree !== sourceChapterTree) {
+    await replaceBookChaptersDirectoryFromFileTree(destinationBookSlug, destinationChapterTree);
+  }
+
+  if (routeChanged) {
+    const wikiMappings = new Map<string, string>();
+    for (const chapter of [existingChapter, ...flattenChapters(existingChapter.children)]) {
+      const relative = chapter.path.slice(canonicalChapterPath.length);
+      wikiMappings.set(
+        chapterLocation(canonicalBookSlug, chapter.path),
+        chapterLocation(destinationBookSlug, [...movedPath, ...relative]),
+      );
+    }
+    await moveMediaDirectory(
+      chapterMediaPath(canonicalBookSlug, canonicalChapterPath),
+      chapterMediaPath(destinationBookSlug, movedPath),
+    );
+    await rewriteReferencesAcrossContent(
+      wikiMappings,
+      [
+        {
+          oldPrefix: `/media/${chapterMediaPath(canonicalBookSlug, canonicalChapterPath)}`,
+          newPrefix: `/media/${chapterMediaPath(destinationBookSlug, movedPath)}`,
+        },
+      ],
+    );
+  }
+
+  await rebuildIndexes();
   const moved = await loadChapterByPath(movedPath);
   if (!moved) {
     throw new Error("Chapter move failed");

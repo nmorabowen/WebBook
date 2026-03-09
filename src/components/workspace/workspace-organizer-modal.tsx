@@ -516,7 +516,13 @@ export function WorkspaceOrganizerModal({
                       <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("chapter-position", async () => {
                         const nextPosition = parsePosition(position);
                         if (!nextPosition) throw new Error("Position must be a positive integer.");
-                        await actions.moveChapter(selectedBook.meta.slug, selectedRef.chapterPath, selectedRef.chapterPath.slice(0, -1), nextPosition);
+                        await actions.moveChapter(
+                          selectedBook.meta.slug,
+                          selectedRef.chapterPath,
+                          selectedBook.meta.slug,
+                          selectedRef.chapterPath.slice(0, -1),
+                          nextPosition,
+                        );
                       })}>Apply</button>
                     </div>
                   </div>
@@ -544,7 +550,7 @@ export function WorkspaceOrganizerModal({
           bookSlug={selectedBook.meta.slug}
           chapterTitle={selectedChapter.meta.title}
           chapterPath={selectedRef.chapterPath}
-          bookChapters={selectedBook.chapters}
+          books={tree.books}
           initialParentPath={selectedRef.chapterPath.slice(0, -1)}
           busy={movePending}
           errorMessage={moveError}
@@ -556,6 +562,7 @@ export function WorkspaceOrganizerModal({
               .moveChapter(
                 selectedBook.meta.slug,
                 selectedRef.chapterPath,
+                input.destinationBookSlug,
                 input.parentChapterPath,
                 input.order,
               )
@@ -564,7 +571,7 @@ export function WorkspaceOrganizerModal({
                 if (payload.path?.length) {
                   setSelectedRef({
                     kind: "chapter",
-                    bookSlug: selectedBook.meta.slug,
+                    bookSlug: payload.meta?.bookSlug ?? input.destinationBookSlug,
                     chapterPath: payload.path,
                   });
                 }
