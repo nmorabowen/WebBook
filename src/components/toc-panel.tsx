@@ -1,3 +1,5 @@
+"use client";
+
 import type { TocItem } from "@/lib/markdown/shared";
 
 type TocPanelProps = {
