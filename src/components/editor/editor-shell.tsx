@@ -1019,6 +1019,15 @@ export function EditorShell({
     previewVisibleLineRef.current = line;
   });
 
+  const handlePreviewNavigationHandled = useEffectEvent(
+    (request: { line: number; nonce: number }, actualLine: number) => {
+      previewVisibleLineRef.current = actualLine;
+      setPreviewNavigationRequest((current) =>
+        current?.nonce === request.nonce ? null : current,
+      );
+    },
+  );
+
   const applySaveResult = useEffectEvent((saved: SaveResponsePayload | null) => {
     const nextKind = saved?.kind ?? mode;
     const nextSlug = saved?.meta?.slug;
@@ -3487,6 +3496,7 @@ export function EditorShell({
               sourceNavigationRequest={previewNavigationRequest}
               onRequestSourceLine={focusSourceLine}
               onVisibleSourceLineChange={handlePreviewVisibleLineChange}
+              onSourceNavigationHandled={handlePreviewNavigationHandled}
             />
           </div>
         </div>

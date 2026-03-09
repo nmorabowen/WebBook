@@ -59,6 +59,10 @@ type MarkdownRendererProps = {
   } | null;
   onRequestSourceLine?: (line: number) => void;
   onVisibleSourceLineChange?: (line: number) => void;
+  onSourceNavigationHandled?: (
+    request: { line: number; nonce: number },
+    actualLine: number,
+  ) => void;
   linkTarget?: HTMLAttributeAnchorTarget;
   linkRel?: string;
 };
@@ -519,6 +523,7 @@ export function MarkdownRenderer({
   sourceNavigationRequest,
   onRequestSourceLine,
   onVisibleSourceLineChange,
+  onSourceNavigationHandled,
   linkTarget,
   linkRel,
 }: MarkdownRendererProps) {
@@ -761,8 +766,9 @@ export function MarkdownRenderer({
       return;
     }
 
-    target.element.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.element.scrollIntoView({ behavior: "auto", block: "center" });
     target.element.classList.add("source-nav-target");
+    onSourceNavigationHandled?.(sourceNavigationRequest, target.line);
     const highlightTimer = window.setTimeout(() => {
       target.element.classList.remove("source-nav-target");
     }, 1400);
@@ -770,7 +776,13 @@ export function MarkdownRenderer({
     return () => {
       window.clearTimeout(highlightTimer);
     };
-  }, [sourceNavigation, sourceNavigationRequest?.line, sourceNavigationRequest?.nonce]);
+  }, [
+    onSourceNavigationHandled,
+    sourceNavigation,
+    sourceNavigationRequest,
+    sourceNavigationRequest?.line,
+    sourceNavigationRequest?.nonce,
+  ]);
 
   const wrapWithSourceNavigation = (
     line: number | undefined,

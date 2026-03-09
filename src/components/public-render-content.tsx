@@ -42,6 +42,7 @@ type PublicRenderContentProps = {
   sourceNavigationRequest?: SourceNavigationRequest | null;
   onRequestSourceLine?: (line: number) => void;
   onVisibleSourceLineChange?: (line: number) => void;
+  onSourceNavigationHandled?: (request: SourceNavigationRequest, actualLine: number) => void;
   linkTarget?: HTMLAttributeAnchorTarget;
   linkRel?: string;
 };
@@ -68,6 +69,7 @@ export function PublicRenderContent({
   sourceNavigationRequest,
   onRequestSourceLine,
   onVisibleSourceLineChange,
+  onSourceNavigationHandled,
   linkTarget,
   linkRel,
 }: PublicRenderContentProps) {
@@ -117,6 +119,7 @@ export function PublicRenderContent({
             sourceNavigationRequest={sourceNavigationRequest}
             onRequestSourceLine={onRequestSourceLine}
             onVisibleSourceLineChange={onVisibleSourceLineChange}
+            onSourceNavigationHandled={onSourceNavigationHandled}
             linkTarget={linkTarget}
             linkRel={linkRel}
           />
@@ -153,6 +156,7 @@ export function PublicRenderContent({
             sourceNavigationRequest={sourceNavigationRequest}
             onRequestSourceLine={onRequestSourceLine}
             onVisibleSourceLineChange={onVisibleSourceLineChange}
+            onSourceNavigationHandled={onSourceNavigationHandled}
             linkTarget={linkTarget}
             linkRel={linkRel}
           />
@@ -243,6 +247,7 @@ export function PublicRenderContent({
           sourceNavigationRequest={sourceNavigationRequest}
           onRequestSourceLine={onRequestSourceLine}
           onVisibleSourceLineChange={onVisibleSourceLineChange}
+          onSourceNavigationHandled={onSourceNavigationHandled}
           linkTarget={linkTarget}
           linkRel={linkRel}
         />

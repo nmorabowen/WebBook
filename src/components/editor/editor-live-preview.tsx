@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import {
   PublicRenderContent,
   type PreviewChapterItem,
@@ -33,6 +33,7 @@ type EditorLivePreviewProps = {
   sourceNavigationRequest?: SourceNavigationRequest | null;
   onRequestSourceLine?: (line: number) => void;
   onVisibleSourceLineChange?: (line: number) => void;
+  onSourceNavigationHandled?: (request: SourceNavigationRequest, actualLine: number) => void;
 };
 
 export function EditorLivePreview({
@@ -55,14 +56,39 @@ export function EditorLivePreview({
   sourceNavigationRequest,
   onRequestSourceLine,
   onVisibleSourceLineChange,
+  onSourceNavigationHandled,
 }: EditorLivePreviewProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef({ top: 0, left: 0 });
+  const lastNavigationNonceRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const navigationNonce = sourceNavigationRequest?.nonce ?? null;
+    if (navigationNonce !== null && navigationNonce !== lastNavigationNonceRef.current) {
+      lastNavigationNonceRef.current = navigationNonce;
+      return;
+    }
+
+    viewport.scrollTop = scrollPositionRef.current.top;
+    viewport.scrollLeft = scrollPositionRef.current.left;
+  }, [fontPreset, markdown, sourceNavigationRequest?.nonce, summary, title, topOffset, typography]);
 
   return (
     <div
       ref={viewportRef}
       className="editor-preview pr-1"
       data-font-preset={fontPreset}
+      onScroll={(event) => {
+        scrollPositionRef.current = {
+          top: event.currentTarget.scrollTop,
+          left: event.currentTarget.scrollLeft,
+        };
+      }}
     >
       <div
         className="editor-preview-offset"
@@ -95,6 +121,7 @@ export function EditorLivePreview({
           sourceNavigationRequest={sourceNavigationRequest}
           onRequestSourceLine={onRequestSourceLine}
           onVisibleSourceLineChange={onVisibleSourceLineChange}
+          onSourceNavigationHandled={onSourceNavigationHandled}
           linkTarget="_blank"
           linkRel="noreferrer"
         />

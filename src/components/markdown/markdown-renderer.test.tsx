@@ -126,6 +126,7 @@ describe("MarkdownRenderer source navigation", () => {
   it("supports local callback-based source navigation in a scroll container", async () => {
     const onRequestSourceLine = vi.fn();
     const onVisibleSourceLineChange = vi.fn();
+    const onSourceNavigationHandled = vi.fn();
 
     vi.stubGlobal(
       "requestAnimationFrame",
@@ -159,6 +160,7 @@ describe("MarkdownRenderer source navigation", () => {
             sourceNavigationRequest={request}
             onRequestSourceLine={onRequestSourceLine}
             onVisibleSourceLineChange={onVisibleSourceLineChange}
+            onSourceNavigationHandled={onSourceNavigationHandled}
           />
         </div>
       );
@@ -199,12 +201,22 @@ describe("MarkdownRenderer source navigation", () => {
       ({ top: 260, bottom: 340 } as DOMRect);
     lastCandidate!.getBoundingClientRect = () =>
       ({ top: 620, bottom: 700 } as DOMRect);
+    lastCandidate!.scrollIntoView = vi.fn() as typeof lastCandidate.scrollIntoView;
 
     onVisibleSourceLineChange.mockClear();
 
     await act(async () => {
       root?.render(<TestHarness request={{ line: 5, nonce: 1 }} />);
     });
+
+    expect(lastCandidate!.scrollIntoView).toHaveBeenCalledWith({
+      behavior: "auto",
+      block: "center",
+    });
+    expect(onSourceNavigationHandled).toHaveBeenCalledWith(
+      { line: 5, nonce: 1 },
+      5,
+    );
 
     await act(async () => {
       viewport?.dispatchEvent(new Event("scroll"));
