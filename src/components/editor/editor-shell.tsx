@@ -69,6 +69,13 @@ import {
 import { extractToc, splitWikiTarget, type TocItem } from "@/lib/markdown/shared";
 import { buildInlineTextStyleHref, cn, normalizeYouTubeEmbedInput, toSlug } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/utils";
+import {
+  applyPreviewVisibleLineUpdate,
+  beginPreviewReload,
+  createPreviewSyncState,
+  setPreviewAnchorLine,
+  setRenderedPreviewLine,
+} from "@/components/editor/preview-sync";
 
 type MathJaxRuntime = {
   startup?: {
@@ -607,6 +614,7 @@ export function EditorShell({
   const previewViewportRef = useRef<HTMLDivElement>(null);
   const previewExpandedRatioRef = useRef(52);
   const previewRefreshTimerRef = useRef<number | null>(null);
+  const previewSyncStateRef = useRef(createPreviewSyncState());
   const bodyRef = useRef(initialValues.body);
   const sourceViewportRef = useRef({
     selectionStart: 0,
@@ -985,10 +993,28 @@ export function EditorShell({
     setSlug(toSlug(title));
   }, [slugTouched, title]);
 
+  const postPreviewLine = useEffectEvent((line: number) => {
+    const previewWindow = previewFrameRef.current?.contentWindow;
+    if (!previewWindow) {
+      return false;
+    }
+
+    previewWindow.postMessage(
+      {
+        type: "webbook-editor-preview-line",
+        line,
+      },
+      window.location.origin,
+    );
+    return true;
+  });
+
   const refreshPreview = useEffectEvent((mode: "debounced" | "immediate" = "immediate") => {
     if (typeof window === "undefined") {
       return;
     }
+
+    previewSyncStateRef.current = beginPreviewReload(previewSyncStateRef.current);
 
     if (previewRefreshTimerRef.current !== null) {
       window.clearTimeout(previewRefreshTimerRef.current);
@@ -1474,19 +1500,15 @@ export function EditorShell({
 
   const revealCurrentSourceInPreview = () => {
     const textarea = sourceRef.current;
-    const previewWindow = previewFrameRef.current?.contentWindow;
-    if (!textarea || !previewWindow) {
+    if (!textarea) {
       return;
     }
 
     const line = sourceLineFromOffset(bodyRef.current, textarea.selectionStart);
-    previewWindow.postMessage(
-      {
-        type: "webbook-editor-preview-line",
-        line,
-      },
-      window.location.origin,
-    );
+    previewSyncStateRef.current = setPreviewAnchorLine(previewSyncStateRef.current, line);
+    if (!postPreviewLine(line)) {
+      previewSyncStateRef.current = beginPreviewReload(previewSyncStateRef.current);
+    }
   };
 
   useEffect(() => {
@@ -1496,16 +1518,29 @@ export function EditorShell({
       }
 
       const data = event.data;
-      if (
-        !data ||
-        typeof data !== "object" ||
-        data.type !== "webbook-preview-source-line" ||
-        typeof data.line !== "number"
-      ) {
+      if (!data || typeof data !== "object" || typeof data.type !== "string") {
         return;
       }
 
-      focusSourceLine(data.line);
+      if (data.type === "webbook-preview-source-line" && typeof data.line === "number") {
+        previewSyncStateRef.current = setRenderedPreviewLine(
+          previewSyncStateRef.current,
+          data.line,
+        );
+        focusSourceLine(data.line);
+        return;
+      }
+
+      if (data.type === "webbook-preview-visible-line" && typeof data.line === "number") {
+        const update = applyPreviewVisibleLineUpdate(
+          previewSyncStateRef.current,
+          data.line,
+        );
+        previewSyncStateRef.current = update.nextState;
+        if (update.restoreLineToSend !== null) {
+          postPreviewLine(update.restoreLineToSend);
+        }
+      }
     };
 
     window.addEventListener("message", handleMessage);

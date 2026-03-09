@@ -21,6 +21,11 @@ import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography"
 import type { ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
 import {
+  collectSourceLineCandidates,
+  findSourceLineRestoreTarget,
+  findVisibleSourceLine,
+} from "@/components/markdown/source-navigation";
+import {
   createWikiLinkPlugin,
   headingId,
   resolveWikiTargetFromManifest,
@@ -602,6 +607,40 @@ export function MarkdownRenderer({
     }
 
     let highlightTimer: number | undefined;
+    let visibleLineFrame: number | undefined;
+    let visibleLineTimeout: number | undefined;
+    let lastVisibleLine: number | null = null;
+
+    const postVisibleLine = (line: number) => {
+      if (line === lastVisibleLine) {
+        return;
+      }
+
+      lastVisibleLine = line;
+      window.parent.postMessage(
+        { type: "webbook-preview-visible-line", line },
+        window.location.origin,
+      );
+    };
+
+    const syncVisibleLine = () => {
+      visibleLineFrame = undefined;
+      const candidates = collectSourceLineCandidates(document);
+      const visibleCandidate = findVisibleSourceLine(candidates, window.innerHeight);
+      if (!visibleCandidate) {
+        return;
+      }
+
+      postVisibleLine(visibleCandidate.line);
+    };
+
+    const scheduleVisibleLineSync = () => {
+      if (visibleLineFrame !== undefined) {
+        return;
+      }
+
+      visibleLineFrame = window.requestAnimationFrame(syncVisibleLine);
+    };
 
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) {
@@ -618,41 +657,50 @@ export function MarkdownRenderer({
         return;
       }
 
-      const nodes = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-source-line]"),
-      ).filter((element) => {
-        const line = Number(element.dataset.sourceLine);
-        return Number.isFinite(line);
-      });
-
-      if (!nodes.length) {
+      const candidates = collectSourceLineCandidates(document);
+      if (!candidates.length) {
         return;
       }
 
-      const requestedLine = data.line;
-      const target =
-        nodes.find((element) => Number(element.dataset.sourceLine) >= requestedLine) ??
-        nodes[nodes.length - 1];
-
+      const target = findSourceLineRestoreTarget(candidates, data.line);
       if (!target) {
         return;
       }
 
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-      target.classList.add("source-nav-target");
+      target.element.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.element.classList.add("source-nav-target");
       if (highlightTimer) {
         window.clearTimeout(highlightTimer);
       }
       highlightTimer = window.setTimeout(() => {
-        target.classList.remove("source-nav-target");
+        target.element.classList.remove("source-nav-target");
       }, 1400);
+      postVisibleLine(target.line);
+      scheduleVisibleLineSync();
+      if (visibleLineTimeout) {
+        window.clearTimeout(visibleLineTimeout);
+      }
+      visibleLineTimeout = window.setTimeout(() => {
+        scheduleVisibleLineSync();
+      }, 220);
     };
 
     window.addEventListener("message", handleMessage);
+    window.addEventListener("scroll", scheduleVisibleLineSync, { passive: true });
+    window.addEventListener("resize", scheduleVisibleLineSync);
+    scheduleVisibleLineSync();
     return () => {
       window.removeEventListener("message", handleMessage);
+      window.removeEventListener("scroll", scheduleVisibleLineSync);
+      window.removeEventListener("resize", scheduleVisibleLineSync);
       if (highlightTimer) {
         window.clearTimeout(highlightTimer);
+      }
+      if (visibleLineTimeout) {
+        window.clearTimeout(visibleLineTimeout);
+      }
+      if (visibleLineFrame !== undefined) {
+        window.cancelAnimationFrame(visibleLineFrame);
       }
     };
   }, [sourceNavigation]);
