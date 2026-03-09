@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
-import { getContentById, getPublicBook, getPublicChapter, getPublicNote } from "@/lib/content/service";
+import { getContentById, getPublicChapter } from "@/lib/content/service";
 import { createRequestKey, executePython } from "@/lib/execution";
 import { enforcePublicExecutionLimit, getExecutionCache, setExecutionCache } from "@/lib/rate-limit";
 
@@ -16,29 +16,25 @@ export async function POST(request: Request) {
   const input = executionSchema.parse(await request.json());
   const session = await getSession();
   const requester = session ? "admin" : input.requester;
-  const content = session
-    ? await getContentById(input.pageId)
-    : await (async () => {
-        const [kind, location] = input.pageId.split(":");
-        if (kind === "note") {
-          return getPublicNote(location);
-        }
-        if (kind === "book") {
-          return getPublicBook(location);
-        }
-        if (kind === "chapter") {
-          const [bookSlug = "", ...chapterPath] = location.split("/").filter(Boolean);
-          const result = await getPublicChapter(bookSlug, chapterPath);
-          return result?.chapter ?? null;
-        }
-        return null;
-      })();
+  const content = await getContentById(input.pageId);
 
   if (!content) {
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }
 
   if (requester === "public") {
+    if (content.kind === "book" && content.meta.status !== "published") {
+      return NextResponse.json({ error: "Content not found" }, { status: 404 });
+    }
+    if (content.kind === "note" && content.meta.status !== "published") {
+      return NextResponse.json({ error: "Content not found" }, { status: 404 });
+    }
+    if (content.kind === "chapter") {
+      const publicChapter = await getPublicChapter(content.meta.bookSlug, content.path);
+      if (!publicChapter) {
+        return NextResponse.json({ error: "Content not found" }, { status: 404 });
+      }
+    }
     if (content.kind === "note" && !content.meta.allowExecution) {
       return NextResponse.json(
         { error: "Execution is disabled for this note." },

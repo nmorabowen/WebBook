@@ -377,6 +377,41 @@ export function useWorkspaceTreeActions(currentPath?: string) {
     [router],
   );
 
+  const moveNoteToBook = useCallback(
+    async (
+      slug: string,
+      destinationBookSlug: string,
+      parentChapterPath: string[],
+      order?: number,
+    ) => {
+      const payload = await requestJson<{
+        meta?: { slug: string; bookSlug?: string };
+        path?: string[];
+      }>(
+        `/api/notes/${slug}/move`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            destinationBookSlug,
+            parentChapterPath,
+            order,
+          }),
+        },
+        "Unable to move this note into a book.",
+      );
+
+      if (payload.path?.length) {
+        router.push(chapterRoute(payload.meta?.bookSlug ?? destinationBookSlug, payload.path));
+      }
+      router.refresh();
+      return payload;
+    },
+    [router],
+  );
+
   const duplicateChapter = useCallback(
     async (bookSlug: string, chapterPath: string[]) => {
       const payload = await requestJson<{ meta?: { slug: string }; path?: string[] }>(
@@ -467,6 +502,7 @@ export function useWorkspaceTreeActions(currentPath?: string) {
     createChapter,
     duplicateBook,
     duplicateNote,
+    moveNoteToBook,
     duplicateChapter,
     deleteBook,
     deleteNote,

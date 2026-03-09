@@ -57,7 +57,7 @@ import { bookCoverColorPresets } from "@/lib/book-cover-colors";
 import type { ManifestEntry, MediaAsset } from "@/lib/content/schemas";
 import { fontPresetOptions, type FontPreset } from "@/lib/font-presets";
 import { mathAutocompleteItems, type MathAutocompleteItem } from "@/lib/math-autocomplete";
-import { defaultUploadTargetPath } from "@/lib/media-paths";
+import { defaultUploadTargetPathForRoute } from "@/lib/media-paths";
 import {
   EDITOR_SHORTCUTS_UPDATED_EVENT,
   defaultEditorShortcuts,
@@ -67,7 +67,7 @@ import {
   type ShortcutActionId,
 } from "@/lib/editor-shortcuts";
 import { extractToc, splitWikiTarget, type TocItem } from "@/lib/markdown/shared";
-import { buildInlineTextStyleHref, cn, normalizeYouTubeEmbedInput } from "@/lib/utils";
+import { buildInlineTextStyleHref, cn, normalizeYouTubeEmbedInput, toSlug } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/utils";
 
 type MathJaxRuntime = {
@@ -126,6 +126,16 @@ type FileUploadPayload = {
   url: string;
   fileName: string;
   originalName: string;
+};
+type SaveResponsePayload = {
+  id?: string;
+  kind?: "book" | "note" | "chapter";
+  route?: string;
+  path?: string[];
+  meta?: {
+    slug: string;
+    bookSlug?: string;
+  };
 };
 type WikiAutocompleteContext = {
   start: number;
@@ -281,6 +291,9 @@ function manifestEntryAliases(entry: ManifestEntry) {
     const canonicalPath = entry.chapterPath?.join("/") ?? entry.slug;
     aliases.unshift(`${entry.bookSlug}/${canonicalPath}`);
     aliases.push(`${entry.bookSlug}/${entry.slug}`);
+  }
+  for (const alias of entry.routeAliases ?? []) {
+    aliases.push(alias.location);
   }
   return Array.from(new Set(aliases));
 }
@@ -488,8 +501,15 @@ export function EditorShell({
   const workspaceGapStyle = {
     gap: "var(--workspace-tile-spacing, 1.5rem)",
   } as CSSProperties;
+  const [currentPath, setCurrentPath] = useState(path);
+  const [currentPageId, setCurrentPageId] = useState(pageId);
+  const [currentPublicRoute, setCurrentPublicRoute] = useState(publicRoute);
+  const [currentUpdateEndpoint, setCurrentUpdateEndpoint] = useState(updateEndpoint);
   const [title, setTitle] = useState(initialValues.title);
   const [slug, setSlug] = useState(initialValues.slug);
+  const [slugTouched, setSlugTouched] = useState(
+    initialValues.slug !== toSlug(initialValues.title),
+  );
   const [summary, setSummary] = useState(initialValues.summary ?? initialValues.description ?? "");
   const [body, setBody] = useState(initialValues.body);
   const [status, setStatus] = useState<"draft" | "published">(initialValues.status);
@@ -528,7 +548,10 @@ export function EditorShell({
     useState<MathAutocompleteContext | null>(null);
   const [activeMathAutocompleteIndex, setActiveMathAutocompleteIndex] = useState(0);
   const [isPending, startTransition] = useTransition();
-  const uploadBasePath = useMemo(() => defaultUploadTargetPath(pageId), [pageId]);
+  const uploadBasePath = useMemo(
+    () => defaultUploadTargetPathForRoute(mode, currentPublicRoute),
+    [currentPublicRoute, mode],
+  );
   const contentTypographyStyle = bookTypographyStyle(typography);
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const mathAutocompletePanelRef = useRef<HTMLDivElement>(null);
@@ -573,8 +596,8 @@ export function EditorShell({
       : `${100 - editorSplitRatio}fr`,
   } as CSSProperties;
   const currentManifestEntry = useMemo(
-    () => manifest.find((entry) => entry.id === pageId) ?? null,
-    [manifest, pageId],
+    () => manifest.find((entry) => entry.id === currentPageId) ?? null,
+    [currentPageId, manifest],
   );
   const liveCurrentHeadings = useMemo(() => extractToc(body), [body]);
   const wikiAutocompleteSuggestions = useMemo(() => {
@@ -621,7 +644,7 @@ export function EditorShell({
         .flatMap((entry) => {
           const primaryAlias = manifestEntryAliases(entry)[0] ?? entry.slug;
           const headingSource =
-            entry.id === pageId ? liveCurrentHeadings : (entry.headings ?? []);
+            entry.id === currentPageId ? liveCurrentHeadings : (entry.headings ?? []);
           return headingSource
             .map((heading) => ({
               heading,
@@ -661,7 +684,7 @@ export function EditorShell({
         kind: entry.kind,
       };
     });
-  }, [currentManifestEntry, liveCurrentHeadings, manifest, pageId, wikiAutocompleteContext]);
+  }, [currentManifestEntry, currentPageId, liveCurrentHeadings, manifest, wikiAutocompleteContext]);
   const mathAutocompleteSuggestions = useMemo(() => {
     if (!mathAutocompleteContext) {
       return [];
@@ -891,11 +914,77 @@ export function EditorShell({
   );
 
   useEffect(() => {
+    if (slugTouched) {
+      return;
+    }
+    setSlug(toSlug(title));
+  }, [slugTouched, title]);
+
+  const applySaveResult = useEffectEvent((saved: SaveResponsePayload | null) => {
+    const nextKind = saved?.kind ?? mode;
+    const nextSlug = saved?.meta?.slug;
+    const nextRoute = saved?.route ?? currentPublicRoute;
+    const nextPageId = saved?.id ?? currentPageId;
+    const nextChapterPath = saved?.path ?? [];
+    const nextBookSlug =
+      saved?.meta?.bookSlug ??
+      (nextKind === "chapter" && nextRoute
+        ? nextRoute.split("/").filter(Boolean)[1]
+        : undefined);
+
+    if (nextSlug) {
+      setSlug(nextSlug);
+    }
+    if (saved?.id) {
+      setCurrentPageId(saved.id);
+    }
+    if (nextRoute) {
+      setCurrentPublicRoute(nextRoute);
+    }
+
+    let nextWorkspaceRoute: string | null = null;
+    let nextEndpoint: string | null = null;
+    let nextSourcePath: string | null = null;
+
+    if (nextKind === "book" && nextSlug) {
+      nextWorkspaceRoute = `/app/books/${nextSlug}`;
+      nextEndpoint = `/api/books/${nextSlug}`;
+      nextSourcePath = `content/books/${nextSlug}/book.md`;
+    } else if (nextKind === "note" && nextSlug) {
+      nextWorkspaceRoute = `/app/notes/${nextSlug}`;
+      nextEndpoint = `/api/notes/${nextSlug}`;
+      nextSourcePath = `content/notes/${nextSlug}.md`;
+    } else if (nextKind === "chapter" && nextBookSlug && nextChapterPath.length > 0) {
+      const joinedPath = nextChapterPath.join("/");
+      nextWorkspaceRoute = `/app/books/${nextBookSlug}/chapters/${joinedPath}`;
+      nextEndpoint = `/api/books/${nextBookSlug}/chapters/${joinedPath}`;
+      nextSourcePath = `content/books/${nextBookSlug}/chapters/**/${nextChapterPath.at(-1)}.md`;
+    }
+
+    const needsRebind =
+      nextPageId !== currentPageId ||
+      nextRoute !== currentPublicRoute ||
+      nextEndpoint !== currentUpdateEndpoint ||
+      nextSourcePath !== currentPath;
+
+    if (nextEndpoint) {
+      setCurrentUpdateEndpoint(nextEndpoint);
+    }
+    if (nextSourcePath) {
+      setCurrentPath(nextSourcePath);
+    }
+    if (needsRebind && nextWorkspaceRoute) {
+      router.replace(nextWorkspaceRoute);
+      router.refresh();
+    }
+  });
+
+  useEffect(() => {
     const timer = setTimeout(async () => {
       setSaveState("saving");
       setSaveMessage("Autosaving...");
       try {
-        const response = await fetch(updateEndpoint, {
+        const response = await fetch(currentUpdateEndpoint, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -907,6 +996,8 @@ export function EditorShell({
           throw new Error("Autosave failed");
         }
 
+        applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
+
         setSaveState("saved");
         setSaveMessage("Autosaved");
         setPreviewVersion((current) => current + 1);
@@ -917,7 +1008,7 @@ export function EditorShell({
     }, 1400);
 
     return () => clearTimeout(timer);
-  }, [payload, updateEndpoint]);
+  }, [applySaveResult, currentUpdateEndpoint, payload]);
 
   useLayoutEffect(() => {
     const textarea = sourceRef.current;
@@ -937,7 +1028,7 @@ export function EditorShell({
   const manualSave = async () => {
     setSaveState("saving");
     setSaveMessage("Saving snapshot...");
-    const response = await fetch(updateEndpoint, {
+    const response = await fetch(currentUpdateEndpoint, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -954,6 +1045,8 @@ export function EditorShell({
       return;
     }
 
+    applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
+
     setSaveState("saved");
     setSaveMessage("Snapshot saved");
     setPreviewVersion((current) => current + 1);
@@ -962,7 +1055,7 @@ export function EditorShell({
   const saveTypography = async () => {
     setSaveState("saving");
     setSaveMessage("Saving typography...");
-    const response = await fetch(updateEndpoint, {
+    const response = await fetch(currentUpdateEndpoint, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -975,6 +1068,8 @@ export function EditorShell({
       setSaveMessage("Typography save failed");
       return;
     }
+
+    applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
 
     setSaveState("saved");
     setSaveMessage("Typography saved");
@@ -989,7 +1084,7 @@ export function EditorShell({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id: pageId }),
+        body: JSON.stringify({ id: currentPageId }),
       });
 
       if (!response.ok) {
@@ -998,6 +1093,7 @@ export function EditorShell({
         return;
       }
 
+      applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
       setStatus(nextPublished ? "published" : "draft");
       setSaveState("saved");
       setSaveMessage(nextPublished ? "Published" : "Moved to draft");
@@ -2105,7 +2201,10 @@ export function EditorShell({
               id={`${pageId}-slug`}
               className="paper-input"
               value={slug}
-              onChange={(event) => setSlug(event.target.value)}
+              onChange={(event) => {
+                setSlugTouched(true);
+                setSlug(event.target.value);
+              }}
             />
           </div>
           <div>
@@ -2178,14 +2277,14 @@ export function EditorShell({
         <div className="grid gap-3">
           <div className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3">
             <p className="text-xs uppercase tracking-[0.18em] text-[var(--paper-muted)]">Path</p>
-            <p className="mt-1 break-words text-sm font-medium">{path}</p>
+            <p className="mt-1 break-words text-sm font-medium">{currentPath}</p>
           </div>
-          {publicRoute ? (
+          {currentPublicRoute ? (
             <Link
-              href={publicRoute}
+              href={currentPublicRoute}
               className="rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.56)] p-3 text-sm text-[var(--paper-muted)] transition hover:text-[var(--paper-ink)] break-words"
             >
-              Public route: {publicRoute}
+              Public route: {currentPublicRoute}
             </Link>
           ) : null}
         </div>
@@ -2902,8 +3001,8 @@ export function EditorShell({
               <Globe className="h-4 w-4" />
               {status === "published" ? "Unpublish" : "Publish"}
             </button>
-            {publicRoute ? (
-              <Link href={publicRoute} className="paper-button paper-button-secondary">
+            {currentPublicRoute ? (
+              <Link href={currentPublicRoute} className="paper-button paper-button-secondary">
                 Open public page
               </Link>
             ) : null}
@@ -3303,9 +3402,9 @@ export function EditorShell({
               />
               <iframe
                 ref={previewFrameRef}
-                key={`${pageId}-${previewVersion}`}
+                key={`${currentPageId}-${previewVersion}`}
                 title="Live preview"
-                src={`/app/preview?pageId=${encodeURIComponent(pageId)}&v=${previewVersion}`}
+                src={`/app/preview?pageId=${encodeURIComponent(currentPageId)}&v=${previewVersion}`}
                 className="preview-frame"
               />
             </div>

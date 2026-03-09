@@ -28,6 +28,30 @@ export function defaultUploadTargetPath(pageId: string) {
   return "uploads";
 }
 
+export function defaultUploadTargetPathForRoute(
+  mode: "book" | "note" | "chapter",
+  publicRoute?: string,
+) {
+  if (!publicRoute) {
+    return "uploads";
+  }
+
+  const segments = publicRoute.split("/").filter(Boolean);
+  if (mode === "note" && segments[0] === "notes" && segments[1]) {
+    return `notes/${segments[1]}`;
+  }
+
+  if (mode === "book" && segments[0] === "books" && segments[1]) {
+    return `books/${segments[1]}`;
+  }
+
+  if (mode === "chapter" && segments[0] === "books" && segments[1] && segments.length > 2) {
+    return `books/${segments[1]}/chapters/${segments.slice(2).join("/")}`;
+  }
+
+  return "uploads";
+}
+
 export function normalizeMediaTargetPath(input: string) {
   return input
     .split(/[\\/]+/)

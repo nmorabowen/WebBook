@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CreateChapterPanel } from "@/components/editor/create-chapter-panel";
 import { EditorShell } from "@/components/editor/editor-shell";
@@ -10,6 +10,7 @@ import {
   getManifest,
   listMediaForPage,
   loadRenderableContent,
+  resolveWorkspaceBookRoute,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 
@@ -22,7 +23,14 @@ export default async function AppBookPage({
 }) {
   const session = await requireSession();
   const { bookSlug } = await params;
-  const loaded = await loadRenderableContent(`book:${bookSlug}`);
+  const resolved = await resolveWorkspaceBookRoute(bookSlug);
+  if (!resolved) {
+    notFound();
+  }
+  if (resolved.aliased) {
+    redirect(resolved.workspaceRoute);
+  }
+  const loaded = await loadRenderableContent(resolved.book.id);
   if (!loaded || loaded.content.kind !== "book") {
     notFound();
   }

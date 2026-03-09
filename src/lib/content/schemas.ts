@@ -74,12 +74,20 @@ export const bookTypographySchema = z.object({
     .optional(),
 });
 
+export const routeAliasKindSchema = z.enum(["book", "note", "chapter"]);
+export const routeAliasSchema = z.object({
+  kind: routeAliasKindSchema,
+  location: z.string().min(1),
+});
+
 export const baseMetaSchema = z.object({
+  id: z.string().min(1).optional(),
   title: z.string().min(1),
   slug: z.string().min(1),
   createdAt: z.string(),
   updatedAt: z.string(),
   publishedAt: z.string().optional(),
+  routeAliases: z.array(routeAliasSchema).optional(),
 });
 
 export const bookMetaSchema = baseMetaSchema.extend({
@@ -116,9 +124,16 @@ export const noteMetaSchema = baseMetaSchema.extend({
   typography: bookTypographySchema.optional(),
 });
 
-export type BookMeta = z.infer<typeof bookMetaSchema>;
-export type ChapterMeta = z.infer<typeof chapterMetaSchema>;
-export type NoteMeta = z.infer<typeof noteMetaSchema>;
+type BaseMetaInput = z.infer<typeof baseMetaSchema>;
+export type RouteAlias = z.infer<typeof routeAliasSchema>;
+type BaseMeta = Omit<BaseMetaInput, "id" | "routeAliases"> & {
+  id: string;
+  routeAliases: RouteAlias[];
+};
+
+export type BookMeta = Omit<z.infer<typeof bookMetaSchema>, keyof BaseMeta> & BaseMeta;
+export type ChapterMeta = Omit<z.infer<typeof chapterMetaSchema>, keyof BaseMeta> & BaseMeta;
+export type NoteMeta = Omit<z.infer<typeof noteMetaSchema>, keyof BaseMeta> & BaseMeta;
 
 export type BookRecord = {
   id: string;
@@ -216,6 +231,7 @@ export type ManifestEntry = {
   allowExecution?: boolean;
   bookSlug?: string;
   chapterPath?: string[];
+  routeAliases?: RouteAlias[];
   summary?: string;
   headings?: ManifestHeading[];
 };
@@ -301,6 +317,12 @@ export const reorderBooksSchema = z.object({
 
 export const reorderNotesSchema = z.object({
   noteSlugs: z.array(z.string().min(1)).min(1),
+});
+
+export const moveNoteToBookSchema = z.object({
+  destinationBookSlug: z.string().min(1),
+  parentChapterPath: z.array(z.string().min(1)).default([]),
+  order: z.number().int().positive().optional(),
 });
 
 export const generalSettingsSchema = z.object({

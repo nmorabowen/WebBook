@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { PublicRenderContent } from "@/components/public-render-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
@@ -8,8 +8,8 @@ import {
   getPublicBacklinks,
   getGeneralSettings,
   getPublicManifest,
-  getPublicBook,
   getPublicContentTree,
+  resolvePublicBookRoute,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 import { buildPublicMetadata } from "@/lib/seo";
@@ -22,7 +22,9 @@ type PreviewChapterNode = {
 };
 
 function mapPreviewChapters(
-  chapters: NonNullable<Awaited<ReturnType<typeof getPublicBook>>>["chapters"],
+  chapters: NonNullable<
+    Awaited<ReturnType<typeof resolvePublicBookRoute>>
+  >["book"]["chapters"],
 ): PreviewChapterNode[] {
   return chapters.map((chapter) => ({
     path: chapter.path,
@@ -38,7 +40,7 @@ export async function generateMetadata({
   params: Promise<{ bookSlug: string }>;
 }): Promise<Metadata> {
   const { bookSlug } = await params;
-  const book = await getPublicBook(bookSlug);
+  const book = (await resolvePublicBookRoute(bookSlug))?.book ?? null;
 
   if (!book) {
     return buildPublicMetadata({
@@ -66,11 +68,14 @@ export default async function BookPage({
   params: Promise<{ bookSlug: string }>;
 }) {
   const { bookSlug } = await params;
-  const book = await getPublicBook(bookSlug);
-
-  if (!book) {
+  const resolved = await resolvePublicBookRoute(bookSlug);
+  if (!resolved) {
     notFound();
   }
+  if (resolved.aliased) {
+    redirect(resolved.publicRoute);
+  }
+  const book = resolved.book;
 
   const [tree, manifest, backlinks, generalSettings] = await Promise.all([
     getPublicContentTree(),

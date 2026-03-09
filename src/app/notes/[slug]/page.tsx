@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { PublicRenderContent } from "@/components/public-render-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
@@ -9,7 +9,7 @@ import {
   getGeneralSettings,
   getPublicManifest,
   getPublicContentTree,
-  getPublicNote,
+  resolvePublicNoteRoute,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 import { buildPublicMetadata } from "@/lib/seo";
@@ -20,7 +20,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const note = await getPublicNote(slug);
+  const resolved = await resolvePublicNoteRoute(slug);
+  const note = resolved?.content.kind === "note" ? resolved.content : null;
 
   if (!note) {
     return buildPublicMetadata({
@@ -48,11 +49,14 @@ export default async function NotePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const note = await getPublicNote(slug);
-
-  if (!note) {
+  const resolved = await resolvePublicNoteRoute(slug);
+  if (!resolved) {
     notFound();
   }
+  if (resolved.content.kind !== "note" || resolved.aliased) {
+    redirect(resolved.publicRoute);
+  }
+  const note = resolved.content;
 
   const [tree, manifest, backlinks, generalSettings] = await Promise.all([
     getPublicContentTree(),

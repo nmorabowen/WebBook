@@ -6,6 +6,7 @@ import { FolderTree, Search, X } from "lucide-react";
 import { buildChapterNumberIndex } from "@/lib/chapter-numbering";
 import { ChapterMoveDialog } from "@/components/chapter-move-dialog";
 import type { ContentTree } from "@/lib/content/schemas";
+import { buildChapterMoveDestinationOptions } from "@/components/workspace/use-chapter-move-options";
 import {
   findChapterNode,
   findChapterSiblings,
@@ -68,6 +69,9 @@ export function WorkspaceOrganizerModal({
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [movePending, setMovePending] = useState(false);
+  const [noteMoveBookSlug, setNoteMoveBookSlug] = useState("");
+  const [noteMoveParentKey, setNoteMoveParentKey] = useState("");
+  const [noteMoveOrder, setNoteMoveOrder] = useState("");
 
   useEffect(() => {
     if (!open || typeof window === "undefined") {
@@ -234,6 +238,34 @@ export function WorkspaceOrganizerModal({
     } catch {}
   }, [selectedId]);
 
+  useEffect(() => {
+    if (selectedRef?.kind !== "note") {
+      return;
+    }
+
+    const fallbackBookSlug = tree.books[0]?.meta.slug ?? "";
+    setNoteMoveBookSlug((current) =>
+      current && tree.books.some((book) => book.meta.slug === current)
+        ? current
+        : fallbackBookSlug,
+    );
+    setNoteMoveParentKey("");
+    setNoteMoveOrder("");
+  }, [selectedRef, tree.books]);
+
+  const noteMoveBook = tree.books.find((book) => book.meta.slug === noteMoveBookSlug) ?? null;
+  const noteMoveOptions = noteMoveBook
+    ? buildChapterMoveDestinationOptions(noteMoveBook.chapters, [])
+    : [];
+  const noteMoveParentPath =
+    noteMoveOptions.find((option) => option.key === noteMoveParentKey)?.parentPath ?? [];
+  const noteMoveSiblingCount =
+    noteMoveBook === null
+      ? 0
+      : noteMoveParentPath.length === 0
+        ? noteMoveBook.chapters.length
+        : (findChapterSiblings(noteMoveBook.chapters, noteMoveParentPath)?.length ?? 0);
+
   if (!open || typeof document === "undefined") {
     return null;
   }
@@ -393,11 +425,61 @@ export function WorkspaceOrganizerModal({
                       const payload = await actions.duplicateNote(selectedNote.meta.slug);
                       if (payload.meta?.slug) setSelectedRef({ kind: "note", slug: payload.meta.slug });
                     })}>Duplicate</button>
+                    <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || !tree.books.length} onClick={() => void run("move-note-into-book", async () => {
+                      if (!noteMoveBookSlug) {
+                        throw new Error("Select a destination book.");
+                      }
+                      const nextPosition = noteMoveOrder ? parsePosition(noteMoveOrder) : null;
+                      if (noteMoveOrder && !nextPosition) {
+                        throw new Error("Position must be a positive integer.");
+                      }
+                      const payload = await actions.moveNoteToBook(
+                        selectedNote.meta.slug,
+                        noteMoveBookSlug,
+                        noteMoveParentPath,
+                        nextPosition ?? undefined,
+                      );
+                      if (payload.path?.length) {
+                        setSelectedRef({
+                          kind: "chapter",
+                          bookSlug: payload.meta?.bookSlug ?? noteMoveBookSlug,
+                          chapterPath: payload.path,
+                        });
+                      }
+                    })}>Move into book</button>
                     <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("del-note", async () => {
                       if (!window.confirm("Delete this note?")) return;
                       await actions.deleteNote(selectedNote.meta.slug);
                       setSelectedRef(null);
                     })}>Delete</button>
+                  </div>
+                  <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
+                    <p className="paper-label mb-1">Move into book</p>
+                    {tree.books.length ? (
+                      <div className="grid gap-2">
+                        <select className="paper-select" value={noteMoveBookSlug} onChange={(event) => {
+                          setNoteMoveBookSlug(event.target.value);
+                          setNoteMoveParentKey("");
+                          setNoteMoveOrder("");
+                        }}>
+                          {tree.books.map((book) => (
+                            <option key={book.meta.slug} value={book.meta.slug}>
+                              {book.meta.title}
+                            </option>
+                          ))}
+                        </select>
+                        <select className="paper-select" value={noteMoveParentKey} onChange={(event) => setNoteMoveParentKey(event.target.value)}>
+                          {noteMoveOptions.map((option) => (
+                            <option key={option.key} value={option.key}>
+                              {option.label} ({option.subtitle})
+                            </option>
+                          ))}
+                        </select>
+                        <input className="paper-input" inputMode="numeric" value={noteMoveOrder} onChange={(event) => setNoteMoveOrder(event.target.value)} placeholder={`Position 1-${Math.max(noteMoveSiblingCount + 1, 1)} (optional)`} />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-[var(--paper-muted)]">Create a book first.</p>
+                    )}
                   </div>
                 </div>
               ) : null}

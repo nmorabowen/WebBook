@@ -1,16 +1,16 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CreateChapterPanel } from "@/components/editor/create-chapter-panel";
 import { EditorShell } from "@/components/editor/editor-shell";
 import { PageMoveControls } from "@/components/editor/page-move-controls";
 import { requireSession } from "@/lib/auth";
 import {
-  getBook,
   getContentTree,
   getGeneralSettings,
   getManifest,
   listMediaForPage,
   loadRenderableContent,
+  resolveWorkspaceChapterRoute,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 
@@ -24,19 +24,25 @@ export default async function AppChapterPage({
   const session = await requireSession();
   const { bookSlug, chapterPath } = await params;
   const requestedPath = chapterPath ?? [];
-  const location = requestedPath.join("/");
-  const loaded = await loadRenderableContent(`chapter:${bookSlug}/${location}`);
+  const resolved = await resolveWorkspaceChapterRoute(bookSlug, requestedPath);
+  if (!resolved) {
+    notFound();
+  }
+  if (resolved.aliased) {
+    redirect(resolved.workspaceRoute);
+  }
+  const loaded = await loadRenderableContent(resolved.chapter.id);
   if (!loaded || loaded.content.kind !== "chapter") {
     notFound();
   }
 
-  const [tree, manifest, book, generalSettings, mediaAssets] = await Promise.all([
+  const [tree, manifest, generalSettings, mediaAssets] = await Promise.all([
     getContentTree(),
     getManifest(),
-    getBook(bookSlug),
     getGeneralSettings(),
     listMediaForPage(loaded.content.id),
   ]);
+  const book = resolved.book;
   const toc = extractToc(loaded.content.body);
   const nextSubchapterOrder =
     loaded.content.children.reduce(

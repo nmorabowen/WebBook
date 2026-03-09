@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { EditorShell } from "@/components/editor/editor-shell";
 import { PageMoveControls } from "@/components/editor/page-move-controls";
@@ -9,6 +9,7 @@ import {
   getManifest,
   listMediaForPage,
   loadRenderableContent,
+  resolveWorkspaceNoteRoute,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
 
@@ -21,7 +22,14 @@ export default async function AppNotePage({
 }) {
   const session = await requireSession();
   const { slug } = await params;
-  const loaded = await loadRenderableContent(`note:${slug}`);
+  const resolved = await resolveWorkspaceNoteRoute(slug);
+  if (!resolved) {
+    notFound();
+  }
+  if (resolved.aliased || resolved.content.kind !== "note") {
+    redirect(resolved.workspaceRoute);
+  }
+  const loaded = await loadRenderableContent(resolved.content.id);
   if (!loaded || loaded.content.kind !== "note") {
     notFound();
   }

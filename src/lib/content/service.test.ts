@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "fs";
 import path from "path";
 import JSZip from "jszip";
+import matter from "gray-matter";
 
 const tempRoot = ".tmp-content-test";
 
@@ -20,6 +21,43 @@ afterEach(async () => {
 });
 
 describe("content service", () => {
+  it("backfills stable ids and route aliases for legacy note files on load", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    const now = "2026-03-08T00:00:00.000Z";
+    const legacyNotePath = path.join(process.cwd(), tempRoot, "notes", "legacy-note.md");
+    await fs.writeFile(
+      legacyNotePath,
+      [
+        "---",
+        "kind: note",
+        "title: Legacy Note",
+        "slug: legacy-note",
+        "summary: Legacy content",
+        "order: 2",
+        "status: draft",
+        "allowExecution: true",
+        `createdAt: '${now}'`,
+        `updatedAt: '${now}'`,
+        "---",
+        "# Legacy Note",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const note = await service.getNote("legacy-note");
+    expect(note).not.toBeNull();
+    expect(note?.id).toBeTruthy();
+    expect(note?.id).not.toBe("note:legacy-note");
+    expect(note?.meta.routeAliases).toEqual([]);
+
+    const raw = await fs.readFile(legacyNotePath, "utf8");
+    const parsed = matter(raw);
+    expect(parsed.data.id).toBe(note?.id);
+    expect(parsed.data.routeAliases).toEqual([]);
+  });
+
   it("creates a sample content scaffold and searchable content", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
@@ -596,7 +634,8 @@ describe("content service", () => {
     });
 
     const publicManifest = await service.getPublicManifest();
-    const publicBacklinks = await service.getPublicBacklinks("note:published-anchor");
+    const publishedAnchor = await service.getNote("published-anchor");
+    const publicBacklinks = await service.getPublicBacklinks(publishedAnchor?.id ?? "");
     const publicResults = await service.searchPublicContent("Draft");
     const workspaceResults = await service.searchContent("Draft");
 
@@ -743,7 +782,7 @@ describe("content service", () => {
     });
 
     const nestedChapter = await service.getChapter("nested-book", ["part-one", "intro"]);
-    expect(nestedChapter?.id).toBe("chapter:nested-book/part-one/intro");
+    expect(typeof nestedChapter?.id).toBe("string");
     expect(nestedChapter?.route).toBe("/books/nested-book/part-one/intro");
 
     expect(await service.getChapter("nested-book", "intro")).toBeNull();
@@ -1158,7 +1197,7 @@ describe("content service", () => {
     expect(duplicate.children[0]?.meta.slug).toBe("detail");
     expect(duplicate.children[0]?.meta.status).toBe("draft");
 
-    const canonicalId = `chapter:nested-subtree/${duplicate.path.join("/")}`;
+    const canonicalId = duplicate.id;
     const byCanonicalId = await service.getContentById(canonicalId);
     expect(byCanonicalId?.id).toBe(canonicalId);
 
@@ -1972,7 +2011,8 @@ describe("content service", () => {
     const listedMedia = await service.listMediaForPage("note:media-note");
     expect(listedMedia).toHaveLength(1);
     expect(listedMedia[0]?.url).toBe("/media/notes/media-note/figure.png");
-    expect(listedMedia[0]?.references[0]?.id).toBe("note:media-note");
+    const mediaNote = await service.getNote("media-note");
+    expect(listedMedia[0]?.references[0]?.id).toBe(mediaNote?.id);
 
     const blockedDelete = await service.removeMediaAsset(
       "/media/notes/media-note/figure.png",
@@ -2044,7 +2084,210 @@ describe("content service", () => {
     expect(missing?.missing).toBe(true);
     expect(missing?.size).toBeNull();
     expect(missing?.relativePath).toBeNull();
-    expect(figure?.references[0]?.id).toBe("note:referenced-media-note");
+    const referencedMediaNote = await service.getNote("referenced-media-note");
+    expect(figure?.references[0]?.id).toBe(referencedMediaNote?.id);
+  });
+
+  it("renames notes while preserving stable ids, aliases, and media rewrites", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Old Note",
+      slug: "old-note",
+      summary: "Before rename",
+      body: "[[old-note]]\n\n![Figure](/media/notes/old-note/figure.png)",
+      status: "published",
+      allowExecution: true,
+    });
+    await service.createNote({
+      title: "Referrer",
+      slug: "referrer",
+      summary: "Backlink source",
+      body: "[[old-note]]\n\n/media/notes/old-note/figure.png",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const oldMediaPath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "notes",
+      "old-note",
+      "figure.png",
+    );
+    await fs.mkdir(path.dirname(oldMediaPath), { recursive: true });
+    await fs.writeFile(oldMediaPath, "image", "utf8");
+
+    const original = await service.getNote("old-note");
+    const renamed = await service.updateNote("old-note", {
+      title: "New Note",
+      slug: "new-note",
+      summary: "After rename",
+      body: "# New Note",
+      status: "published",
+      allowExecution: true,
+    });
+
+    expect(renamed?.id).toBe(original?.id);
+    expect(renamed?.meta.slug).toBe("new-note");
+    expect(renamed?.meta.routeAliases).toContainEqual({ kind: "note", location: "old-note" });
+
+    const oldRoute = await service.resolveWorkspaceNoteRoute("old-note");
+    expect(oldRoute?.aliased).toBe(true);
+    expect(oldRoute?.workspaceRoute).toBe("/app/notes/new-note");
+    expect(oldRoute?.content.kind).toBe("note");
+
+    const referrer = await service.getNote("referrer");
+    expect(referrer?.body).toContain("[[new-note]]");
+    expect(referrer?.body).toContain("/media/notes/new-note/figure.png");
+    await expect(fs.access(oldMediaPath)).rejects.toThrow();
+    await expect(
+      fs.access(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          ".webbook",
+          "uploads",
+          "notes",
+          "new-note",
+          "figure.png",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("renames books while preserving chapter redirects and rewriting canonical chapter links", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Legacy Book",
+      slug: "legacy-book",
+      description: "Before rename",
+      body: "# Legacy",
+      status: "published",
+      theme: "paper",
+    });
+    await service.createChapter("legacy-book", {
+      title: "Intro",
+      slug: "intro",
+      summary: "",
+      body: "# Intro",
+      status: "published",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createNote({
+      title: "Book Referrer",
+      slug: "book-referrer",
+      summary: "Links to the chapter",
+      body: "[[legacy-book/intro]]",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await service.updateBook("legacy-book", {
+      title: "Renamed Book",
+      slug: "renamed-book",
+      description: "After rename",
+      body: "# Renamed",
+      status: "published",
+      featured: false,
+      coverColor: "#292118",
+      fontPreset: "source-serif",
+    });
+
+    const oldBookRoute = await service.resolveWorkspaceBookRoute("legacy-book");
+    expect(oldBookRoute?.aliased).toBe(true);
+    expect(oldBookRoute?.workspaceRoute).toBe("/app/books/renamed-book");
+
+    const oldChapterRoute = await service.resolveWorkspaceChapterRoute("legacy-book", ["intro"]);
+    expect(oldChapterRoute?.aliased).toBe(true);
+    expect(oldChapterRoute?.workspaceRoute).toBe("/app/books/renamed-book/chapters/intro");
+
+    const referrer = await service.getNote("book-referrer");
+    expect(referrer?.body).toContain("[[renamed-book/intro]]");
+  });
+
+  it("moves notes into books as chapters while preserving ids and redirecting old note routes", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Destination Book",
+      slug: "destination-book",
+      description: "Target",
+      body: "# Destination",
+      status: "draft",
+      theme: "paper",
+    });
+    await service.createNote({
+      title: "Standalone",
+      slug: "standalone",
+      summary: "Move me",
+      body: "# Standalone\n\n/media/notes/standalone/figure.png",
+      status: "draft",
+      allowExecution: true,
+    });
+    await service.createNote({
+      title: "Second Referrer",
+      slug: "second-referrer",
+      summary: "Links to standalone",
+      body: "[[standalone]]",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const original = await service.getNote("standalone");
+    const oldMediaPath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "notes",
+      "standalone",
+      "figure.png",
+    );
+    await fs.mkdir(path.dirname(oldMediaPath), { recursive: true });
+    await fs.writeFile(oldMediaPath, "image", "utf8");
+
+    const moved = await service.moveNoteToBook("standalone", {
+      destinationBookSlug: "destination-book",
+      parentChapterPath: [],
+      order: 1,
+    });
+
+    expect(moved?.id).toBe(original?.id);
+    expect(moved?.meta.bookSlug).toBe("destination-book");
+    expect(moved?.meta.routeAliases).toContainEqual({ kind: "note", location: "standalone" });
+    expect(await service.getNote("standalone")).toBeNull();
+
+    const oldRoute = await service.resolveWorkspaceNoteRoute("standalone");
+    expect(oldRoute?.aliased).toBe(true);
+    expect(oldRoute?.content.kind).toBe("chapter");
+    expect(oldRoute?.workspaceRoute).toBe("/app/books/destination-book/chapters/standalone");
+
+    const referrer = await service.getNote("second-referrer");
+    expect(referrer?.body).toContain("[[destination-book/standalone]]");
+    await expect(fs.access(oldMediaPath)).rejects.toThrow();
+    await expect(
+      fs.access(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          ".webbook",
+          "uploads",
+          "books",
+          "destination-book",
+          "chapters",
+          "standalone",
+          "figure.png",
+        ),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it("renames media and rewrites references across content while preserving URL suffixes", async () => {

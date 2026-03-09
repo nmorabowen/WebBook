@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { PublicRenderContent } from "@/components/public-render-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
@@ -8,8 +8,8 @@ import {
   getPublicBacklinks,
   getGeneralSettings,
   getPublicManifest,
-  getPublicChapter,
   getPublicContentTree,
+  resolvePublicChapterRoute,
 } from "@/lib/content/service";
 import { getChapterNumberByPath } from "@/lib/chapter-numbering";
 import { extractToc } from "@/lib/markdown/shared";
@@ -22,7 +22,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { bookSlug, chapterPath } = await params;
   const requestedPath = chapterPath ?? [];
-  const result = await getPublicChapter(bookSlug, requestedPath);
+  const result = await resolvePublicChapterRoute(bookSlug, requestedPath);
 
   if (!result) {
     return buildPublicMetadata({
@@ -54,10 +54,12 @@ export default async function ChapterPage({
 }) {
   const { bookSlug, chapterPath } = await params;
   const requestedPath = chapterPath ?? [];
-  const result = await getPublicChapter(bookSlug, requestedPath);
-
+  const result = await resolvePublicChapterRoute(bookSlug, requestedPath);
   if (!result) {
     notFound();
+  }
+  if (result.aliased) {
+    redirect(result.publicRoute);
   }
 
   const { book, chapter } = result;
