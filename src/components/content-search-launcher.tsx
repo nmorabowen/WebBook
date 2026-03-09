@@ -487,7 +487,7 @@ export function ContentSearchLauncher({
           bookSlug={chapterMoveRequest.bookSlug}
           chapterTitle={chapterMoveRequest.chapterTitle}
           chapterPath={chapterMoveRequest.chapterPath}
-          books={tree.books}
+          books={treeForCommands.books}
           initialParentPath={chapterMoveRequest.chapterPath.slice(0, -1)}
           busy={isChapterMovePending}
           errorMessage={chapterMoveError}
