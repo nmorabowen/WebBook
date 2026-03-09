@@ -6,7 +6,6 @@ import {
   type PreviewChapterItem,
   type SourceNavigationRequest,
 } from "@/components/public-render-content";
-import { ReadingMetaPanel } from "@/components/reading-meta-panel";
 import type { BookTypography } from "@/lib/book-typography";
 import type { GeneralSettings, ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -48,9 +47,6 @@ export function EditorLivePreview({
   fontPreset = "source-serif",
   typography,
   generalSettings,
-  backlinks,
-  updatedAt,
-  revisions,
   currentRoute,
   bookTitle,
   chapterNumber,
@@ -73,50 +69,36 @@ export function EditorLivePreview({
         aria-hidden="true"
         style={{ height: `${topOffset}px` }}
       />
-      <div className="paper-grid preview-shell-layout" style={{ gap: "var(--workspace-tile-spacing)" }}>
-        <main
-          className="paper-panel paper-panel-strong p-6 md:p-10"
-          style={{ borderRadius: "var(--workspace-corner-radius)" }}
-        >
-          <PublicRenderContent
-            mode={mode}
-            title={title}
-            summary={summary}
-            markdown={markdown}
-            manifest={manifest}
-            pageId={pageId}
-            requester="admin"
-            allowExecution={allowExecution}
-            fontPreset={fontPreset}
-            typography={typography}
-            generalSettings={generalSettings}
-            bookTitle={bookTitle}
-            chapterNumber={chapterNumber}
-            bookSlug={bookSlug}
-            chapters={chapters}
-            sourceNavigation
-            currentRoute={currentRoute}
-            sourceNavigationViewportRef={viewportRef}
-            sourceNavigationRequest={sourceNavigationRequest}
-            onRequestSourceLine={onRequestSourceLine}
-            onVisibleSourceLineChange={onVisibleSourceLineChange}
-            linkTarget="_blank"
-            linkRel="noreferrer"
-          />
-        </main>
-        <aside
-          className="paper-panel hidden p-6 xl:block"
-          style={{ borderRadius: "var(--workspace-corner-radius)" }}
-        >
-          <ReadingMetaPanel
-            backlinks={backlinks}
-            updatedAt={updatedAt}
-            revisions={revisions}
-            linkTarget="_blank"
-            linkRel="noreferrer"
-          />
-        </aside>
-      </div>
+      <main
+        className="paper-panel paper-panel-strong p-6 md:p-10"
+        style={{ borderRadius: "var(--workspace-corner-radius)" }}
+      >
+        <PublicRenderContent
+          mode={mode}
+          title={title}
+          summary={summary}
+          markdown={markdown}
+          manifest={manifest}
+          pageId={pageId}
+          requester="admin"
+          allowExecution={allowExecution}
+          fontPreset={fontPreset}
+          typography={typography}
+          generalSettings={generalSettings}
+          bookTitle={bookTitle}
+          chapterNumber={chapterNumber}
+          bookSlug={bookSlug}
+          chapters={chapters}
+          sourceNavigation
+          currentRoute={currentRoute}
+          sourceNavigationViewportRef={viewportRef}
+          sourceNavigationRequest={sourceNavigationRequest}
+          onRequestSourceLine={onRequestSourceLine}
+          onVisibleSourceLineChange={onVisibleSourceLineChange}
+          linkTarget="_blank"
+          linkRel="noreferrer"
+        />
+      </main>
     </div>
   );
 }
