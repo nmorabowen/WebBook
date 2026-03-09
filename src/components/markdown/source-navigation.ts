@@ -40,13 +40,16 @@ export function findSourceLineRestoreTarget(
 
 export function findVisibleSourceLine(
   candidates: SourceLineCandidate[],
-  viewportHeight: number,
+  viewport: {
+    top: number;
+    bottom: number;
+  },
 ) {
   if (!candidates.length) {
     return null;
   }
 
-  const viewportCenter = viewportHeight / 2;
+  const viewportCenter = (viewport.top + viewport.bottom) / 2;
   let bestCandidate: SourceLineCandidate | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
 

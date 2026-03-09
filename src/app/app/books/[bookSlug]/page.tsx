@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { CreateChapterPanel } from "@/components/editor/create-chapter-panel";
 import { EditorShell } from "@/components/editor/editor-shell";
 import { PageMoveControls } from "@/components/editor/page-move-controls";
+import type { PreviewChapterItem } from "@/components/public-render-content";
 import { requireSession } from "@/lib/auth";
 import {
   getContentTree,
@@ -12,9 +13,26 @@ import {
   loadRenderableContent,
   resolveWorkspaceBookRoute,
 } from "@/lib/content/service";
-import { extractToc } from "@/lib/markdown/shared";
 
 export const dynamic = "force-dynamic";
+
+type PreviewChapterSource = {
+  path: string[];
+  meta: {
+    title: string;
+    summary?: string;
+  };
+  children: PreviewChapterSource[];
+};
+
+function mapPreviewChapters(chapters: PreviewChapterSource[]): PreviewChapterItem[] {
+  return chapters.map((chapter) => ({
+    path: chapter.path,
+    title: chapter.meta.title,
+    summary: chapter.meta.summary,
+    children: mapPreviewChapters(chapter.children),
+  }));
+}
 
 export default async function AppBookPage({
   params,
@@ -41,7 +59,6 @@ export default async function AppBookPage({
     getGeneralSettings(),
     listMediaForPage(loaded.content.id),
   ]);
-  const toc = extractToc(loaded.content.body);
   const nextRootChapterOrder =
     loaded.content.chapters.reduce(
       (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
@@ -73,11 +90,15 @@ export default async function AppBookPage({
           fontPreset: loaded.content.meta.fontPreset ?? "archivo-narrow",
           typography: loaded.content.meta.typography,
         }}
-        toc={toc}
         backlinks={loaded.backlinks}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
         mediaAssets={mediaAssets}
+        generalSettings={generalSettings}
+        previewContext={{
+          chapters: mapPreviewChapters(loaded.content.chapters),
+          updatedAt: loaded.content.meta.updatedAt,
+        }}
         updateEndpoint={`/api/books/${loaded.content.meta.slug}`}
         shortcutScopeKey={session.username}
         extraActions={

@@ -11,7 +11,6 @@ import {
   loadRenderableContent,
   resolveWorkspaceNoteRoute,
 } from "@/lib/content/service";
-import { extractToc } from "@/lib/markdown/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +39,6 @@ export default async function AppNotePage({
     getGeneralSettings(),
     listMediaForPage(loaded.content.id),
   ]);
-  const toc = extractToc(loaded.content.body);
-
   return (
     <AppShell
       tree={tree}
@@ -66,11 +63,14 @@ export default async function AppNotePage({
           fontPreset: loaded.content.meta.fontPreset ?? "archivo-narrow",
           typography: loaded.content.meta.typography,
         }}
-        toc={toc}
         backlinks={loaded.backlinks}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
         mediaAssets={mediaAssets}
+        generalSettings={generalSettings}
+        previewContext={{
+          updatedAt: loaded.content.meta.updatedAt,
+        }}
         updateEndpoint={`/api/notes/${loaded.content.meta.slug}`}
         shortcutScopeKey={session.username}
         extraActions={

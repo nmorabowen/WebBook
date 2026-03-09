@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useDeferredValue,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -54,7 +55,9 @@ import {
   type BookTypography,
 } from "@/lib/book-typography";
 import { bookCoverColorPresets } from "@/lib/book-cover-colors";
-import type { ManifestEntry, MediaAsset } from "@/lib/content/schemas";
+import { EditorLivePreview } from "@/components/editor/editor-live-preview";
+import type { PreviewChapterItem } from "@/components/public-render-content";
+import type { GeneralSettings, ManifestEntry, MediaAsset } from "@/lib/content/schemas";
 import { fontPresetOptions, type FontPreset } from "@/lib/font-presets";
 import { mathAutocompleteItems, type MathAutocompleteItem } from "@/lib/math-autocomplete";
 import { defaultUploadTargetPathForRoute } from "@/lib/media-paths";
@@ -66,16 +69,9 @@ import {
   type EditorShortcutMap,
   type ShortcutActionId,
 } from "@/lib/editor-shortcuts";
-import { extractToc, splitWikiTarget, type TocItem } from "@/lib/markdown/shared";
+import { extractToc, splitWikiTarget } from "@/lib/markdown/shared";
 import { buildInlineTextStyleHref, cn, normalizeYouTubeEmbedInput, toSlug } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/utils";
-import {
-  applyPreviewVisibleLineUpdate,
-  beginPreviewReload,
-  createPreviewSyncState,
-  setPreviewAnchorLine,
-  setRenderedPreviewLine,
-} from "@/components/editor/preview-sync";
 
 type MathJaxRuntime = {
   startup?: {
@@ -104,11 +100,17 @@ type EditorShellProps = {
     fontPreset?: FontPreset;
     typography?: Partial<BookTypography>;
   };
-  toc: TocItem[];
   backlinks: ManifestEntry[];
   unresolvedLinks: string[];
   revisions: string[];
   mediaAssets: MediaAsset[];
+  generalSettings?: GeneralSettings;
+  previewContext?: {
+    bookTitle?: string;
+    chapterNumber?: string;
+    chapters?: PreviewChapterItem[];
+    updatedAt?: string;
+  };
   updateEndpoint: string;
   extraActions?: React.ReactNode;
   shortcutScopeKey?: string;
@@ -534,11 +536,12 @@ export function EditorShell({
   publicRoute,
   manifest,
   initialValues,
-  toc,
   backlinks,
   unresolvedLinks,
   revisions,
   mediaAssets,
+  generalSettings,
+  previewContext,
   updateEndpoint,
   extraActions,
   shortcutScopeKey = "workspace",
@@ -578,10 +581,13 @@ export function EditorShell({
   const [saveMessage, setSaveMessage] = useState<string>("Ready");
   const [imageUploadPending, setImageUploadPending] = useState(false);
   const [fileUploadPending, setFileUploadPending] = useState(false);
-  const [previewVersion, setPreviewVersion] = useState(0);
   const [editorSplitRatio, setEditorSplitRatio] = useState(52);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const [previewOffset, setPreviewOffset] = useState(0);
+  const [previewNavigationRequest, setPreviewNavigationRequest] = useState<{
+    line: number;
+    nonce: number;
+  } | null>(null);
   const [rightPanelRoot, setRightPanelRoot] = useState<HTMLElement | null>(null);
   const [inlineTextSize, setInlineTextSize] = useState<(typeof inlineTextSizeOptions)[number]["value"]>("inherit");
   const [inlineTextColor, setInlineTextColor] = useState("#8f5335");
@@ -607,14 +613,11 @@ export function EditorShell({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadFileInputRef = useRef<HTMLInputElement>(null);
   const uploadFolderInputRef = useRef<HTMLInputElement>(null);
-  const previewFrameRef = useRef<HTMLIFrameElement>(null);
   const editorSplitRef = useRef<HTMLDivElement>(null);
   const sourcePanelRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
-  const previewViewportRef = useRef<HTMLDivElement>(null);
   const previewExpandedRatioRef = useRef(52);
-  const previewRefreshTimerRef = useRef<number | null>(null);
-  const previewSyncStateRef = useRef(createPreviewSyncState());
+  const previewVisibleLineRef = useRef<number | null>(null);
   const bodyRef = useRef(initialValues.body);
   const sourceViewportRef = useRef({
     selectionStart: 0,
@@ -671,6 +674,18 @@ export function EditorShell({
     [currentPageId, manifest],
   );
   const liveCurrentHeadings = useMemo(() => extractToc(body), [body]);
+  const deferredPreviewTitle = useDeferredValue(title);
+  const deferredPreviewSummary = useDeferredValue(summary);
+  const deferredPreviewBody = useDeferredValue(body);
+  const deferredPreviewTypography = useDeferredValue(typography);
+  const deferredPreviewFontPreset = useDeferredValue(fontPreset);
+  const livePreviewBookSlug = useMemo(() => {
+    if (mode !== "book" || !currentPublicRoute) {
+      return undefined;
+    }
+
+    return currentPublicRoute.split("/").filter(Boolean)[1];
+  }, [currentPublicRoute, mode]);
   const wikiAutocompleteSuggestions = useMemo(() => {
     if (!wikiAutocompleteContext) {
       return [];
@@ -874,7 +889,7 @@ export function EditorShell({
     const sourcePanel = sourcePanelRef.current;
     const previewPanel = previewPanelRef.current;
     const textarea = sourceRef.current;
-    const previewViewport = previewViewportRef.current;
+    const previewViewport = previewPanel?.querySelector<HTMLElement>(".editor-preview");
 
     if (!sourcePanel || !previewPanel || !textarea || !previewViewport) {
       return;
@@ -993,43 +1008,15 @@ export function EditorShell({
     setSlug(toSlug(title));
   }, [slugTouched, title]);
 
-  const postPreviewLine = useEffectEvent((line: number) => {
-    const previewWindow = previewFrameRef.current?.contentWindow;
-    if (!previewWindow) {
-      return false;
-    }
-
-    previewWindow.postMessage(
-      {
-        type: "webbook-editor-preview-line",
-        line,
-      },
-      window.location.origin,
-    );
-    return true;
+  const requestPreviewLine = useEffectEvent((line: number) => {
+    setPreviewNavigationRequest((current) => ({
+      line,
+      nonce: (current?.nonce ?? 0) + 1,
+    }));
   });
 
-  const refreshPreview = useEffectEvent((mode: "debounced" | "immediate" = "immediate") => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    previewSyncStateRef.current = beginPreviewReload(previewSyncStateRef.current);
-
-    if (previewRefreshTimerRef.current !== null) {
-      window.clearTimeout(previewRefreshTimerRef.current);
-      previewRefreshTimerRef.current = null;
-    }
-
-    if (mode === "debounced") {
-      previewRefreshTimerRef.current = window.setTimeout(() => {
-        setPreviewVersion((current) => current + 1);
-        previewRefreshTimerRef.current = null;
-      }, 3000);
-      return;
-    }
-
-    setPreviewVersion((current) => current + 1);
+  const handlePreviewVisibleLineChange = useEffectEvent((line: number) => {
+    previewVisibleLineRef.current = line;
   });
 
   const applySaveResult = useEffectEvent((saved: SaveResponsePayload | null) => {
@@ -1088,18 +1075,8 @@ export function EditorShell({
     if (needsRebind && nextWorkspaceRoute) {
       router.replace(nextWorkspaceRoute);
       router.refresh();
-      refreshPreview("immediate");
     }
   });
-
-  useEffect(
-    () => () => {
-      if (previewRefreshTimerRef.current !== null && typeof window !== "undefined") {
-        window.clearTimeout(previewRefreshTimerRef.current);
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     if (payloadSignature === lastSavedPayloadSignatureRef.current) {
@@ -1127,7 +1104,6 @@ export function EditorShell({
 
         setSaveState("saved");
         setSaveMessage("Autosaved");
-        refreshPreview("debounced");
       } catch {
         setSaveState("error");
         setSaveMessage("Autosave failed");
@@ -1135,7 +1111,7 @@ export function EditorShell({
     }, 1400);
 
     return () => clearTimeout(timer);
-  }, [applySaveResult, currentUpdateEndpoint, payload, payloadSignature, refreshPreview]);
+  }, [applySaveResult, currentUpdateEndpoint, payload, payloadSignature]);
 
   useLayoutEffect(() => {
     const textarea = sourceRef.current;
@@ -1177,7 +1153,6 @@ export function EditorShell({
 
     setSaveState("saved");
     setSaveMessage("Snapshot saved");
-    refreshPreview("immediate");
   };
 
   const saveTypography = async () => {
@@ -1202,7 +1177,6 @@ export function EditorShell({
 
     setSaveState("saved");
     setSaveMessage("Typography saved");
-    refreshPreview("immediate");
   };
 
   const togglePublication = (nextPublished: boolean) => {
@@ -1230,7 +1204,6 @@ export function EditorShell({
       setStatus(nextPublished ? "published" : "draft");
       setSaveState("saved");
       setSaveMessage(nextPublished ? "Published" : "Moved to draft");
-      refreshPreview("immediate");
     });
   };
 
@@ -1505,49 +1478,8 @@ export function EditorShell({
     }
 
     const line = sourceLineFromOffset(bodyRef.current, textarea.selectionStart);
-    previewSyncStateRef.current = setPreviewAnchorLine(previewSyncStateRef.current, line);
-    if (!postPreviewLine(line)) {
-      previewSyncStateRef.current = beginPreviewReload(previewSyncStateRef.current);
-    }
+    requestPreviewLine(line);
   };
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
-        return;
-      }
-
-      const data = event.data;
-      if (!data || typeof data !== "object" || typeof data.type !== "string") {
-        return;
-      }
-
-      if (data.type === "webbook-preview-source-line" && typeof data.line === "number") {
-        previewSyncStateRef.current = setRenderedPreviewLine(
-          previewSyncStateRef.current,
-          data.line,
-        );
-        focusSourceLine(data.line);
-        return;
-      }
-
-      if (data.type === "webbook-preview-visible-line" && typeof data.line === "number") {
-        const update = applyPreviewVisibleLineUpdate(
-          previewSyncStateRef.current,
-          data.line,
-        );
-        previewSyncStateRef.current = update.nextState;
-        if (update.restoreLineToSend !== null) {
-          postPreviewLine(update.restoreLineToSend);
-        }
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
-  }, []);
 
   const uploadImageAndInsert = async (
     file: File,
@@ -2544,7 +2476,7 @@ export function EditorShell({
       >
         <p className="paper-label">Outline</p>
         <div className="toc-list">
-          {toc.map((item) => (
+          {liveCurrentHeadings.map((item) => (
             <a
               key={item.id}
               href={`#${item.id}`}
@@ -3522,7 +3454,7 @@ export function EditorShell({
               <div>
                 <p className="paper-label">Live preview</p>
                 <p className="text-sm text-[var(--paper-muted)]">
-                  Uses the saved public-page render path. Click a preview dot to jump to source.
+                  Updates from local editor state. Click a preview dot to jump to source.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -3532,23 +3464,30 @@ export function EditorShell({
                 </span>
               </div>
             </div>
-            <div
-              ref={previewViewportRef}
-              className="editor-preview pr-1"
-              data-font-preset={fontPreset}
-            >
-              <div
-                className="editor-preview-offset"
-                aria-hidden="true"
-                style={{ height: `${previewOffset}px` }}
-              />
-              <iframe
-                ref={previewFrameRef}
-                title="Live preview"
-                src={`/app/preview?pageId=${encodeURIComponent(currentPageId)}&v=${previewVersion}`}
-                className="preview-frame"
-              />
-            </div>
+            <EditorLivePreview
+              mode={mode}
+              topOffset={previewOffset}
+              title={deferredPreviewTitle}
+              summary={deferredPreviewSummary}
+              markdown={deferredPreviewBody}
+              manifest={manifest}
+              pageId={currentPageId}
+              allowExecution={allowExecution}
+              fontPreset={deferredPreviewFontPreset}
+              typography={deferredPreviewTypography}
+              generalSettings={generalSettings}
+              backlinks={backlinks}
+              updatedAt={previewContext?.updatedAt}
+              revisions={revisions}
+              currentRoute={currentPublicRoute}
+              bookTitle={previewContext?.bookTitle}
+              chapterNumber={previewContext?.chapterNumber}
+              bookSlug={livePreviewBookSlug}
+              chapters={previewContext?.chapters}
+              sourceNavigationRequest={previewNavigationRequest}
+              onRequestSourceLine={focusSourceLine}
+              onVisibleSourceLineChange={handlePreviewVisibleLineChange}
+            />
           </div>
         </div>
 

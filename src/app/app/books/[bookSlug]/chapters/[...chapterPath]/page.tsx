@@ -4,6 +4,7 @@ import { CreateChapterPanel } from "@/components/editor/create-chapter-panel";
 import { EditorShell } from "@/components/editor/editor-shell";
 import { PageMoveControls } from "@/components/editor/page-move-controls";
 import { requireSession } from "@/lib/auth";
+import { getChapterNumberByPath } from "@/lib/chapter-numbering";
 import {
   getContentTree,
   getGeneralSettings,
@@ -12,7 +13,6 @@ import {
   loadRenderableContent,
   resolveWorkspaceChapterRoute,
 } from "@/lib/content/service";
-import { extractToc } from "@/lib/markdown/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +43,6 @@ export default async function AppChapterPage({
     listMediaForPage(loaded.content.id),
   ]);
   const book = resolved.book;
-  const toc = extractToc(loaded.content.body);
   const nextSubchapterOrder =
     loaded.content.children.reduce(
       (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
@@ -55,6 +54,9 @@ export default async function AppChapterPage({
       0,
     ) + 1;
   const chapterRoutePath = loaded.content.path.join("/");
+  const chapterNumber =
+    getChapterNumberByPath(book.chapters, loaded.content.path) ??
+    String(loaded.content.meta.order);
 
   return (
     <AppShell
@@ -83,11 +85,16 @@ export default async function AppChapterPage({
             "archivo-narrow",
           typography: book.meta.typography,
         }}
-        toc={toc}
         backlinks={loaded.backlinks}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
         mediaAssets={mediaAssets}
+        generalSettings={generalSettings}
+        previewContext={{
+          bookTitle: book.meta.title,
+          chapterNumber,
+          updatedAt: loaded.content.meta.updatedAt,
+        }}
         updateEndpoint={`/api/books/${bookSlug}/chapters/${chapterRoutePath}`}
         shortcutScopeKey={session.username}
         extraActions={

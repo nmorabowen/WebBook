@@ -6,12 +6,16 @@ type ReadingMetaPanelProps = {
   backlinks: ManifestEntry[];
   updatedAt?: string;
   revisions?: string[];
+  linkTarget?: string;
+  linkRel?: string;
 };
 
 export function ReadingMetaPanel({
   backlinks,
   updatedAt,
   revisions = [],
+  linkTarget,
+  linkRel,
 }: ReadingMetaPanelProps) {
   return (
     <div className="grid gap-8">
@@ -20,7 +24,13 @@ export function ReadingMetaPanel({
         <div className="backlink-list">
           {backlinks.length ? (
             backlinks.map((entry) => (
-              <Link key={entry.id} href={entry.route} className="paper-nav-link">
+              <Link
+                key={entry.id}
+                href={entry.route}
+                className="paper-nav-link"
+                target={linkTarget}
+                rel={linkRel}
+              >
                 {entry.title}
               </Link>
             ))

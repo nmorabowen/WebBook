@@ -2,6 +2,7 @@
 
 import { act } from "react-dom/test-utils";
 import { createRoot } from "react-dom/client";
+import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MarkdownRenderer } from "@/components/markdown/markdown-renderer";
 
@@ -120,5 +121,103 @@ describe("MarkdownRenderer source navigation", () => {
       { type: "webbook-preview-visible-line", line: 5 },
       window.location.origin,
     );
+  });
+
+  it("supports local callback-based source navigation in a scroll container", async () => {
+    const onRequestSourceLine = vi.fn();
+    const onVisibleSourceLineChange = vi.fn();
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      ((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      }) as typeof requestAnimationFrame,
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn() as typeof cancelAnimationFrame,
+    );
+
+    function TestHarness({
+      request,
+    }: {
+      request: { line: number; nonce: number } | null;
+    }) {
+      const viewportRef = useRef<HTMLDivElement>(null);
+
+      return (
+        <div ref={viewportRef} style={{ height: "400px", overflow: "auto" }}>
+          <MarkdownRenderer
+            markdown={`# One\n\nAlpha\n\n## Two`}
+            manifest={[]}
+            pageId="page-2"
+            requester="admin"
+            sourceNavigation
+            currentRoute="/notes/page-2"
+            sourceNavigationViewportRef={viewportRef}
+            sourceNavigationRequest={request}
+            onRequestSourceLine={onRequestSourceLine}
+            onVisibleSourceLineChange={onVisibleSourceLineChange}
+          />
+        </div>
+      );
+    }
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<TestHarness request={null} />);
+    });
+
+    const viewport = container.firstElementChild as HTMLDivElement | null;
+    const candidates = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-source-line]"),
+    ).filter((element) => {
+      const line = Number(element.dataset.sourceLine);
+      return line === 1 || line === 3 || line === 5;
+    });
+
+    const topCandidate = candidates.find((element) => element.dataset.sourceLine === "1");
+    const middleCandidate = candidates.find((element) => element.dataset.sourceLine === "3");
+    const lastCandidate = candidates.find((element) => element.dataset.sourceLine === "5");
+    const sourceNavDot = container.querySelector<HTMLButtonElement>(".source-nav-dot");
+
+    expect(viewport).toBeTruthy();
+    expect(topCandidate).toBeTruthy();
+    expect(middleCandidate).toBeTruthy();
+    expect(lastCandidate).toBeTruthy();
+    expect(sourceNavDot).toBeTruthy();
+
+    viewport!.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 500 } as DOMRect);
+    topCandidate!.getBoundingClientRect = () =>
+      ({ top: 120, bottom: 180 } as DOMRect);
+    middleCandidate!.getBoundingClientRect = () =>
+      ({ top: 260, bottom: 340 } as DOMRect);
+    lastCandidate!.getBoundingClientRect = () =>
+      ({ top: 620, bottom: 700 } as DOMRect);
+
+    onVisibleSourceLineChange.mockClear();
+
+    await act(async () => {
+      root?.render(<TestHarness request={{ line: 5, nonce: 1 }} />);
+    });
+
+    await act(async () => {
+      viewport?.dispatchEvent(new Event("scroll"));
+    });
+
+    expect(onVisibleSourceLineChange).toHaveBeenCalledWith(3);
+
+    await act(async () => {
+      sourceNavDot?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(onRequestSourceLine).toHaveBeenCalled();
   });
 });

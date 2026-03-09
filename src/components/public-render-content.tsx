@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { HTMLAttributeAnchorTarget, ReactNode, RefObject } from "react";
 import { MarkdownRenderer } from "@/components/markdown/markdown-renderer";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import { nestedChapterNumber } from "@/lib/chapter-numbering";
@@ -8,11 +8,16 @@ import type { GeneralSettings, ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
 import { DEFAULT_GENERAL_SETTINGS } from "@/lib/general-settings-config";
 
-type PreviewChapterItem = {
+export type PreviewChapterItem = {
   path: string[];
   title: string;
   summary?: string;
   children: PreviewChapterItem[];
+};
+
+export type SourceNavigationRequest = {
+  line: number;
+  nonce: number;
 };
 
 type PublicRenderContentProps = {
@@ -33,6 +38,12 @@ type PublicRenderContentProps = {
   sourceNavigation?: boolean;
   generalSettings?: GeneralSettings;
   currentRoute?: string;
+  sourceNavigationViewportRef?: RefObject<HTMLDivElement | null>;
+  sourceNavigationRequest?: SourceNavigationRequest | null;
+  onRequestSourceLine?: (line: number) => void;
+  onVisibleSourceLineChange?: (line: number) => void;
+  linkTarget?: HTMLAttributeAnchorTarget;
+  linkRel?: string;
 };
 
 export function PublicRenderContent({
@@ -53,6 +64,12 @@ export function PublicRenderContent({
   sourceNavigation = false,
   generalSettings,
   currentRoute,
+  sourceNavigationViewportRef,
+  sourceNavigationRequest,
+  onRequestSourceLine,
+  onVisibleSourceLineChange,
+  linkTarget,
+  linkRel,
 }: PublicRenderContentProps) {
   const countChapters = (items: PreviewChapterItem[]): number =>
     items.reduce((total, item) => total + 1 + countChapters(item.children), 0);
@@ -96,6 +113,12 @@ export function PublicRenderContent({
             typography={typography}
             sourceNavigation={sourceNavigation}
             currentRoute={currentRoute}
+            sourceNavigationViewportRef={sourceNavigationViewportRef}
+            sourceNavigationRequest={sourceNavigationRequest}
+            onRequestSourceLine={onRequestSourceLine}
+            onVisibleSourceLineChange={onVisibleSourceLineChange}
+            linkTarget={linkTarget}
+            linkRel={linkRel}
           />
         </div>
       </div>
@@ -126,6 +149,12 @@ export function PublicRenderContent({
             typography={typography}
             sourceNavigation={sourceNavigation}
             currentRoute={currentRoute}
+            sourceNavigationViewportRef={sourceNavigationViewportRef}
+            sourceNavigationRequest={sourceNavigationRequest}
+            onRequestSourceLine={onRequestSourceLine}
+            onVisibleSourceLineChange={onVisibleSourceLineChange}
+            linkTarget={linkTarget}
+            linkRel={linkRel}
           />
         </div>
 
@@ -152,6 +181,8 @@ export function PublicRenderContent({
                         <a
                           href={bookSlug ? `/books/${bookSlug}/${chapter.path.join("/")}` : "#"}
                           className="rounded-[22px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.52)] px-5 py-4 transition hover:-translate-y-0.5"
+                          target={linkTarget}
+                          rel={linkRel}
                           style={{
                             borderRadius: cardRadius,
                             marginLeft: `${depth * 14}px`,
@@ -208,6 +239,12 @@ export function PublicRenderContent({
           typography={typography}
           sourceNavigation={sourceNavigation}
           currentRoute={currentRoute}
+          sourceNavigationViewportRef={sourceNavigationViewportRef}
+          sourceNavigationRequest={sourceNavigationRequest}
+          onRequestSourceLine={onRequestSourceLine}
+          onVisibleSourceLineChange={onVisibleSourceLineChange}
+          linkTarget={linkTarget}
+          linkRel={linkRel}
         />
       </div>
     </div>

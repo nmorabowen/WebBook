@@ -42,6 +42,6 @@ describe("source navigation helpers", () => {
       createCandidate(8, 420, 520),
     ];
 
-    expect(findVisibleSourceLine(candidates, 600)?.line).toBe(5);
+    expect(findVisibleSourceLine(candidates, { top: 0, bottom: 600 })?.line).toBe(5);
   });
 });

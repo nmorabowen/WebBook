@@ -2,9 +2,10 @@ import type { TocItem } from "@/lib/markdown/shared";
 
 type TocPanelProps = {
   toc: TocItem[];
+  onNavigate?: (id: string) => void;
 };
 
-export function TocPanel({ toc }: TocPanelProps) {
+export function TocPanel({ toc, onNavigate }: TocPanelProps) {
   return (
     <section>
       <p className="paper-label">Outline</p>
@@ -16,6 +17,14 @@ export function TocPanel({ toc }: TocPanelProps) {
               href={`#${item.id}`}
               className="paper-nav-link"
               style={{ paddingLeft: `${Math.max(item.depth - 1, 0) * 14 + 14}px` }}
+              onClick={(event) => {
+                if (!onNavigate) {
+                  return;
+                }
+
+                event.preventDefault();
+                onNavigate(item.id);
+              }}
             >
               {item.value}
             </a>

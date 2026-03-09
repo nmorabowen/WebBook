@@ -10,6 +10,8 @@ import {
   useMemo,
   useRef,
   type CSSProperties,
+  type HTMLAttributeAnchorTarget,
+  type RefObject,
   type ReactNode,
 } from "react";
 import remarkGfm from "remark-gfm";
@@ -50,6 +52,15 @@ type MarkdownRendererProps = {
   typography?: Partial<BookTypography>;
   sourceNavigation?: boolean;
   currentRoute?: string;
+  sourceNavigationViewportRef?: RefObject<HTMLDivElement | null>;
+  sourceNavigationRequest?: {
+    line: number;
+    nonce: number;
+  } | null;
+  onRequestSourceLine?: (line: number) => void;
+  onVisibleSourceLineChange?: (line: number) => void;
+  linkTarget?: HTMLAttributeAnchorTarget;
+  linkRel?: string;
 };
 type Alignment = "left" | "center" | "right";
 type MediaLayoutKind = "media-left" | "media-right" | "media-split";
@@ -504,6 +515,12 @@ export function MarkdownRenderer({
   typography,
   sourceNavigation = false,
   currentRoute,
+  sourceNavigationViewportRef,
+  sourceNavigationRequest,
+  onRequestSourceLine,
+  onVisibleSourceLineChange,
+  linkTarget,
+  linkRel,
 }: MarkdownRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const normalizedMarkdown = useMemo(
@@ -611,22 +628,73 @@ export function MarkdownRenderer({
     let visibleLineTimeout: number | undefined;
     let lastVisibleLine: number | null = null;
 
+    const getNavigationRoot = () => containerRef.current ?? document;
+    const getViewportBounds = () => {
+      const viewport = sourceNavigationViewportRef?.current;
+      if (viewport) {
+        const rect = viewport.getBoundingClientRect();
+        return {
+          scrollTarget: viewport,
+          top: rect.top,
+          bottom: rect.bottom,
+        };
+      }
+
+      return {
+        scrollTarget: window,
+        top: 0,
+        bottom: window.innerHeight,
+      };
+    };
+
     const postVisibleLine = (line: number) => {
       if (line === lastVisibleLine) {
         return;
       }
 
       lastVisibleLine = line;
-      window.parent.postMessage(
-        { type: "webbook-preview-visible-line", line },
-        window.location.origin,
-      );
+      if (onVisibleSourceLineChange) {
+        onVisibleSourceLineChange(line);
+        return;
+      }
+
+      window.parent.postMessage({ type: "webbook-preview-visible-line", line }, window.location.origin);
+    };
+
+    const revealSourceLine = (line: number) => {
+      const candidates = collectSourceLineCandidates(getNavigationRoot());
+      if (!candidates.length) {
+        return;
+      }
+
+      const target = findSourceLineRestoreTarget(candidates, line);
+      if (!target) {
+        return;
+      }
+
+      target.element.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.element.classList.add("source-nav-target");
+      if (highlightTimer) {
+        window.clearTimeout(highlightTimer);
+      }
+      highlightTimer = window.setTimeout(() => {
+        target.element.classList.remove("source-nav-target");
+      }, 1400);
+      postVisibleLine(target.line);
+      scheduleVisibleLineSync();
+      if (visibleLineTimeout) {
+        window.clearTimeout(visibleLineTimeout);
+      }
+      visibleLineTimeout = window.setTimeout(() => {
+        scheduleVisibleLineSync();
+      }, 220);
     };
 
     const syncVisibleLine = () => {
       visibleLineFrame = undefined;
-      const candidates = collectSourceLineCandidates(document);
-      const visibleCandidate = findVisibleSourceLine(candidates, window.innerHeight);
+      const bounds = getViewportBounds();
+      const candidates = collectSourceLineCandidates(getNavigationRoot());
+      const visibleCandidate = findVisibleSourceLine(candidates, bounds);
       if (!visibleCandidate) {
         return;
       }
@@ -657,41 +725,17 @@ export function MarkdownRenderer({
         return;
       }
 
-      const candidates = collectSourceLineCandidates(document);
-      if (!candidates.length) {
-        return;
-      }
-
-      const target = findSourceLineRestoreTarget(candidates, data.line);
-      if (!target) {
-        return;
-      }
-
-      target.element.scrollIntoView({ behavior: "smooth", block: "center" });
-      target.element.classList.add("source-nav-target");
-      if (highlightTimer) {
-        window.clearTimeout(highlightTimer);
-      }
-      highlightTimer = window.setTimeout(() => {
-        target.element.classList.remove("source-nav-target");
-      }, 1400);
-      postVisibleLine(target.line);
-      scheduleVisibleLineSync();
-      if (visibleLineTimeout) {
-        window.clearTimeout(visibleLineTimeout);
-      }
-      visibleLineTimeout = window.setTimeout(() => {
-        scheduleVisibleLineSync();
-      }, 220);
+      revealSourceLine(data.line);
     };
 
+    const { scrollTarget } = getViewportBounds();
     window.addEventListener("message", handleMessage);
-    window.addEventListener("scroll", scheduleVisibleLineSync, { passive: true });
+    scrollTarget.addEventListener("scroll", scheduleVisibleLineSync, { passive: true });
     window.addEventListener("resize", scheduleVisibleLineSync);
     scheduleVisibleLineSync();
     return () => {
       window.removeEventListener("message", handleMessage);
-      window.removeEventListener("scroll", scheduleVisibleLineSync);
+      scrollTarget.removeEventListener("scroll", scheduleVisibleLineSync);
       window.removeEventListener("resize", scheduleVisibleLineSync);
       if (highlightTimer) {
         window.clearTimeout(highlightTimer);
@@ -703,7 +747,30 @@ export function MarkdownRenderer({
         window.cancelAnimationFrame(visibleLineFrame);
       }
     };
-  }, [sourceNavigation]);
+  }, [onVisibleSourceLineChange, sourceNavigation, sourceNavigationViewportRef]);
+
+  useEffect(() => {
+    if (!sourceNavigation || !sourceNavigationRequest) {
+      return;
+    }
+
+    const root = containerRef.current ?? document;
+    const candidates = collectSourceLineCandidates(root);
+    const target = findSourceLineRestoreTarget(candidates, sourceNavigationRequest.line);
+    if (!target) {
+      return;
+    }
+
+    target.element.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.element.classList.add("source-nav-target");
+    const highlightTimer = window.setTimeout(() => {
+      target.element.classList.remove("source-nav-target");
+    }, 1400);
+
+    return () => {
+      window.clearTimeout(highlightTimer);
+    };
+  }, [sourceNavigation, sourceNavigationRequest?.line, sourceNavigationRequest?.nonce]);
 
   const wrapWithSourceNavigation = (
     line: number | undefined,
@@ -723,10 +790,12 @@ export function MarkdownRenderer({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            window.parent.postMessage(
-              { type: "webbook-preview-source-line", line },
-              window.location.origin,
-            );
+            if (onRequestSourceLine) {
+              onRequestSourceLine(line);
+              return;
+            }
+
+            window.parent.postMessage({ type: "webbook-preview-source-line", line }, window.location.origin);
           }}
         />
         <div className="source-nav-content">{content}</div>
@@ -848,6 +917,16 @@ export function MarkdownRenderer({
               return (
                 <a
                   {...props}
+                  target={
+                    typeof props.href === "string" && props.href.startsWith("#")
+                      ? undefined
+                      : linkTarget
+                  }
+                  rel={
+                    typeof props.href === "string" && props.href.startsWith("#")
+                      ? undefined
+                      : linkRel
+                  }
                   className={cn(
                     "transition-colors hover:text-[var(--paper-ink)]",
                     linkClassName,
