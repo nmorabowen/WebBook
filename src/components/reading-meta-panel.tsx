@@ -17,13 +17,17 @@ export function ReadingMetaPanel({
   linkTarget,
   linkRel,
 }: ReadingMetaPanelProps) {
+  const validBacklinks = backlinks.filter(
+    (entry) => typeof entry.route === "string" && entry.route.trim().length > 0,
+  );
+
   return (
     <div className="grid gap-8">
       <section>
         <p className="paper-label">Backlinks</p>
         <div className="backlink-list">
-          {backlinks.length ? (
-            backlinks.map((entry) => (
+          {validBacklinks.length ? (
+            validBacklinks.map((entry) => (
               <Link
                 key={entry.id}
                 href={entry.route}

@@ -158,7 +158,12 @@ function contentOrder(order?: number) {
 }
 
 function filterPublishedManifestEntries(entries: ManifestEntry[]) {
-  return entries.filter((entry) => entry.status === "published");
+  return entries.filter(
+    (entry) =>
+      entry.status === "published" &&
+      typeof entry.route === "string" &&
+      entry.route.trim().length > 0,
+  );
 }
 
 function bookFilePath(bookSlug: string) {

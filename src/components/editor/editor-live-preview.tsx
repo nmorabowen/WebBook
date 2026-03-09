@@ -1,17 +1,15 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useRef } from "react";
 import {
   PublicRenderContent,
   type PreviewChapterItem,
   type SourceNavigationRequest,
 } from "@/components/public-render-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
-import { TocPanel } from "@/components/toc-panel";
 import type { BookTypography } from "@/lib/book-typography";
 import type { GeneralSettings, ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
-import { extractToc } from "@/lib/markdown/shared";
 
 type EditorLivePreviewProps = {
   mode: "book" | "note" | "chapter";
@@ -63,21 +61,6 @@ export function EditorLivePreview({
   onVisibleSourceLineChange,
 }: EditorLivePreviewProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const toc = useMemo(() => extractToc(markdown), [markdown]);
-
-  const navigateToHeading = (id: string) => {
-    const viewport = viewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    const escapedId =
-      typeof CSS !== "undefined" && typeof CSS.escape === "function"
-        ? CSS.escape(id)
-        : id.replace(/["\\]/g, "\\$&");
-    const target = viewport.querySelector<HTMLElement>(`#${escapedId}`);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
 
   return (
     <div
@@ -125,16 +108,13 @@ export function EditorLivePreview({
           className="paper-panel hidden p-6 xl:block"
           style={{ borderRadius: "var(--workspace-corner-radius)" }}
         >
-          <TocPanel toc={toc} onNavigate={navigateToHeading} />
-          <div className="mt-8">
-            <ReadingMetaPanel
-              backlinks={backlinks}
-              updatedAt={updatedAt}
-              revisions={revisions}
-              linkTarget="_blank"
-              linkRel="noreferrer"
-            />
-          </div>
+          <ReadingMetaPanel
+            backlinks={backlinks}
+            updatedAt={updatedAt}
+            revisions={revisions}
+            linkTarget="_blank"
+            linkRel="noreferrer"
+          />
         </aside>
       </div>
     </div>
