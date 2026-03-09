@@ -69,6 +69,7 @@ export function PublicShell({
   const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const hasRightPanel = Boolean(rightPanel);
+  const collapseChaptersByDefault = normalizedSettings.collapseBookChaptersByDefault;
   const leftWidth = leftWidthOverride ?? normalizedSettings.publicLeftPanelWidth;
   const rightWidth = rightWidthOverride ?? normalizedSettings.publicRightPanelWidth;
   const isLeftCollapsed = leftWidth === 0;
@@ -214,7 +215,8 @@ export function PublicShell({
                       chapters.map((chapter, chapterIndex) => {
                         const chapterRoute = `/books/${activeBook.meta.slug}/${chapter.path.join("/")}`;
                         const chapterKey = chapterPathKey(activeBook.meta.slug, chapter.path);
-                        const collapsed = effectiveCollapsedChapters[chapterKey] ?? false;
+                        const collapsed =
+                          effectiveCollapsedChapters[chapterKey] ?? collapseChaptersByDefault;
                         const chapterNumber = nestedChapterNumber(parentNumber, chapterIndex);
 
                         return (
@@ -230,7 +232,8 @@ export function PublicShell({
                                   onClick={() =>
                                     setCollapsedChapters((current) => ({
                                       ...current,
-                                      [chapterKey]: !current[chapterKey],
+                                      [chapterKey]:
+                                        !(current[chapterKey] ?? collapseChaptersByDefault),
                                     }))
                                   }
                                   aria-label={
