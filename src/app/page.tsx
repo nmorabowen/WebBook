@@ -1,16 +1,14 @@
 import Link from "next/link";
 import { ArrowUpRight, BookOpen, NotebookPen } from "lucide-react";
 import type { CSSProperties } from "react";
-import { getSession } from "@/lib/auth";
-import { ContentSearchLauncher } from "@/components/content-search-launcher";
-import { LandingBackground } from "@/components/landing-background";
+import { LandingBackgroundDeferred } from "@/components/landing-background-deferred";
 import { PublicCredit } from "@/components/public-credit";
-import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
+import { PublicSearchLauncher } from "@/components/public-search-launcher";
+import { PublicStyleFrame } from "@/components/public-style-frame";
 import { getGeneralSettings, getPublicContentTree } from "@/lib/content/service";
 import type { ContentTree } from "@/lib/content/schemas";
 import { buildPublicMetadata } from "@/lib/seo";
 
-export const dynamic = "force-dynamic";
 export const metadata = buildPublicMetadata({
   title: "WebBook Library",
   description:
@@ -19,9 +17,8 @@ export const metadata = buildPublicMetadata({
 });
 
 export default async function HomePage() {
-  const [tree, session, generalSettings] = await Promise.all([
+  const [tree, generalSettings] = await Promise.all([
     getPublicContentTree(),
-    getSession(),
     getGeneralSettings(),
   ]);
   const featuredBooks = [...tree.books]
@@ -42,9 +39,9 @@ export default async function HomePage() {
     );
 
   return (
-    <WorkspaceStyleFrame generalSettings={generalSettings}>
+    <PublicStyleFrame generalSettings={generalSettings}>
       <div className="paper-shell library-shell">
-        <LandingBackground />
+        <LandingBackgroundDeferred />
 
         <div className="paper-grid gap-8">
           <header className="library-topbar">
@@ -52,18 +49,17 @@ export default async function HomePage() {
               <span className="paper-badge">WebBook</span>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <ContentSearchLauncher
-                scope="public"
+              <PublicSearchLauncher
                 buttonLabel="Search"
                 dialogTitle="Search the library"
                 dialogDescription="Search published books, chapters, and notes from anywhere in the reading desk."
               />
               <Link
-                href={session ? "/app" : "/login"}
+                href="/login"
                 className="library-editor-button"
               >
                 <NotebookPen className="h-4 w-4" />
-                {session ? "Open editor" : "Editor access"}
+                Editor access
               </Link>
             </div>
           </header>
@@ -200,6 +196,6 @@ export default async function HomePage() {
           <PublicCredit />
         </div>
       </div>
-    </WorkspaceStyleFrame>
+    </PublicStyleFrame>
   );
 }

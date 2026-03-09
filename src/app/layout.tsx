@@ -7,7 +7,6 @@ import {
   Source_Serif_4,
 } from "next/font/google";
 import { AnalyticsRoot } from "@/components/analytics-root";
-import { MathHydrator } from "@/components/markdown/math-hydrator";
 import { env } from "@/lib/env";
 import "./globals.css";
 
@@ -149,7 +148,6 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <AnalyticsRoot />
         </Suspense>
-        <MathHydrator />
         {children}
       </body>
     </html>

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
+import { unstable_cache, revalidateTag } from "next/cache";
 import matter from "gray-matter";
 import MiniSearch from "minisearch";
 import {
@@ -69,11 +70,20 @@ const indexesRoot = path.join(systemRoot, "indexes");
 const settingsFilePath = path.join(systemRoot, "settings.json");
 const CHAPTER_MOVE_ENDPOINT_HINT =
   "Use /api/books/{bookSlug}/chapters/move for order/parent changes";
+const INDEXES_TAG = "webbook-indexes";
+const PUBLIC_INDEXES_TAG = "webbook-public-indexes";
+const SETTINGS_TAG = "webbook-settings";
 
 type IndexState = {
   manifest: ManifestEntry[];
   backlinks: Record<string, ManifestEntry[]>;
   search: string;
+};
+
+type PublicIndexState = {
+  tree: PublicContentTree;
+  manifest: ManifestEntry[];
+  backlinks: Record<string, ManifestEntry[]>;
 };
 
 type PublicContentTree = ContentTree;
@@ -172,6 +182,96 @@ function bookFilePath(bookSlug: string) {
 
 function indexFile(name: string) {
   return path.join(indexesRoot, name);
+}
+
+async function indexesExist() {
+  const requiredIndexFiles = [
+    "manifest.json",
+    "backlinks.json",
+    "search.json",
+    "public-tree.json",
+    "public-manifest.json",
+    "public-backlinks.json",
+  ];
+
+  const results = await Promise.all(
+    requiredIndexFiles.map((fileName) =>
+      fs
+        .access(indexFile(fileName))
+        .then(() => true)
+        .catch(() => false),
+    ),
+  );
+
+  return results.every(Boolean);
+}
+
+async function readIndexesFromDisk(): Promise<IndexState> {
+  const [manifestContent, backlinksContent, searchContent] = await Promise.all([
+    fs.readFile(indexFile("manifest.json"), "utf8"),
+    fs.readFile(indexFile("backlinks.json"), "utf8"),
+    fs.readFile(indexFile("search.json"), "utf8"),
+  ]);
+
+  return {
+    manifest: safeJsonParse<ManifestEntry[]>(manifestContent, []),
+    backlinks: safeJsonParse<Record<string, ManifestEntry[]>>(backlinksContent, {}),
+    search: searchContent,
+  };
+}
+
+async function readPublicIndexesFromDisk(): Promise<PublicIndexState> {
+  const [treeContent, manifestContent, backlinksContent] = await Promise.all([
+    fs.readFile(indexFile("public-tree.json"), "utf8"),
+    fs.readFile(indexFile("public-manifest.json"), "utf8"),
+    fs.readFile(indexFile("public-backlinks.json"), "utf8"),
+  ]);
+
+  return {
+    tree: safeJsonParse<PublicContentTree>(treeContent, { books: [], notes: [] }),
+    manifest: safeJsonParse<ManifestEntry[]>(manifestContent, []),
+    backlinks: safeJsonParse<Record<string, ManifestEntry[]>>(backlinksContent, {}),
+  };
+}
+
+async function readGeneralSettingsFromDisk(): Promise<GeneralSettings> {
+  try {
+    const raw = await fs.readFile(settingsFilePath, "utf8");
+    return saveGeneralSettingsSchema.parse(
+      normalizeGeneralSettings({
+        ...DEFAULT_GENERAL_SETTINGS,
+        ...safeJsonParse<Record<string, unknown>>(raw, {}),
+      }),
+    );
+  } catch {
+    return normalizeGeneralSettings(DEFAULT_GENERAL_SETTINGS);
+  }
+}
+
+const loadIndexesCached = unstable_cache(readIndexesFromDisk, ["webbook:indexes"], {
+  tags: [INDEXES_TAG],
+});
+
+const loadPublicIndexesCached = unstable_cache(
+  readPublicIndexesFromDisk,
+  ["webbook:public-indexes"],
+  {
+    tags: [PUBLIC_INDEXES_TAG],
+  },
+);
+
+const loadGeneralSettingsCached = unstable_cache(
+  readGeneralSettingsFromDisk,
+  ["webbook:settings"],
+  {
+    tags: [SETTINGS_TAG],
+  },
+);
+
+function safeRevalidateTag(tag: string) {
+  try {
+    revalidateTag(tag);
+  } catch {}
 }
 
 function ensureSafeSlugOrThrow(slug: string) {
@@ -1973,11 +2073,32 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
     backlinks,
     search: JSON.stringify(buildSearch(documents)),
   };
+  const publicState: PublicIndexState = {
+    tree: toContentTree(content.books, content.notes, { publicOnly: true }),
+    manifest: filterPublishedManifestEntries(manifest),
+    backlinks: Object.fromEntries(
+      Object.entries(backlinks).map(([id, entries]) => [
+        id,
+        filterPublishedManifestEntries(entries),
+      ]),
+    ),
+  };
 
   await ensureDirectory(indexesRoot);
-  await fs.writeFile(indexFile("manifest.json"), JSON.stringify(state.manifest, null, 2));
-  await fs.writeFile(indexFile("backlinks.json"), JSON.stringify(state.backlinks, null, 2));
-  await fs.writeFile(indexFile("search.json"), state.search);
+  await Promise.all([
+    writeFileAtomic(indexFile("manifest.json"), JSON.stringify(state.manifest, null, 2)),
+    writeFileAtomic(indexFile("backlinks.json"), JSON.stringify(state.backlinks, null, 2)),
+    writeFileAtomic(indexFile("search.json"), state.search),
+    writeFileAtomic(indexFile("public-tree.json"), JSON.stringify(publicState.tree, null, 2)),
+    writeFileAtomic(
+      indexFile("public-manifest.json"),
+      JSON.stringify(publicState.manifest, null, 2),
+    ),
+    writeFileAtomic(
+      indexFile("public-backlinks.json"),
+      JSON.stringify(publicState.backlinks, null, 2),
+    ),
+  ]);
 }
 
 export async function ensureContentScaffold() {
@@ -2097,24 +2218,18 @@ export async function ensureContentScaffold() {
       sampleChapter,
     );
     await fs.writeFile(noteFilePath("webbook-notes"), sampleNote);
+    await rebuildIndexes();
+    return;
   }
 
-  await rebuildIndexes();
+  if (!(await indexesExist())) {
+    await rebuildIndexes();
+  }
 }
 
 export async function getGeneralSettings(): Promise<GeneralSettings> {
   await ensureContentScaffold();
-  try {
-    const raw = await fs.readFile(settingsFilePath, "utf8");
-    return saveGeneralSettingsSchema.parse(
-      normalizeGeneralSettings({
-        ...DEFAULT_GENERAL_SETTINGS,
-        ...safeJsonParse<Record<string, unknown>>(raw, {}),
-      }),
-    );
-  } catch {
-    return normalizeGeneralSettings(DEFAULT_GENERAL_SETTINGS);
-  }
+  return loadGeneralSettingsCached();
 }
 
 export async function updateGeneralSettings(input: unknown) {
@@ -2127,6 +2242,7 @@ export async function updateGeneralSettings(input: unknown) {
     }),
   );
   await writeFileAtomic(settingsFilePath, JSON.stringify(settings, null, 2));
+  safeRevalidateTag(SETTINGS_TAG);
   return settings;
 }
 
@@ -2166,6 +2282,8 @@ export async function listContent() {
 export async function rebuildIndexes() {
   const [books, notes] = await Promise.all([listBookRecords(), listNoteRecords()]);
   await writeIndexes({ books, notes });
+  safeRevalidateTag(INDEXES_TAG);
+  safeRevalidateTag(PUBLIC_INDEXES_TAG);
 }
 
 function toContentTree(
@@ -2209,8 +2327,9 @@ export async function getContentTree(): Promise<ContentTree> {
 }
 
 export async function getPublicContentTree(): Promise<PublicContentTree> {
-  const { books, notes } = await listContent();
-  return toContentTree(books, notes, { publicOnly: true });
+  await ensureContentScaffold();
+  const { tree } = await loadPublicIndexesCached();
+  return tree;
 }
 
 export async function getBook(bookSlug: string) {
@@ -2248,16 +2367,7 @@ export async function getPublicNote(slug: string) {
 
 export async function loadIndexes() {
   await ensureContentScaffold();
-  const [manifestContent, backlinksContent, searchContent] = await Promise.all([
-    fs.readFile(indexFile("manifest.json"), "utf8"),
-    fs.readFile(indexFile("backlinks.json"), "utf8"),
-    fs.readFile(indexFile("search.json"), "utf8"),
-  ]);
-  return {
-    manifest: safeJsonParse<ManifestEntry[]>(manifestContent, []),
-    backlinks: safeJsonParse<Record<string, ManifestEntry[]>>(backlinksContent, {}),
-    search: searchContent,
-  };
+  return loadIndexesCached();
 }
 
 export async function searchContent(query: string) {
@@ -2327,13 +2437,15 @@ export async function searchPublicContent(query: string) {
 }
 
 export async function getPublicBacklinks(id: string) {
-  const { backlinks } = await loadIndexes();
-  return filterPublishedManifestEntries(backlinks[id] ?? []);
+  await ensureContentScaffold();
+  const { backlinks } = await loadPublicIndexesCached();
+  return backlinks[id] ?? [];
 }
 
 export async function getPublicManifest() {
-  const { manifest } = await loadIndexes();
-  return filterPublishedManifestEntries(manifest);
+  await ensureContentScaffold();
+  const { manifest } = await loadPublicIndexesCached();
+  return manifest;
 }
 
 export async function unresolvedWikiLinks(markdown: string) {

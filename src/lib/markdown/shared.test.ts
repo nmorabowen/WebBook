@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ManifestEntry } from "@/lib/content/schemas";
-import { extractCodeCells, extractToc, resolveWikiTargetFromManifest } from "./shared";
+import {
+  containsMathSyntax,
+  extractCodeCells,
+  extractToc,
+  resolveWikiTargetFromManifest,
+} from "./shared";
 
 describe("markdown shared helpers", () => {
   it("extracts a table of contents from headings", () => {
@@ -59,6 +64,13 @@ oops
       language: "ts",
       executable: false,
     });
+  });
+
+  it("detects math syntax without flagging ordinary currency text", () => {
+    expect(containsMathSyntax("Inline $x^2$ and display $$y=x$$")).toBe(true);
+    expect(containsMathSyntax("Escaped \\(a+b\\) still counts")).toBe(true);
+    expect(containsMathSyntax("Price: $25 per book")).toBe(false);
+    expect(containsMathSyntax("No math markers here")).toBe(false);
   });
 
   it("resolves wiki links for pages and headings from the manifest", () => {

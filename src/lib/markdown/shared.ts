@@ -221,6 +221,12 @@ export function extractToc(markdown: string) {
   return toc;
 }
 
+export function containsMathSyntax(markdown: string) {
+  return /(?:\$\$[\s\S]+?\$\$|(?<!\$)\$[^$\n]+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/.test(
+    markdown,
+  );
+}
+
 export function extractCodeCells(markdown: string) {
   const tree = unified()
     .use(remarkParse)

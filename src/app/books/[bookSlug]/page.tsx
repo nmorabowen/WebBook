@@ -1,7 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { PublicRenderContent } from "@/components/public-render-content";
+import { MathHydrator } from "@/components/markdown/math-hydrator";
+import {
+  PublicDocumentContent,
+  type PublicDocumentChapterItem,
+} from "@/components/public-document-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
+import { PublicStyleFrame } from "@/components/public-style-frame";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
@@ -11,21 +16,14 @@ import {
   getPublicContentTree,
   resolvePublicBookRoute,
 } from "@/lib/content/service";
-import { extractToc } from "@/lib/markdown/shared";
+import { containsMathSyntax, extractToc } from "@/lib/markdown/shared";
 import { buildPublicMetadata } from "@/lib/seo";
-
-type PreviewChapterNode = {
-  path: string[];
-  title: string;
-  summary?: string;
-  children: PreviewChapterNode[];
-};
 
 function mapPreviewChapters(
   chapters: NonNullable<
     Awaited<ReturnType<typeof resolvePublicBookRoute>>
   >["book"]["chapters"],
-): PreviewChapterNode[] {
+): PublicDocumentChapterItem[] {
   return chapters.map((chapter) => ({
     path: chapter.path,
     title: chapter.meta.title,
@@ -84,40 +82,44 @@ export default async function BookPage({
     getGeneralSettings(),
   ]);
   const toc = extractToc(book.body);
+  const hasMath = containsMathSyntax(book.body);
 
   return (
-    <PublicShell
-      tree={tree}
-      currentPath={`/books/${book.meta.slug}`}
-      bookSlug={book.meta.slug}
-      fontPreset={book.meta.fontPreset ?? "source-serif"}
-      generalSettings={generalSettings}
-      readingWidth={book.meta.typography?.contentWidth}
-      rightPanel={
-        <div className="grid gap-8">
-          <TocPanel toc={toc} />
-          <ReadingMetaPanel
-            backlinks={backlinks}
-            updatedAt={book.meta.updatedAt}
-          />
-        </div>
-      }
-    >
-      <PublicRenderContent
-        mode="book"
-        title={book.meta.title}
-        summary={book.meta.description}
-        markdown={book.body}
-        manifest={manifest}
-        pageId={book.id}
-        requester="public"
-        fontPreset={book.meta.fontPreset ?? "source-serif"}
-        typography={book.meta.typography}
+    <PublicStyleFrame generalSettings={generalSettings}>
+      {hasMath ? <MathHydrator /> : null}
+      <PublicShell
+        tree={tree}
+        currentPath={`/books/${book.meta.slug}`}
         bookSlug={book.meta.slug}
+        fontPreset={book.meta.fontPreset ?? "source-serif"}
         generalSettings={generalSettings}
-        currentRoute={`/books/${book.meta.slug}`}
-        chapters={mapPreviewChapters(book.chapters)}
-      />
-    </PublicShell>
+        readingWidth={book.meta.typography?.contentWidth}
+        rightPanel={
+          <div className="grid gap-8">
+            <TocPanel toc={toc} />
+            <ReadingMetaPanel
+              backlinks={backlinks}
+              updatedAt={book.meta.updatedAt}
+            />
+          </div>
+        }
+      >
+        <PublicDocumentContent
+          mode="book"
+          title={book.meta.title}
+          summary={book.meta.description}
+          markdown={book.body}
+          manifest={manifest}
+          pageId={book.id}
+          requester="public"
+          fontPreset={book.meta.fontPreset ?? "source-serif"}
+          typography={book.meta.typography}
+          bookSlug={book.meta.slug}
+          generalSettings={generalSettings}
+          currentRoute={`/books/${book.meta.slug}`}
+          chapters={mapPreviewChapters(book.chapters)}
+        />
+      </PublicShell>
+    </PublicStyleFrame>
   );
 }

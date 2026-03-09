@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MathHydrator } from "@/components/markdown/math-hydrator";
 import { WorkspaceDebugRecorder } from "@/components/workspace-debug-recorder";
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export default function WorkspaceLayout({
 }>) {
   return (
     <>
+      <MathHydrator />
       <WorkspaceDebugRecorder />
       {children}
     </>

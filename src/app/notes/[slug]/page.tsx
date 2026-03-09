@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { PublicRenderContent } from "@/components/public-render-content";
+import { MathHydrator } from "@/components/markdown/math-hydrator";
+import { PublicDocumentContent } from "@/components/public-document-content";
 import { ReadingMetaPanel } from "@/components/reading-meta-panel";
+import { PublicStyleFrame } from "@/components/public-style-frame";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
@@ -11,7 +13,7 @@ import {
   getPublicContentTree,
   resolvePublicNoteRoute,
 } from "@/lib/content/service";
-import { extractToc } from "@/lib/markdown/shared";
+import { containsMathSyntax, extractToc } from "@/lib/markdown/shared";
 import { buildPublicMetadata } from "@/lib/seo";
 
 export async function generateMetadata({
@@ -65,38 +67,42 @@ export default async function NotePage({
     getGeneralSettings(),
   ]);
   const toc = extractToc(note.body);
+  const hasMath = containsMathSyntax(note.body);
 
   return (
-    <PublicShell
-      tree={tree}
-      currentPath={`/notes/${note.meta.slug}`}
-      fontPreset={note.meta.fontPreset ?? "source-serif"}
-      generalSettings={generalSettings}
-      readingWidth={note.meta.typography?.contentWidth}
-      rightPanel={
-        <div className="grid gap-8">
-          <TocPanel toc={toc} />
-          <ReadingMetaPanel
-            backlinks={backlinks}
-            updatedAt={note.meta.updatedAt}
-          />
-        </div>
-      }
-    >
-      <PublicRenderContent
-        mode="note"
-        title={note.meta.title}
-        summary={note.meta.summary}
-        markdown={note.body}
-        manifest={manifest}
-        pageId={note.id}
-        requester="public"
-        allowExecution={note.meta.allowExecution}
+    <PublicStyleFrame generalSettings={generalSettings}>
+      {hasMath ? <MathHydrator /> : null}
+      <PublicShell
+        tree={tree}
+        currentPath={`/notes/${note.meta.slug}`}
         fontPreset={note.meta.fontPreset ?? "source-serif"}
-        typography={note.meta.typography}
         generalSettings={generalSettings}
-        currentRoute={`/notes/${note.meta.slug}`}
-      />
-    </PublicShell>
+        readingWidth={note.meta.typography?.contentWidth}
+        rightPanel={
+          <div className="grid gap-8">
+            <TocPanel toc={toc} />
+            <ReadingMetaPanel
+              backlinks={backlinks}
+              updatedAt={note.meta.updatedAt}
+            />
+          </div>
+        }
+      >
+        <PublicDocumentContent
+          mode="note"
+          title={note.meta.title}
+          summary={note.meta.summary}
+          markdown={note.body}
+          manifest={manifest}
+          pageId={note.id}
+          requester="public"
+          allowExecution={note.meta.allowExecution}
+          fontPreset={note.meta.fontPreset ?? "source-serif"}
+          typography={note.meta.typography}
+          generalSettings={generalSettings}
+          currentRoute={`/notes/${note.meta.slug}`}
+        />
+      </PublicShell>
+    </PublicStyleFrame>
   );
 }

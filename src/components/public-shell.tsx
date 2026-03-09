@@ -10,9 +10,8 @@ import {
   GripVertical,
   Search,
 } from "lucide-react";
-import { ContentSearchLauncher } from "@/components/content-search-launcher";
+import { PublicSearchLauncher } from "@/components/public-search-launcher";
 import { PublicCredit } from "@/components/public-credit";
-import { WorkspaceStyleFrame } from "@/components/workspace-style-frame";
 import type { ContentTree, GeneralSettings } from "@/lib/content/schemas";
 import { nestedChapterNumber } from "@/lib/chapter-numbering";
 import type { FontPreset } from "@/lib/font-presets";
@@ -148,17 +147,16 @@ export function PublicShell({
   );
 
   return (
-    <WorkspaceStyleFrame generalSettings={generalSettings}>
-      <div className="paper-shell" data-font-preset={fontPreset}>
-        <div className="paper-grid gap-5">
-          <div
-            ref={containerRef}
-            className={cn("paper-grid public-shell-layout", dragTarget && "public-shell-layout-dragging")}
-            style={{
-              ...layoutStyle,
-              gap: "var(--workspace-tile-spacing)",
-            }}
-          >
+    <div className="paper-shell" data-font-preset={fontPreset}>
+      <div className="paper-grid gap-5">
+        <div
+          ref={containerRef}
+          className={cn("paper-grid public-shell-layout", dragTarget && "public-shell-layout-dragging")}
+          style={{
+            ...layoutStyle,
+            gap: "var(--workspace-tile-spacing)",
+          }}
+        >
             <aside
               className={cn(
                 "paper-panel paper-panel-strong public-shell-panel flex flex-col gap-5 p-6",
@@ -185,8 +183,7 @@ export function PublicShell({
                     <h1 className="font-serif text-3xl">Reading room</h1>
                   </div>
                 </div>
-                <ContentSearchLauncher
-                  scope="public"
+                <PublicSearchLauncher
                   buttonLabel="Search library"
                   dialogTitle="Search the library"
                   dialogDescription="Search published books, chapters, and notes by title, summary, or indexed body text."
@@ -354,10 +351,9 @@ export function PublicShell({
             >
               {rightPanel}
             </aside>
-          </div>
-          <PublicCredit />
         </div>
+        <PublicCredit />
       </div>
-    </WorkspaceStyleFrame>
+    </div>
   );
 }

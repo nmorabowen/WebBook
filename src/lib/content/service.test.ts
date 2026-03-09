@@ -779,6 +779,45 @@ describe("content service", () => {
     expect(workspaceResults[0]?.publicRoute).toBe("/notes/draft-referrer");
   });
 
+  it("rebuilds missing public index files before serving public content", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createNote({
+      title: "Indexed Public Note",
+      slug: "indexed-public-note",
+      summary: "Indexed",
+      body: "# Indexed Public Note",
+      status: "published",
+      allowExecution: true,
+    });
+
+    const publicIndexesRoot = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "indexes",
+    );
+    await expect(
+      fs.access(path.join(publicIndexesRoot, "public-tree.json")),
+    ).resolves.toBeUndefined();
+    await expect(
+      fs.access(path.join(publicIndexesRoot, "public-manifest.json")),
+    ).resolves.toBeUndefined();
+    await expect(
+      fs.access(path.join(publicIndexesRoot, "public-backlinks.json")),
+    ).resolves.toBeUndefined();
+
+    await fs.rm(path.join(publicIndexesRoot, "public-tree.json"));
+
+    const publicTree = await service.getPublicContentTree();
+
+    expect(publicTree.notes.map((note) => note.meta.slug)).toContain("indexed-public-note");
+    await expect(
+      fs.access(path.join(publicIndexesRoot, "public-tree.json")),
+    ).resolves.toBeUndefined();
+  });
+
   it("duplicates and deletes chapters while keeping chapter order contiguous", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
