@@ -270,7 +270,7 @@ const loadGeneralSettingsCached = unstable_cache(
 
 function safeRevalidateTag(tag: string) {
   try {
-    revalidateTag(tag);
+    revalidateTag(tag, "max");
   } catch {}
 }
 
