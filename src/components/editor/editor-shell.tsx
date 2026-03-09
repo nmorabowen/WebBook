@@ -155,6 +155,20 @@ type MathAutocompleteContext = {
   query: string;
 };
 
+type EditorSavePayload = {
+  title: string;
+  slug: string;
+  body: string;
+  status: "draft" | "published";
+  featured?: boolean;
+  coverColor?: string;
+  allowExecution?: boolean;
+  summary?: string;
+  description?: string;
+  fontPreset?: FontPreset;
+  typography?: BookTypography;
+};
+
 type WikiTargetParts = {
   pageTarget: string;
   headingTarget?: string;
@@ -175,6 +189,34 @@ const pairedDelimiters = {
   "{": "}",
 } as const;
 const closingDelimiters = new Set<string>(Object.values(pairedDelimiters));
+
+function buildEditorSavePayload(input: {
+  mode: EditorShellProps["mode"];
+  title: string;
+  slug: string;
+  body: string;
+  status: "draft" | "published";
+  featured: boolean;
+  coverColor: string;
+  allowExecution: boolean;
+  summary: string;
+  fontPreset: FontPreset;
+  typography: BookTypography;
+}): EditorSavePayload {
+  return {
+    title: input.title,
+    slug: input.slug,
+    body: input.body,
+    status: input.status,
+    featured: input.mode === "book" ? input.featured : undefined,
+    coverColor: input.mode === "book" ? input.coverColor : undefined,
+    allowExecution: input.allowExecution,
+    summary: input.mode === "note" || input.mode === "chapter" ? input.summary : undefined,
+    description: input.mode === "book" ? input.summary : undefined,
+    fontPreset: input.fontPreset,
+    typography: input.mode === "book" || input.mode === "note" ? input.typography : undefined,
+  };
+}
 
 function detectWikiAutocompleteContext(
   content: string,
@@ -564,6 +606,7 @@ export function EditorShell({
   const previewPanelRef = useRef<HTMLDivElement>(null);
   const previewViewportRef = useRef<HTMLDivElement>(null);
   const previewExpandedRatioRef = useRef(52);
+  const previewRefreshTimerRef = useRef<number | null>(null);
   const bodyRef = useRef(initialValues.body);
   const sourceViewportRef = useRef({
     selectionStart: 0,
@@ -587,6 +630,26 @@ export function EditorShell({
     scrollTop: number;
     scrollLeft: number;
   } | null>(null);
+  const lastSavedPayloadSignatureRef = useRef(
+    JSON.stringify(
+      buildEditorSavePayload({
+        mode,
+        title: initialValues.title,
+        slug: initialValues.slug,
+        body: initialValues.body,
+        status: initialValues.status,
+        featured: initialValues.featured ?? false,
+        coverColor: initialValues.coverColor ?? "#292118",
+        allowExecution: initialValues.allowExecution ?? true,
+        summary: initialValues.summary ?? initialValues.description ?? "",
+        fontPreset: initialValues.fontPreset ?? "archivo-narrow",
+        typography: normalizeBookTypography(
+          initialValues.typography,
+          mode === "note" ? defaultNoteTypography : defaultBookTypography,
+        ),
+      }),
+    ),
+  );
   const isSourceCollapsed = editorSplitRatio <= 4;
   const isPreviewCollapsed = editorSplitRatio >= 96;
   const editorSplitStyle = {
@@ -885,19 +948,20 @@ export function EditorShell({
   }, [isDraggingSplit]);
 
   const payload = useMemo(
-    () => ({
-      title,
-      slug,
-      body,
-      status,
-      featured: mode === "book" ? featured : undefined,
-      coverColor: mode === "book" ? coverColor : undefined,
-      allowExecution,
-      summary: mode === "note" || mode === "chapter" ? summary : undefined,
-      description: mode === "book" ? summary : undefined,
-      fontPreset,
-      typography: mode === "book" || mode === "note" ? typography : undefined,
-    }),
+    () =>
+      buildEditorSavePayload({
+        mode,
+        title,
+        slug,
+        body,
+        status,
+        featured,
+        coverColor,
+        allowExecution,
+        summary,
+        fontPreset,
+        typography,
+      }),
     [
       allowExecution,
       body,
@@ -912,6 +976,7 @@ export function EditorShell({
       coverColor,
     ],
   );
+  const payloadSignature = useMemo(() => JSON.stringify(payload), [payload]);
 
   useEffect(() => {
     if (slugTouched) {
@@ -919,6 +984,27 @@ export function EditorShell({
     }
     setSlug(toSlug(title));
   }, [slugTouched, title]);
+
+  const refreshPreview = useEffectEvent((mode: "debounced" | "immediate" = "immediate") => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (previewRefreshTimerRef.current !== null) {
+      window.clearTimeout(previewRefreshTimerRef.current);
+      previewRefreshTimerRef.current = null;
+    }
+
+    if (mode === "debounced") {
+      previewRefreshTimerRef.current = window.setTimeout(() => {
+        setPreviewVersion((current) => current + 1);
+        previewRefreshTimerRef.current = null;
+      }, 3000);
+      return;
+    }
+
+    setPreviewVersion((current) => current + 1);
+  });
 
   const applySaveResult = useEffectEvent((saved: SaveResponsePayload | null) => {
     const nextKind = saved?.kind ?? mode;
@@ -976,10 +1062,24 @@ export function EditorShell({
     if (needsRebind && nextWorkspaceRoute) {
       router.replace(nextWorkspaceRoute);
       router.refresh();
+      refreshPreview("immediate");
     }
   });
 
+  useEffect(
+    () => () => {
+      if (previewRefreshTimerRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(previewRefreshTimerRef.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
+    if (payloadSignature === lastSavedPayloadSignatureRef.current) {
+      return;
+    }
+
     const timer = setTimeout(async () => {
       setSaveState("saving");
       setSaveMessage("Autosaving...");
@@ -997,10 +1097,11 @@ export function EditorShell({
         }
 
         applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
+        lastSavedPayloadSignatureRef.current = payloadSignature;
 
         setSaveState("saved");
         setSaveMessage("Autosaved");
-        setPreviewVersion((current) => current + 1);
+        refreshPreview("debounced");
       } catch {
         setSaveState("error");
         setSaveMessage("Autosave failed");
@@ -1008,7 +1109,7 @@ export function EditorShell({
     }, 1400);
 
     return () => clearTimeout(timer);
-  }, [applySaveResult, currentUpdateEndpoint, payload]);
+  }, [applySaveResult, currentUpdateEndpoint, payload, payloadSignature, refreshPreview]);
 
   useLayoutEffect(() => {
     const textarea = sourceRef.current;
@@ -1046,10 +1147,11 @@ export function EditorShell({
     }
 
     applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
+    lastSavedPayloadSignatureRef.current = payloadSignature;
 
     setSaveState("saved");
     setSaveMessage("Snapshot saved");
-    setPreviewVersion((current) => current + 1);
+    refreshPreview("immediate");
   };
 
   const saveTypography = async () => {
@@ -1070,10 +1172,11 @@ export function EditorShell({
     }
 
     applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
+    lastSavedPayloadSignatureRef.current = payloadSignature;
 
     setSaveState("saved");
     setSaveMessage("Typography saved");
-    setPreviewVersion((current) => current + 1);
+    refreshPreview("immediate");
   };
 
   const togglePublication = (nextPublished: boolean) => {
@@ -1094,10 +1197,14 @@ export function EditorShell({
       }
 
       applySaveResult((await response.json().catch(() => null)) as SaveResponsePayload | null);
+      lastSavedPayloadSignatureRef.current = JSON.stringify({
+        ...payload,
+        status: nextPublished ? "published" : "draft",
+      } satisfies EditorSavePayload);
       setStatus(nextPublished ? "published" : "draft");
       setSaveState("saved");
       setSaveMessage(nextPublished ? "Published" : "Moved to draft");
-      setPreviewVersion((current) => current + 1);
+      refreshPreview("immediate");
     });
   };
 
@@ -3402,7 +3509,6 @@ export function EditorShell({
               />
               <iframe
                 ref={previewFrameRef}
-                key={`${currentPageId}-${previewVersion}`}
                 title="Live preview"
                 src={`/app/preview?pageId=${encodeURIComponent(currentPageId)}&v=${previewVersion}`}
                 className="preview-frame"
