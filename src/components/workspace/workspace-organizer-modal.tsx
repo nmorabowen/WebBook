@@ -53,11 +53,13 @@ export function WorkspaceOrganizerModal({
   tree,
   currentPath,
   onClose,
+  canManageTopLevel = true,
 }: {
   open: boolean;
   tree: Pick<ContentTree, "books" | "notes">;
   currentPath?: string;
   onClose: () => void;
+  canManageTopLevel?: boolean;
 }) {
   const actions = useWorkspaceTreeActions(currentPath);
   const [search, setSearch] = useState("");
@@ -348,12 +350,14 @@ export function WorkspaceOrganizerModal({
                     <p className="paper-label mb-1">Create</p>
                     <input className="paper-input" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("create-book", async () => {
-                        const payload = await actions.createBook(draftTitle);
-                        if (payload.meta?.slug) {
-                          setSelectedRef({ kind: "book", slug: payload.meta.slug });
-                        }
-                      })}>Create book</button>
+                      {canManageTopLevel ? (
+                        <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("create-book", async () => {
+                          const payload = await actions.createBook(draftTitle);
+                          if (payload.meta?.slug) {
+                            setSelectedRef({ kind: "book", slug: payload.meta.slug });
+                          }
+                        })}>Create book</button>
+                      ) : null}
                       <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null} onClick={() => void run("create-root-from-book", async () => {
                         const payload = await actions.createChapter(tree, selectedBook.meta.slug, draftTitle, []);
                         if (payload.path?.length) {
@@ -363,124 +367,136 @@ export function WorkspaceOrganizerModal({
                     </div>
                   </div>
 
-                  <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
-                    <p className="paper-label mb-1">Reorder</p>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.books.findIndex((book) => book.meta.slug === selectedBook.meta.slug) === 0} onClick={() => void run("book-up", () => actions.moveBookByStep(tree, selectedBook.meta.slug, "up").then(() => undefined))}>Move up</button>
-                      <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.books.findIndex((book) => book.meta.slug === selectedBook.meta.slug) === tree.books.length - 1} onClick={() => void run("book-down", () => actions.moveBookByStep(tree, selectedBook.meta.slug, "down").then(() => undefined))}>Move down</button>
+                  {canManageTopLevel ? (
+                    <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
+                      <p className="paper-label mb-1">Reorder</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.books.findIndex((book) => book.meta.slug === selectedBook.meta.slug) === 0} onClick={() => void run("book-up", () => actions.moveBookByStep(tree, selectedBook.meta.slug, "up").then(() => undefined))}>Move up</button>
+                        <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.books.findIndex((book) => book.meta.slug === selectedBook.meta.slug) === tree.books.length - 1} onClick={() => void run("book-down", () => actions.moveBookByStep(tree, selectedBook.meta.slug, "down").then(() => undefined))}>Move down</button>
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <input className="paper-input" inputMode="numeric" value={position} onChange={(event) => setPosition(event.target.value)} placeholder={`Position 1-${Math.max(tree.books.length, 1)}`} />
+                        <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("book-position", async () => {
+                          const nextPosition = parsePosition(position);
+                          if (!nextPosition) throw new Error("Position must be a positive integer.");
+                          await actions.moveBookToPosition(tree, selectedBook.meta.slug, nextPosition);
+                        })}>Apply</button>
+                      </div>
                     </div>
-                    <div className="mt-2 flex gap-2">
-                      <input className="paper-input" inputMode="numeric" value={position} onChange={(event) => setPosition(event.target.value)} placeholder={`Position 1-${Math.max(tree.books.length, 1)}`} />
-                      <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("book-position", async () => {
-                        const nextPosition = parsePosition(position);
-                        if (!nextPosition) throw new Error("Position must be a positive integer.");
-                        await actions.moveBookToPosition(tree, selectedBook.meta.slug, nextPosition);
-                      })}>Apply</button>
-                    </div>
-                  </div>
+                  ) : null}
 
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null} onClick={() => void run("dup-book", async () => {
-                      const payload = await actions.duplicateBook(selectedBook.meta.slug);
-                      if (payload.meta?.slug) setSelectedRef({ kind: "book", slug: payload.meta.slug });
-                    })}>Duplicate</button>
-                    <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("del-book", async () => {
-                      if (!window.confirm("Delete this book?")) return;
-                      await actions.deleteBook(selectedBook.meta.slug);
-                      setSelectedRef(null);
-                    })}>Delete</button>
-                  </div>
+                  {canManageTopLevel ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null} onClick={() => void run("dup-book", async () => {
+                        const payload = await actions.duplicateBook(selectedBook.meta.slug);
+                        if (payload.meta?.slug) setSelectedRef({ kind: "book", slug: payload.meta.slug });
+                      })}>Duplicate</button>
+                      <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("del-book", async () => {
+                        if (!window.confirm("Delete this book?")) return;
+                        await actions.deleteBook(selectedBook.meta.slug);
+                        setSelectedRef(null);
+                      })}>Delete</button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
               {selectedRef?.kind === "note" && selectedNote ? (
                 <div className="grid gap-3">
-                  <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
-                    <p className="paper-label mb-1">Create note</p>
-                    <input className="paper-input" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
-                    <button type="button" className="paper-button mt-2" disabled={pending !== null} onClick={() => void run("create-note", async () => {
-                      const payload = await actions.createNote(draftTitle);
-                      if (payload.meta?.slug) setSelectedRef({ kind: "note", slug: payload.meta.slug });
-                    })}>Create note</button>
-                  </div>
-
-                  <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
-                    <p className="paper-label mb-1">Reorder</p>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.notes.findIndex((note) => note.meta.slug === selectedNote.meta.slug) === 0} onClick={() => void run("note-up", () => actions.moveNoteByStep(tree, selectedNote.meta.slug, "up").then(() => undefined))}>Move up</button>
-                      <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.notes.findIndex((note) => note.meta.slug === selectedNote.meta.slug) === tree.notes.length - 1} onClick={() => void run("note-down", () => actions.moveNoteByStep(tree, selectedNote.meta.slug, "down").then(() => undefined))}>Move down</button>
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <input className="paper-input" inputMode="numeric" value={position} onChange={(event) => setPosition(event.target.value)} placeholder={`Position 1-${Math.max(tree.notes.length, 1)}`} />
-                      <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("note-position", async () => {
-                        const nextPosition = parsePosition(position);
-                        if (!nextPosition) throw new Error("Position must be a positive integer.");
-                        await actions.moveNoteToPosition(tree, selectedNote.meta.slug, nextPosition);
-                      })}>Apply</button>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null} onClick={() => void run("dup-note", async () => {
-                      const payload = await actions.duplicateNote(selectedNote.meta.slug);
-                      if (payload.meta?.slug) setSelectedRef({ kind: "note", slug: payload.meta.slug });
-                    })}>Duplicate</button>
-                    <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || !tree.books.length} onClick={() => void run("move-note-into-book", async () => {
-                      if (!noteMoveBookSlug) {
-                        throw new Error("Select a destination book.");
-                      }
-                      const nextPosition = noteMoveOrder ? parsePosition(noteMoveOrder) : null;
-                      if (noteMoveOrder && !nextPosition) {
-                        throw new Error("Position must be a positive integer.");
-                      }
-                      const payload = await actions.moveNoteToBook(
-                        selectedNote.meta.slug,
-                        noteMoveBookSlug,
-                        noteMoveParentPath,
-                        nextPosition ?? undefined,
-                      );
-                      if (payload.path?.length) {
-                        setSelectedRef({
-                          kind: "chapter",
-                          bookSlug: payload.meta?.bookSlug ?? noteMoveBookSlug,
-                          chapterPath: payload.path,
-                        });
-                      }
-                    })}>Move into book</button>
-                    <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("del-note", async () => {
-                      if (!window.confirm("Delete this note?")) return;
-                      await actions.deleteNote(selectedNote.meta.slug);
-                      setSelectedRef(null);
-                    })}>Delete</button>
-                  </div>
-                  <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
-                    <p className="paper-label mb-1">Move into book</p>
-                    {tree.books.length ? (
-                      <div className="grid gap-2">
-                        <select className="paper-select" value={noteMoveBookSlug} onChange={(event) => {
-                          setNoteMoveBookSlug(event.target.value);
-                          setNoteMoveParentKey("");
-                          setNoteMoveOrder("");
-                        }}>
-                          {tree.books.map((book) => (
-                            <option key={book.meta.slug} value={book.meta.slug}>
-                              {book.meta.title}
-                            </option>
-                          ))}
-                        </select>
-                        <select className="paper-select" value={noteMoveParentKey} onChange={(event) => setNoteMoveParentKey(event.target.value)}>
-                          {noteMoveOptions.map((option) => (
-                            <option key={option.key} value={option.key}>
-                              {option.label} ({option.subtitle})
-                            </option>
-                          ))}
-                        </select>
-                        <input className="paper-input" inputMode="numeric" value={noteMoveOrder} onChange={(event) => setNoteMoveOrder(event.target.value)} placeholder={`Position 1-${Math.max(noteMoveSiblingCount + 1, 1)} (optional)`} />
+                  {canManageTopLevel ? (
+                    <>
+                      <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
+                        <p className="paper-label mb-1">Create note</p>
+                        <input className="paper-input" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
+                        <button type="button" className="paper-button mt-2" disabled={pending !== null} onClick={() => void run("create-note", async () => {
+                          const payload = await actions.createNote(draftTitle);
+                          if (payload.meta?.slug) setSelectedRef({ kind: "note", slug: payload.meta.slug });
+                        })}>Create note</button>
                       </div>
-                    ) : (
-                      <p className="text-sm text-[var(--paper-muted)]">Create a book first.</p>
-                    )}
-                  </div>
+
+                      <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
+                        <p className="paper-label mb-1">Reorder</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.notes.findIndex((note) => note.meta.slug === selectedNote.meta.slug) === 0} onClick={() => void run("note-up", () => actions.moveNoteByStep(tree, selectedNote.meta.slug, "up").then(() => undefined))}>Move up</button>
+                          <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || tree.notes.findIndex((note) => note.meta.slug === selectedNote.meta.slug) === tree.notes.length - 1} onClick={() => void run("note-down", () => actions.moveNoteByStep(tree, selectedNote.meta.slug, "down").then(() => undefined))}>Move down</button>
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <input className="paper-input" inputMode="numeric" value={position} onChange={(event) => setPosition(event.target.value)} placeholder={`Position 1-${Math.max(tree.notes.length, 1)}`} />
+                          <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("note-position", async () => {
+                            const nextPosition = parsePosition(position);
+                            if (!nextPosition) throw new Error("Position must be a positive integer.");
+                            await actions.moveNoteToPosition(tree, selectedNote.meta.slug, nextPosition);
+                          })}>Apply</button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null} onClick={() => void run("dup-note", async () => {
+                          const payload = await actions.duplicateNote(selectedNote.meta.slug);
+                          if (payload.meta?.slug) setSelectedRef({ kind: "note", slug: payload.meta.slug });
+                        })}>Duplicate</button>
+                        <button type="button" className="paper-button paper-button-secondary" disabled={pending !== null || !tree.books.length} onClick={() => void run("move-note-into-book", async () => {
+                          if (!noteMoveBookSlug) {
+                            throw new Error("Select a destination book.");
+                          }
+                          const nextPosition = noteMoveOrder ? parsePosition(noteMoveOrder) : null;
+                          if (noteMoveOrder && !nextPosition) {
+                            throw new Error("Position must be a positive integer.");
+                          }
+                          const payload = await actions.moveNoteToBook(
+                            selectedNote.meta.slug,
+                            noteMoveBookSlug,
+                            noteMoveParentPath,
+                            nextPosition ?? undefined,
+                          );
+                          if (payload.path?.length) {
+                            setSelectedRef({
+                              kind: "chapter",
+                              bookSlug: payload.meta?.bookSlug ?? noteMoveBookSlug,
+                              chapterPath: payload.path,
+                            });
+                          }
+                        })}>Move into book</button>
+                        <button type="button" className="paper-button" disabled={pending !== null} onClick={() => void run("del-note", async () => {
+                          if (!window.confirm("Delete this note?")) return;
+                          await actions.deleteNote(selectedNote.meta.slug);
+                          setSelectedRef(null);
+                        })}>Delete</button>
+                      </div>
+                      <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3">
+                        <p className="paper-label mb-1">Move into book</p>
+                        {tree.books.length ? (
+                          <div className="grid gap-2">
+                            <select className="paper-select" value={noteMoveBookSlug} onChange={(event) => {
+                              setNoteMoveBookSlug(event.target.value);
+                              setNoteMoveParentKey("");
+                              setNoteMoveOrder("");
+                            }}>
+                              {tree.books.map((book) => (
+                                <option key={book.meta.slug} value={book.meta.slug}>
+                                  {book.meta.title}
+                                </option>
+                              ))}
+                            </select>
+                            <select className="paper-select" value={noteMoveParentKey} onChange={(event) => setNoteMoveParentKey(event.target.value)}>
+                              {noteMoveOptions.map((option) => (
+                                <option key={option.key} value={option.key}>
+                                  {option.label} ({option.subtitle})
+                                </option>
+                              ))}
+                            </select>
+                            <input className="paper-input" inputMode="numeric" value={noteMoveOrder} onChange={(event) => setNoteMoveOrder(event.target.value)} placeholder={`Position 1-${Math.max(noteMoveSiblingCount + 1, 1)} (optional)`} />
+                          </div>
+                        ) : (
+                          <p className="text-sm text-[var(--paper-muted)]">Create a book first.</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-[16px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.72)] p-3 text-sm text-[var(--paper-muted)]">
+                      Top-level note creation, reordering, duplication, deletion, and note-to-book moves are reserved for admins.
+                    </div>
+                  )}
                 </div>
               ) : null}
 
@@ -593,11 +609,13 @@ export function WorkspaceOrganizerLauncher({
   currentPath,
   buttonLabel = "Organizer",
   buttonClassName,
+  canManageTopLevel = true,
 }: {
   tree: Pick<ContentTree, "books" | "notes">;
   currentPath?: string;
   buttonLabel?: string;
   buttonClassName?: string;
+  canManageTopLevel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -616,6 +634,7 @@ export function WorkspaceOrganizerLauncher({
         tree={tree}
         currentPath={currentPath}
         onClose={() => setOpen(false)}
+        canManageTopLevel={canManageTopLevel}
       />
     </>
   );

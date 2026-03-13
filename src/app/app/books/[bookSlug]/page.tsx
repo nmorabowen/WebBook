@@ -13,6 +13,14 @@ import {
   loadRenderableContent,
   resolveWorkspaceBookRoute,
 } from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  canAccessBook,
+  filterBacklinksForScope,
+  filterContentTreeForScope,
+  filterManifestEntriesForScope,
+  filterMediaAssetsForScope,
+} from "@/lib/workspace-access";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +61,17 @@ export default async function AppBookPage({
     notFound();
   }
 
-  const [tree, manifest, generalSettings, mediaAssets] = await Promise.all([
+  const [rawTree, manifest, generalSettings, mediaAssets] = await Promise.all([
     getContentTree(),
     getManifest(),
     getGeneralSettings(),
     listMediaForPage(loaded.content.id),
   ]);
+  const scope = await buildWorkspaceAccessScope(session, rawTree);
+  if (!canAccessBook(scope, loaded.content)) {
+    notFound();
+  }
+  const tree = filterContentTreeForScope(rawTree, scope);
   const nextRootChapterOrder =
     loaded.content.chapters.reduce(
       (highestOrder, chapter) => Math.max(highestOrder, chapter.meta.order),
@@ -78,7 +91,7 @@ export default async function AppBookPage({
         path={`content/books/${loaded.content.meta.slug}/book.md`}
         pageId={loaded.content.id}
         publicRoute={`/books/${loaded.content.meta.slug}`}
-        manifest={manifest}
+        manifest={filterManifestEntriesForScope(manifest, scope)}
         initialValues={{
           title: loaded.content.meta.title,
           slug: loaded.content.meta.slug,
@@ -90,10 +103,10 @@ export default async function AppBookPage({
           fontPreset: loaded.content.meta.fontPreset ?? "archivo-narrow",
           typography: loaded.content.meta.typography,
         }}
-        backlinks={loaded.backlinks}
+        backlinks={filterBacklinksForScope(loaded.backlinks, scope)}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
-        mediaAssets={mediaAssets}
+        mediaAssets={filterMediaAssetsForScope(mediaAssets, scope)}
         generalSettings={generalSettings}
         previewContext={{
           chapters: mapPreviewChapters(loaded.content.chapters),
@@ -109,6 +122,7 @@ export default async function AppBookPage({
               orderedSlugs={tree.books.map((book) => book.meta.slug)}
               workspaceTree={tree}
               currentPath={`/app/books/${loaded.content.meta.slug}`}
+              canManageTopLevel={session.role === "admin"}
             />
             <CreateChapterPanel
               bookSlug={loaded.content.meta.slug}

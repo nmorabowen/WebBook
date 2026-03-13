@@ -1,7 +1,7 @@
 import { BarChart3, ExternalLink, Radar, Route, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AnalyticsSettingsPanel } from "@/components/editor/analytics-settings-panel";
-import { requireSession } from "@/lib/auth";
+import { requireAdminSession } from "@/lib/auth";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
 import { getAnalyticsProvider, isAnalyticsEnabled } from "@/lib/analytics";
 
@@ -21,7 +21,7 @@ const trackedAreas = [
 ];
 
 export default async function AnalyticsSettingsPage() {
-  const session = await requireSession();
+  const session = await requireAdminSession();
   const [tree, generalSettings] = await Promise.all([
     getContentTree(),
     getGeneralSettings(),
@@ -63,9 +63,8 @@ export default async function AnalyticsSettingsPage() {
               Access
             </div>
             <p className="mt-2 text-sm leading-7 text-[var(--paper-muted)]">
-              All signed-in users can verify tracking status here. {session.role === "admin"
-                ? "Admins can set the GTM or GA4 identifier directly from this page."
-                : "Only admins can change analytics identifiers."}
+              Signed in as <span className="font-semibold text-[var(--paper-ink)]">{session.username}</span>.
+              Only admins can open or change analytics settings.
             </p>
           </div>
 

@@ -37,6 +37,7 @@ type UseCommandCatalogInput = {
   currentPath?: string;
   actions: CommandActions;
   onOpenChapterMove: (request: WorkspaceChapterMoveRequest) => void;
+  canManageTopLevel?: boolean;
 };
 
 export function buildWorkspaceCommandCatalog({
@@ -44,6 +45,7 @@ export function buildWorkspaceCommandCatalog({
   currentPath,
   actions,
   onOpenChapterMove,
+  canManageTopLevel = true,
 }: UseCommandCatalogInput) {
   const currentContext = parseWorkspaceRoute(currentPath);
   const commands: Array<WorkspaceCommand & { activeWeight: number }> = [];
@@ -54,26 +56,28 @@ export function buildWorkspaceCommandCatalog({
     const isCurrentBook =
       currentContext?.kind === "book" && currentContext.slug === book.meta.slug;
 
-    commands.push({
-      id: `book:${book.meta.slug}:up`,
-      label: `Move book up: ${book.meta.title}`,
-      kind: "book",
-      context: "Books",
-      keywords: `book move up ${book.meta.title} ${book.meta.slug}`.toLowerCase(),
-      disabledReason: canMoveUp ? undefined : "Already first book",
-      run: () => actions.moveBookByStep(tree, book.meta.slug, "up"),
-      activeWeight: isCurrentBook ? 2 : 0,
-    });
-    commands.push({
-      id: `book:${book.meta.slug}:down`,
-      label: `Move book down: ${book.meta.title}`,
-      kind: "book",
-      context: "Books",
-      keywords: `book move down ${book.meta.title} ${book.meta.slug}`.toLowerCase(),
-      disabledReason: canMoveDown ? undefined : "Already last book",
-      run: () => actions.moveBookByStep(tree, book.meta.slug, "down"),
-      activeWeight: isCurrentBook ? 2 : 0,
-    });
+    if (canManageTopLevel) {
+      commands.push({
+        id: `book:${book.meta.slug}:up`,
+        label: `Move book up: ${book.meta.title}`,
+        kind: "book",
+        context: "Books",
+        keywords: `book move up ${book.meta.title} ${book.meta.slug}`.toLowerCase(),
+        disabledReason: canMoveUp ? undefined : "Already first book",
+        run: () => actions.moveBookByStep(tree, book.meta.slug, "up"),
+        activeWeight: isCurrentBook ? 2 : 0,
+      });
+      commands.push({
+        id: `book:${book.meta.slug}:down`,
+        label: `Move book down: ${book.meta.title}`,
+        kind: "book",
+        context: "Books",
+        keywords: `book move down ${book.meta.title} ${book.meta.slug}`.toLowerCase(),
+        disabledReason: canMoveDown ? undefined : "Already last book",
+        run: () => actions.moveBookByStep(tree, book.meta.slug, "down"),
+        activeWeight: isCurrentBook ? 2 : 0,
+      });
+    }
 
     const chapterRefs = flattenBookChapterRefs(book.meta.slug, book.chapters);
     const chapterNumbers = buildChapterNumberIndex(book.chapters);
@@ -144,6 +148,9 @@ export function buildWorkspaceCommandCatalog({
   }
 
   for (const [noteIndex, note] of tree.notes.entries()) {
+    if (!canManageTopLevel) {
+      continue;
+    }
     const canMoveUp = noteIndex > 0;
     const canMoveDown = noteIndex < tree.notes.length - 1;
     const isCurrentNote =
@@ -185,9 +192,17 @@ export function useCommandCatalog({
   currentPath,
   actions,
   onOpenChapterMove,
+  canManageTopLevel,
 }: UseCommandCatalogInput) {
   return useMemo(
-    () => buildWorkspaceCommandCatalog({ tree, currentPath, actions, onOpenChapterMove }),
-    [actions, currentPath, onOpenChapterMove, tree],
+    () =>
+      buildWorkspaceCommandCatalog({
+        tree,
+        currentPath,
+        actions,
+        onOpenChapterMove,
+        canManageTopLevel,
+      }),
+    [actions, canManageTopLevel, currentPath, onOpenChapterMove, tree],
   );
 }

@@ -13,6 +13,14 @@ import {
   loadRenderableContent,
   resolveWorkspaceChapterRoute,
 } from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  canAccessChapter,
+  filterBacklinksForScope,
+  filterContentTreeForScope,
+  filterManifestEntriesForScope,
+  filterMediaAssetsForScope,
+} from "@/lib/workspace-access";
 
 export const dynamic = "force-dynamic";
 
@@ -36,12 +44,17 @@ export default async function AppChapterPage({
     notFound();
   }
 
-  const [tree, manifest, generalSettings, mediaAssets] = await Promise.all([
+  const [rawTree, manifest, generalSettings, mediaAssets] = await Promise.all([
     getContentTree(),
     getManifest(),
     getGeneralSettings(),
     listMediaForPage(loaded.content.id),
   ]);
+  const scope = await buildWorkspaceAccessScope(session, rawTree);
+  if (!canAccessChapter(scope, loaded.content)) {
+    notFound();
+  }
+  const tree = filterContentTreeForScope(rawTree, scope);
   const book = resolved.book;
   const nextSubchapterOrder =
     loaded.content.children.reduce(
@@ -71,7 +84,7 @@ export default async function AppChapterPage({
         path={`content/books/${bookSlug}/chapters/**/${loaded.content.meta.slug}.md`}
         pageId={loaded.content.id}
         publicRoute={`/books/${bookSlug}/${chapterRoutePath}`}
-        manifest={manifest}
+        manifest={filterManifestEntriesForScope(manifest, scope)}
         initialValues={{
           title: loaded.content.meta.title,
           slug: loaded.content.meta.slug,
@@ -85,10 +98,10 @@ export default async function AppChapterPage({
             "archivo-narrow",
           typography: book.meta.typography,
         }}
-        backlinks={loaded.backlinks}
+        backlinks={filterBacklinksForScope(loaded.backlinks, scope)}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
-        mediaAssets={mediaAssets}
+        mediaAssets={filterMediaAssetsForScope(mediaAssets, scope)}
         generalSettings={generalSettings}
         previewContext={{
           bookTitle: book.meta.title,
@@ -107,6 +120,7 @@ export default async function AppChapterPage({
               bookChapters={book.chapters}
               workspaceTree={tree}
               currentPath={`/app/books/${bookSlug}/chapters/${chapterRoutePath}`}
+              canManageTopLevel={session.role === "admin"}
             />
             <CreateChapterPanel
               bookSlug={book.meta.slug}

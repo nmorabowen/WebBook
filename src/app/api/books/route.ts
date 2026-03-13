@@ -3,7 +3,10 @@ import { requireSession } from "@/lib/auth";
 import { createBook } from "@/lib/content/service";
 
 export async function POST(request: Request) {
-  await requireSession();
+  const session = await requireSession();
+  if (session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   try {
     const book = await createBook(await request.json());
     return NextResponse.json(book, { status: 201 });

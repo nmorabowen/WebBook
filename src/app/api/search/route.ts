@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { searchContent, searchPublicContent } from "@/lib/content/service";
+import { getContentTree, searchContent, searchPublicContent } from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  filterSearchResultsForScope,
+} from "@/lib/workspace-access";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -20,10 +24,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    return NextResponse.json(await searchContent(query));
+    const tree = await getContentTree();
+    const accessScope = await buildWorkspaceAccessScope(session, tree);
+    return NextResponse.json(
+      filterSearchResultsForScope(await searchContent(query), accessScope),
+    );
   }
 
+  if (!session) {
+    return NextResponse.json(await searchPublicContent(query));
+  }
+
+  const tree = await getContentTree();
+  const accessScope = await buildWorkspaceAccessScope(session, tree);
   return NextResponse.json(
-    session ? await searchContent(query) : await searchPublicContent(query),
+    filterSearchResultsForScope(await searchContent(query), accessScope),
   );
 }

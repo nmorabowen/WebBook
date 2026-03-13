@@ -1,6 +1,15 @@
 import JSZip from "jszip";
 import { requireSession } from "@/lib/auth";
-import { getBook, getNote } from "@/lib/content/service";
+import {
+  getBook,
+  getNote,
+  isMissingWorkspaceContentError,
+} from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  canAccessBook,
+  canAccessNote,
+} from "@/lib/workspace-access";
 
 function addChaptersToZip(
   chapters: Awaited<ReturnType<typeof getBook>>["chapters"],
@@ -19,7 +28,7 @@ function addChaptersToZip(
 }
 
 export async function GET(request: Request) {
-  await requireSession();
+  const session = await requireSession();
   const url = new URL(request.url);
   const kind = url.searchParams.get("kind");
   const slug = url.searchParams.get("slug");
@@ -33,6 +42,10 @@ export async function GET(request: Request) {
     if (!note) {
       return new Response("Not found", { status: 404 });
     }
+    const scope = await buildWorkspaceAccessScope(session);
+    if (!canAccessNote(scope, note)) {
+      return new Response("Not found", { status: 404 });
+    }
 
     return new Response(note.raw, {
       headers: {
@@ -43,25 +56,36 @@ export async function GET(request: Request) {
   }
 
   if (kind === "book") {
-    const book = await getBook(slug);
-    const zip = new JSZip();
-    const root = zip.folder(book.meta.slug);
+    try {
+      const book = await getBook(slug);
+      const scope = await buildWorkspaceAccessScope(session);
+      if (!canAccessBook(scope, book)) {
+        return new Response("Not found", { status: 404 });
+      }
+      const zip = new JSZip();
+      const root = zip.folder(book.meta.slug);
 
-    root?.file("book.md", book.raw);
-    const chaptersFolder = root?.folder("chapters");
+      root?.file("book.md", book.raw);
+      const chaptersFolder = root?.folder("chapters");
 
-    if (chaptersFolder) {
-      addChaptersToZip(book.chapters, chaptersFolder);
+      if (chaptersFolder) {
+        addChaptersToZip(book.chapters, chaptersFolder);
+      }
+
+      const content = await zip.generateAsync({ type: "uint8array" });
+
+      return new Response(Buffer.from(content), {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="${book.meta.slug}.zip"`,
+        },
+      });
+    } catch (error) {
+      if (isMissingWorkspaceContentError(error)) {
+        return new Response("Not found", { status: 404 });
+      }
+      throw error;
     }
-
-    const content = await zip.generateAsync({ type: "uint8array" });
-
-    return new Response(Buffer.from(content), {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${book.meta.slug}.zip"`,
-      },
-    });
   }
 
   return new Response("Unsupported export kind", { status: 400 });

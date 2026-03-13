@@ -20,6 +20,7 @@ type ContentSearchLauncherProps = {
   dialogDescription?: string;
   workspaceTree?: Pick<ContentTree, "books" | "notes">;
   workspaceCurrentPath?: string;
+  canManageTopLevel?: boolean;
 };
 
 type SearchState = "idle" | "loading" | "ready" | "error";
@@ -53,6 +54,7 @@ export function ContentSearchLauncher({
   dialogDescription = "Find books, chapters, and notes from the indexed markdown workspace.",
   workspaceTree,
   workspaceCurrentPath,
+  canManageTopLevel = true,
 }: ContentSearchLauncherProps) {
   const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -85,6 +87,7 @@ export function ContentSearchLauncher({
       setIsOpen(false);
       setChapterMoveRequest(request);
     },
+    canManageTopLevel,
   });
 
   const visibleCommands = useMemo(() => {

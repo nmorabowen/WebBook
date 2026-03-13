@@ -47,6 +47,7 @@ type BookMoveControls = {
   orderedSlugs: string[];
   workspaceTree: Pick<ContentTree, "books" | "notes">;
   currentPath?: string;
+  canManageTopLevel?: boolean;
 };
 
 type NoteMoveControls = {
@@ -55,6 +56,7 @@ type NoteMoveControls = {
   orderedSlugs: string[];
   workspaceTree: Pick<ContentTree, "books" | "notes">;
   currentPath?: string;
+  canManageTopLevel?: boolean;
 };
 
 type ChapterMoveControls = {
@@ -65,6 +67,7 @@ type ChapterMoveControls = {
   bookChapters: ChapterTreeNode[];
   workspaceTree: Pick<ContentTree, "books" | "notes">;
   currentPath?: string;
+  canManageTopLevel?: boolean;
 };
 
 type PageMoveControlsProps = BookMoveControls | NoteMoveControls | ChapterMoveControls;
@@ -176,6 +179,7 @@ export function PageMoveControls(props: PageMoveControlsProps) {
               tree={props.workspaceTree}
               currentPath={props.currentPath}
               buttonLabel="Organizer"
+              canManageTopLevel={props.canManageTopLevel}
             />
           </div>
           {errorMessage ? (
@@ -294,28 +298,33 @@ export function PageMoveControls(props: PageMoveControlsProps) {
     <div className="page-move-controls rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] p-3">
       <p className="paper-label">Move/Reorder</p>
       <div className="page-move-controls-actions mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="paper-button paper-button-secondary inline-flex items-center gap-2"
-          onClick={() => reorder("up")}
-          disabled={!canMoveUp || pendingAction !== null}
-        >
-          <ArrowUp className="h-4 w-4" />
-          Move up
-        </button>
-        <button
-          type="button"
-          className="paper-button paper-button-secondary inline-flex items-center gap-2"
-          onClick={() => reorder("down")}
-          disabled={!canMoveDown || pendingAction !== null}
-        >
-          <ArrowDown className="h-4 w-4" />
-          Move down
-        </button>
+        {props.canManageTopLevel !== false ? (
+          <>
+            <button
+              type="button"
+              className="paper-button paper-button-secondary inline-flex items-center gap-2"
+              onClick={() => reorder("up")}
+              disabled={!canMoveUp || pendingAction !== null}
+            >
+              <ArrowUp className="h-4 w-4" />
+              Move up
+            </button>
+            <button
+              type="button"
+              className="paper-button paper-button-secondary inline-flex items-center gap-2"
+              onClick={() => reorder("down")}
+              disabled={!canMoveDown || pendingAction !== null}
+            >
+              <ArrowDown className="h-4 w-4" />
+              Move down
+            </button>
+          </>
+        ) : null}
         <WorkspaceOrganizerLauncher
           tree={props.workspaceTree}
           currentPath={props.currentPath}
           buttonLabel="Organizer"
+          canManageTopLevel={props.canManageTopLevel}
         />
       </div>
       {errorMessage ? (

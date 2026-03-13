@@ -3,15 +3,21 @@ import { AppShell } from "@/components/app-shell";
 import { ShortcutsSettingsPanel } from "@/components/editor/shortcuts-settings-panel";
 import { requireSession } from "@/lib/auth";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  filterContentTreeForScope,
+} from "@/lib/workspace-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShortcutsSettingsPage() {
   const session = await requireSession();
-  const [tree, generalSettings] = await Promise.all([
+  const [rawTree, generalSettings] = await Promise.all([
     getContentTree(),
     getGeneralSettings(),
   ]);
+  const scope = await buildWorkspaceAccessScope(session, rawTree);
+  const tree = filterContentTreeForScope(rawTree, scope);
 
   return (
     <AppShell

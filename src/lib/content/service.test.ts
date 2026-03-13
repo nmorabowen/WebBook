@@ -2461,6 +2461,48 @@ describe("content service", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("prunes standalone note assignments when a note becomes a chapter", async () => {
+    const service = await loadService();
+    const userStore = await import("./user-store");
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Assignment Destination",
+      slug: "assignment-destination",
+      description: "Target",
+      body: "# Destination",
+      status: "draft",
+      theme: "paper",
+    });
+    const note = await service.createNote({
+      title: "Assigned Standalone",
+      slug: "assigned-standalone",
+      summary: "Move me",
+      body: "# Assigned Standalone",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    await userStore.createUser({
+      username: "editor-one",
+      role: "editor",
+      password: "editor-secret",
+    });
+    await userStore.updateUserAssignments("editor-one", {
+      bookIds: [],
+      noteIds: [note.id],
+    });
+
+    await service.moveNoteToBook("assigned-standalone", {
+      destinationBookSlug: "assignment-destination",
+      parentChapterPath: [],
+      order: 1,
+    });
+
+    const updatedEditor = await userStore.getUserByUsername("editor-one");
+    expect(updatedEditor?.assignments.noteIds).toEqual([]);
+  });
+
   it("renames media and rewrites references across content while preserving URL suffixes", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();

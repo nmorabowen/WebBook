@@ -4,6 +4,10 @@ import { DashboardCreatePanel } from "@/components/editor/dashboard-create-panel
 import { requireSession } from "@/lib/auth";
 import type { ContentTree } from "@/lib/content/schemas";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  filterContentTreeForScope,
+} from "@/lib/workspace-access";
 
 function countChapterNodes(chapters: ContentTree["books"][number]["chapters"]): number {
   return chapters.reduce((total, chapter) => total + 1 + countChapterNodes(chapter.children), 0);
@@ -13,10 +17,12 @@ export const dynamic = "force-dynamic";
 
 export default async function AppDashboardPage() {
   const session = await requireSession();
-  const [tree, generalSettings] = await Promise.all([
+  const [rawTree, generalSettings] = await Promise.all([
     getContentTree(),
     getGeneralSettings(),
   ]);
+  const scope = await buildWorkspaceAccessScope(session, rawTree);
+  const tree = filterContentTreeForScope(rawTree, scope);
   const cardRadius = `${generalSettings.cornerRadius}px`;
   const tileSpacing = `${generalSettings.tileSpacing}rem`;
 
@@ -54,7 +60,9 @@ export default async function AppDashboardPage() {
 
         <div className="grid md:grid-cols-2" style={{ gap: tileSpacing }}>
           <div className="grid" style={{ gap: tileSpacing }}>
-            <DashboardCreatePanel kind="book" generalSettings={generalSettings} />
+            {session.role === "admin" ? (
+              <DashboardCreatePanel kind="book" generalSettings={generalSettings} />
+            ) : null}
             <section
               className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.6)] p-6"
               style={{ borderRadius: cardRadius }}
@@ -87,7 +95,9 @@ export default async function AppDashboardPage() {
           </div>
 
           <div className="grid" style={{ gap: tileSpacing }}>
-            <DashboardCreatePanel kind="note" generalSettings={generalSettings} />
+            {session.role === "admin" ? (
+              <DashboardCreatePanel kind="note" generalSettings={generalSettings} />
+            ) : null}
             <section
               className="border border-[var(--paper-border)] bg-[rgba(255,255,255,0.6)] p-6"
               style={{ borderRadius: cardRadius }}

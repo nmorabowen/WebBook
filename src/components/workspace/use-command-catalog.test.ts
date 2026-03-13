@@ -137,5 +137,26 @@ describe("buildWorkspaceCommandCatalog", () => {
       chapterTitle: "Part One",
     });
   });
+
+  it("hides book and note commands for editors without top-level permissions", () => {
+    const tree = createTree();
+    const actions = {
+      moveBookByStep: vi.fn().mockResolvedValue({ changed: true }),
+      moveNoteByStep: vi.fn().mockResolvedValue({ changed: true }),
+      moveChapterByStep: vi.fn().mockResolvedValue({ changed: true }),
+    };
+
+    const commands = buildWorkspaceCommandCatalog({
+      tree,
+      currentPath: "/app/books/book-a/chapters/part-one",
+      actions,
+      onOpenChapterMove: vi.fn(),
+      canManageTopLevel: false,
+    });
+
+    expect(commands.some((command) => command.kind === "book")).toBe(false);
+    expect(commands.some((command) => command.kind === "note")).toBe(false);
+    expect(commands.some((command) => command.kind === "chapter")).toBe(true);
+  });
 });
 

@@ -11,6 +11,14 @@ import {
   loadRenderableContent,
   resolveWorkspaceNoteRoute,
 } from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  canAccessNote,
+  filterBacklinksForScope,
+  filterContentTreeForScope,
+  filterManifestEntriesForScope,
+  filterMediaAssetsForScope,
+} from "@/lib/workspace-access";
 
 export const dynamic = "force-dynamic";
 
@@ -33,12 +41,17 @@ export default async function AppNotePage({
     notFound();
   }
 
-  const [tree, manifest, generalSettings, mediaAssets] = await Promise.all([
+  const [rawTree, manifest, generalSettings, mediaAssets] = await Promise.all([
     getContentTree(),
     getManifest(),
     getGeneralSettings(),
     listMediaForPage(loaded.content.id),
   ]);
+  const scope = await buildWorkspaceAccessScope(session, rawTree);
+  if (!canAccessNote(scope, loaded.content)) {
+    notFound();
+  }
+  const tree = filterContentTreeForScope(rawTree, scope);
   return (
     <AppShell
       tree={tree}
@@ -52,7 +65,7 @@ export default async function AppNotePage({
         path={`content/notes/${loaded.content.meta.slug}.md`}
         pageId={loaded.content.id}
         publicRoute={`/notes/${loaded.content.meta.slug}`}
-        manifest={manifest}
+        manifest={filterManifestEntriesForScope(manifest, scope)}
         initialValues={{
           title: loaded.content.meta.title,
           slug: loaded.content.meta.slug,
@@ -63,10 +76,10 @@ export default async function AppNotePage({
           fontPreset: loaded.content.meta.fontPreset ?? "archivo-narrow",
           typography: loaded.content.meta.typography,
         }}
-        backlinks={loaded.backlinks}
+        backlinks={filterBacklinksForScope(loaded.backlinks, scope)}
         unresolvedLinks={loaded.unresolvedLinks}
         revisions={loaded.revisions}
-        mediaAssets={mediaAssets}
+        mediaAssets={filterMediaAssetsForScope(mediaAssets, scope)}
         generalSettings={generalSettings}
         previewContext={{
           updatedAt: loaded.content.meta.updatedAt,
@@ -80,6 +93,7 @@ export default async function AppNotePage({
             orderedSlugs={tree.notes.map((note) => note.meta.slug)}
             workspaceTree={tree}
             currentPath={`/app/notes/${loaded.content.meta.slug}`}
+            canManageTopLevel={session.role === "admin"}
           />
         }
       />

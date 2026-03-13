@@ -14,6 +14,12 @@ import {
   loadRenderableContent,
 } from "@/lib/content/service";
 import { extractToc } from "@/lib/markdown/shared";
+import {
+  buildWorkspaceAccessScope,
+  canAccessContentRecord,
+  filterBacklinksForScope,
+  filterManifestEntriesForScope,
+} from "@/lib/workspace-access";
 
 type PreviewChapterNode = {
   path: string[];
@@ -38,7 +44,7 @@ export default async function EditorPreviewPage({
 }: {
   searchParams: Promise<{ pageId?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const { pageId } = await searchParams;
   if (!pageId) {
     notFound();
@@ -55,6 +61,12 @@ export default async function EditorPreviewPage({
     listRevisions(loaded.content.id),
     getGeneralSettings(),
   ]);
+  const scope = await buildWorkspaceAccessScope(session);
+  if (!canAccessContentRecord(scope, loaded.content)) {
+    notFound();
+  }
+  const filteredManifest = filterManifestEntriesForScope(manifest, scope);
+  const filteredBacklinks = filterBacklinksForScope(backlinks, scope);
   const toc = extractToc(loaded.content.body);
 
   if (loaded.content.kind === "note") {
@@ -71,7 +83,7 @@ export default async function EditorPreviewPage({
                 title={loaded.content.meta.title}
                 summary={loaded.content.meta.summary}
                 markdown={loaded.content.body}
-                manifest={manifest}
+                manifest={filteredManifest}
                 pageId={loaded.content.id}
                 requester="admin"
                 allowExecution={loaded.content.meta.allowExecution}
@@ -91,7 +103,7 @@ export default async function EditorPreviewPage({
               />
               <div className="mt-8">
                 <ReadingMetaPanel
-                  backlinks={backlinks}
+                  backlinks={filteredBacklinks}
                   updatedAt={loaded.content.meta.updatedAt}
                   revisions={revisions}
                 />
@@ -118,7 +130,7 @@ export default async function EditorPreviewPage({
                 title={book.meta.title}
                 summary={book.meta.description}
                 markdown={book.body}
-                manifest={manifest}
+                manifest={filteredManifest}
                 pageId={book.id}
                 requester="admin"
                 fontPreset={book.meta.fontPreset ?? "source-serif"}
@@ -139,7 +151,7 @@ export default async function EditorPreviewPage({
               />
               <div className="mt-8">
                 <ReadingMetaPanel
-                  backlinks={backlinks}
+                  backlinks={filteredBacklinks}
                   updatedAt={book.meta.updatedAt}
                   revisions={revisions}
                 />
@@ -172,7 +184,7 @@ export default async function EditorPreviewPage({
                 title={chapter.meta.title}
                 summary={chapter.meta.summary}
                 markdown={chapter.body}
-                manifest={manifest}
+                manifest={filteredManifest}
                 pageId={chapter.id}
                 requester="admin"
                 allowExecution={chapter.meta.allowExecution}
@@ -194,7 +206,7 @@ export default async function EditorPreviewPage({
               />
               <div className="mt-8">
                 <ReadingMetaPanel
-                  backlinks={backlinks}
+                  backlinks={filteredBacklinks}
                   updatedAt={chapter.meta.updatedAt}
                   revisions={revisions}
                 />

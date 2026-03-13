@@ -51,6 +51,8 @@ import { extractToc, headingId, splitWikiTarget } from "@/lib/markdown/shared";
 import { isSafeSlug, safeJsonParse, stripMarkdown, toSlug } from "@/lib/utils";
 import {
   ensureUserStoreFile,
+  removeBookAssignmentFromAllUsers,
+  removeNoteAssignmentFromAllUsers,
   validateUserStoreFile,
 } from "@/lib/user-store";
 import {
@@ -1894,6 +1896,10 @@ async function findMediaReferences(url: string): Promise<MediaReference[]> {
     .map(recordToMediaReference);
 }
 
+export async function getMediaReferences(url: string): Promise<MediaReference[]> {
+  return findMediaReferences(url);
+}
+
 async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] }) {
   const manifest: ManifestEntry[] = [];
   const documents: SearchDocument[] = [];
@@ -2360,6 +2366,13 @@ export async function getChapter(bookSlug: string, chapterPathInput: string | st
 
 export async function getNote(slug: string) {
   return (await resolveNoteRecord(slug))?.record ?? null;
+}
+
+export function isMissingWorkspaceContentError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.message === "Book not found" || error.message === "Note not found")
+  );
 }
 
 export async function getPublicBook(bookSlug: string) {
@@ -3550,6 +3563,7 @@ export async function moveNoteToBook(slug: string, input: unknown) {
     new Set([existing.id]),
   );
 
+  await removeNoteAssignmentFromAllUsers(existing.id);
   await rebuildIndexes();
   return parseChapterFile(
     path.join(destinationChaptersPath, `${chapterStem(requestedOrder, existing.meta.slug)}.md`),
@@ -3865,6 +3879,7 @@ export async function deleteBook(bookSlug: string) {
         ),
       ),
   );
+  await removeBookAssignmentFromAllUsers(existing.id);
   await rebuildIndexes();
 }
 
@@ -3978,6 +3993,7 @@ export async function deleteNote(slug: string) {
         ),
       ),
   );
+  await removeNoteAssignmentFromAllUsers(existing.id);
   await rebuildIndexes();
 }
 

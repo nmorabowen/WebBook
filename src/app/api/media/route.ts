@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { removeMediaAsset, renameMediaAsset } from "@/lib/content/service";
+import {
+  getMediaReferences,
+  removeMediaAsset,
+  renameMediaAsset,
+} from "@/lib/content/service";
+import {
+  buildWorkspaceAccessScope,
+  canAccessMediaReference,
+} from "@/lib/workspace-access";
 
 function statusFromError(error: unknown) {
   if (
@@ -16,7 +24,7 @@ function statusFromError(error: unknown) {
 }
 
 export async function DELETE(request: Request) {
-  await requireSession();
+  const session = await requireSession();
 
   const body = (await request.json().catch(() => null)) as
     | { url?: string; force?: boolean }
@@ -27,6 +35,16 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    const scope = await buildWorkspaceAccessScope(session);
+    if (!scope.isAdmin) {
+      const references = await getMediaReferences(url);
+      if (
+        references.length === 0 ||
+        references.some((reference) => !canAccessMediaReference(scope, reference))
+      ) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+    }
     const result = await removeMediaAsset(url, body?.force === true);
     if (result.blocked) {
       return NextResponse.json(
@@ -55,7 +73,7 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  await requireSession();
+  const session = await requireSession();
 
   const body = (await request.json().catch(() => null)) as
     | { url?: string; newBaseName?: string; rewriteReferences?: boolean }
@@ -70,6 +88,16 @@ export async function PATCH(request: Request) {
   }
 
   try {
+    const scope = await buildWorkspaceAccessScope(session);
+    if (!scope.isAdmin) {
+      const references = await getMediaReferences(url);
+      if (
+        references.length === 0 ||
+        references.some((reference) => !canAccessMediaReference(scope, reference))
+      ) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+    }
     const result = await renameMediaAsset(
       url,
       newBaseName,

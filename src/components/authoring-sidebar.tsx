@@ -315,6 +315,7 @@ export function AuthoringSidebar({
   generalSettings,
   session,
 }: AuthoringSidebarProps) {
+  const canManageTopLevel = session?.role === "admin";
   const router = useRouter();
   const [localTree, setLocalTree] = useState(tree);
   const [collapsedBooks, setCollapsedBooks] = useState<Record<string, boolean>>(() =>
@@ -992,12 +993,14 @@ export function AuthoringSidebar({
         workspaceTree={localTree}
         workspaceCurrentPath={currentPath}
         buttonClassName="justify-center"
+        canManageTopLevel={canManageTopLevel}
       />
       <WorkspaceOrganizerLauncher
         tree={localTree}
         currentPath={currentPath}
         buttonLabel="Organizer"
         buttonClassName="justify-center"
+        canManageTopLevel={canManageTopLevel}
       />
 
       {actionError ? (
@@ -1077,11 +1080,13 @@ export function AuthoringSidebar({
                 label="Shortcuts"
                 active={currentPath === "/app/settings/shortcuts"}
               />
-              <NavLink
-                href="/app/settings/analytics"
-                label="Analytics"
-                active={currentPath === "/app/settings/analytics"}
-              />
+              {session?.role === "admin" ? (
+                <NavLink
+                  href="/app/settings/analytics"
+                  label="Analytics"
+                  active={currentPath === "/app/settings/analytics"}
+                />
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -1137,22 +1142,24 @@ export function AuthoringSidebar({
                     active={currentPath === `/app/books/${book.meta.slug}`}
                   />
                 </div>
-                <ActionMenu
-                  open={openMenuId === `book:${book.meta.slug}`}
-                  busy={pendingActionId?.startsWith(`book:${book.meta.slug}:`) ?? false}
-                  onToggle={() =>
-                    setOpenMenuId((current) =>
-                      current === `book:${book.meta.slug}` ? null : `book:${book.meta.slug}`,
-                    )
-                  }
-                  onMoveUp={() => runItemAction("book", book.meta.slug, "move-up")}
-                  onMoveDown={() => runItemAction("book", book.meta.slug, "move-down")}
-                  disableMoveUp={bookIndex === 0}
-                  disableMoveDown={bookIndex === localTree.books.length - 1}
-                  onDuplicate={() => runItemAction("book", book.meta.slug, "duplicate")}
-                  onDelete={() => runItemAction("book", book.meta.slug, "delete")}
-                  onDownload={() => runItemAction("book", book.meta.slug, "download")}
-                />
+                {canManageTopLevel ? (
+                  <ActionMenu
+                    open={openMenuId === `book:${book.meta.slug}`}
+                    busy={pendingActionId?.startsWith(`book:${book.meta.slug}:`) ?? false}
+                    onToggle={() =>
+                      setOpenMenuId((current) =>
+                        current === `book:${book.meta.slug}` ? null : `book:${book.meta.slug}`,
+                      )
+                    }
+                    onMoveUp={() => runItemAction("book", book.meta.slug, "move-up")}
+                    onMoveDown={() => runItemAction("book", book.meta.slug, "move-down")}
+                    disableMoveUp={bookIndex === 0}
+                    disableMoveDown={bookIndex === localTree.books.length - 1}
+                    onDuplicate={() => runItemAction("book", book.meta.slug, "duplicate")}
+                    onDelete={() => runItemAction("book", book.meta.slug, "delete")}
+                    onDownload={() => runItemAction("book", book.meta.slug, "download")}
+                  />
+                ) : null}
               </div>
 
               {!collapsedBooks[book.meta.slug] ? (
@@ -1180,22 +1187,24 @@ export function AuthoringSidebar({
                   active={currentPath === `/app/notes/${note.meta.slug}`}
                 />
               </div>
-              <ActionMenu
-                open={openMenuId === `note:${note.meta.slug}`}
-                busy={pendingActionId?.startsWith(`note:${note.meta.slug}:`) ?? false}
-                onToggle={() =>
-                  setOpenMenuId((current) =>
-                    current === `note:${note.meta.slug}` ? null : `note:${note.meta.slug}`,
-                  )
-                }
-                onMoveUp={() => runItemAction("note", note.meta.slug, "move-up")}
-                onMoveDown={() => runItemAction("note", note.meta.slug, "move-down")}
-                disableMoveUp={noteIndex === 0}
-                disableMoveDown={noteIndex === localTree.notes.length - 1}
-                onDuplicate={() => runItemAction("note", note.meta.slug, "duplicate")}
-                onDelete={() => runItemAction("note", note.meta.slug, "delete")}
-                onDownload={() => runItemAction("note", note.meta.slug, "download")}
-              />
+              {canManageTopLevel ? (
+                <ActionMenu
+                  open={openMenuId === `note:${note.meta.slug}`}
+                  busy={pendingActionId?.startsWith(`note:${note.meta.slug}:`) ?? false}
+                  onToggle={() =>
+                    setOpenMenuId((current) =>
+                      current === `note:${note.meta.slug}` ? null : `note:${note.meta.slug}`,
+                    )
+                  }
+                  onMoveUp={() => runItemAction("note", note.meta.slug, "move-up")}
+                  onMoveDown={() => runItemAction("note", note.meta.slug, "move-down")}
+                  disableMoveUp={noteIndex === 0}
+                  disableMoveDown={noteIndex === localTree.notes.length - 1}
+                  onDuplicate={() => runItemAction("note", note.meta.slug, "duplicate")}
+                  onDelete={() => runItemAction("note", note.meta.slug, "delete")}
+                  onDownload={() => runItemAction("note", note.meta.slug, "download")}
+                />
+              ) : null}
             </div>
           ))}
         </div>

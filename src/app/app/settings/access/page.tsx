@@ -3,18 +3,24 @@ import { AppShell } from "@/components/app-shell";
 import { AccessSettingsPanel } from "@/components/editor/access-settings-panel";
 import { requireSession } from "@/lib/auth";
 import { getContentTree, getGeneralSettings } from "@/lib/content/service";
-import { getUserByUsername, listUsers } from "@/lib/user-store";
+import { getPublicUserByUsername, listUsers } from "@/lib/user-store";
+import {
+  buildWorkspaceAccessScope,
+  filterContentTreeForScope,
+} from "@/lib/workspace-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccessSettingsPage() {
   const session = await requireSession();
-  const [tree, generalSettings, listedUsers, currentUser] = await Promise.all([
+  const [rawTree, generalSettings, listedUsers, currentUser] = await Promise.all([
     getContentTree(),
     getGeneralSettings(),
     session.role === "admin" ? listUsers() : Promise.resolve([]),
-    getUserByUsername(session.username),
+    getPublicUserByUsername(session.username),
   ]);
+  const scope = await buildWorkspaceAccessScope(session, rawTree);
+  const tree = filterContentTreeForScope(rawTree, scope);
   const users = session.role === "admin" ? listedUsers : currentUser ? [currentUser] : [];
 
   return (
@@ -57,7 +63,11 @@ export default async function AccessSettingsPage() {
           </p>
         </div>
 
-        <AccessSettingsPanel session={session} initialUsers={users} />
+        <AccessSettingsPanel
+          session={session}
+          initialUsers={users}
+          assignmentTree={session.role === "admin" ? rawTree : tree}
+        />
       </div>
     </AppShell>
   );

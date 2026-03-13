@@ -3,7 +3,10 @@ import { requireSession } from "@/lib/auth";
 import { reorderNotes } from "@/lib/content/service";
 
 export async function POST(request: Request) {
-  await requireSession();
+  const session = await requireSession();
+  if (session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   try {
     const tree = await reorderNotes(await request.json());
     return NextResponse.json(tree);

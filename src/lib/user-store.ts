@@ -7,6 +7,11 @@ import { safeJsonParse } from "@/lib/utils";
 
 export const userRoleSchema = z.enum(["admin", "editor"]);
 
+const userAssignmentsSchema = z.object({
+  bookIds: z.array(z.string().min(1)).default([]),
+  noteIds: z.array(z.string().min(1)).default([]),
+});
+
 const usernameSchema = z
   .string()
   .trim()
@@ -18,6 +23,7 @@ const usernameSchema = z
 const storedUserSchema = z.object({
   username: usernameSchema,
   role: userRoleSchema,
+  assignments: userAssignmentsSchema.default({ bookIds: [], noteIds: [] }),
   passwordHash: z.string().min(1),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -41,6 +47,8 @@ export const updateUserRoleSchema = z.object({
   role: userRoleSchema,
 });
 
+export const updateUserAssignmentsSchema = userAssignmentsSchema;
+
 export const changeOwnPasswordSchema = z
   .object({
     currentPassword: z.string().min(1),
@@ -53,6 +61,7 @@ export const changeOwnPasswordSchema = z
   });
 
 export type UserRole = z.infer<typeof userRoleSchema>;
+export type UserAssignments = z.infer<typeof userAssignmentsSchema>;
 export type StoredUser = z.infer<typeof storedUserSchema>;
 export type PublicUserRecord = Omit<StoredUser, "passwordHash">;
 
@@ -66,7 +75,21 @@ const usersFilePath = path.join(
 function sanitizeUser(user: StoredUser): PublicUserRecord {
   const { passwordHash, ...publicUser } = user;
   void passwordHash;
-  return publicUser;
+  return {
+    ...publicUser,
+    assignments: normalizeAssignments(publicUser.assignments),
+  };
+}
+
+function normalizeAssignments(assignments: UserAssignments): UserAssignments {
+  return {
+    bookIds: Array.from(new Set(assignments.bookIds)).sort((left, right) =>
+      left.localeCompare(right),
+    ),
+    noteIds: Array.from(new Set(assignments.noteIds)).sort((left, right) =>
+      left.localeCompare(right),
+    ),
+  };
 }
 
 function sortUsers(users: StoredUser[]) {
@@ -109,6 +132,7 @@ async function buildBootstrapAdminUser(): Promise<StoredUser> {
   return {
     username: env.adminUsername.toLowerCase(),
     role: "admin",
+    assignments: { bookIds: [], noteIds: [] },
     passwordHash: await bootstrapAdminPasswordHash(),
     createdAt: now,
     updatedAt: now,
@@ -177,6 +201,11 @@ export async function getUserByUsername(username: string) {
   return null;
 }
 
+export async function getPublicUserByUsername(username: string) {
+  const user = await getUserByUsername(username);
+  return user ? sanitizeUser(user) : null;
+}
+
 export async function verifyUserCredentials(username: string, password: string) {
   const normalizedUsername = username.trim().toLowerCase();
   const store = await readUserStore();
@@ -210,6 +239,7 @@ export async function createUser(input: unknown) {
   const nextUser: StoredUser = {
     username: data.username,
     role: data.role,
+    assignments: { bookIds: [], noteIds: [] },
     passwordHash: await bcrypt.hash(data.password, 10),
     createdAt: now,
     updatedAt: now,
@@ -278,6 +308,90 @@ export async function updateUserRole(username: string, role: UserRole) {
 
   await writeUserStore(nextUsers);
   return sanitizeUser(nextUsers.find((user) => user.username === normalizedUsername)!);
+}
+
+export async function updateUserAssignments(
+  username: string,
+  assignments: UserAssignments,
+) {
+  const normalizedUsername = username.trim().toLowerCase();
+  const store = await ensureWritableUserStore();
+  const targetUser = store.users.find((user) => user.username === normalizedUsername);
+  if (!targetUser) {
+    throw new Error("User not found");
+  }
+
+  const nextAssignments = normalizeAssignments(assignments);
+  const currentAssignments = normalizeAssignments(targetUser.assignments);
+  if (
+    JSON.stringify(nextAssignments.bookIds) === JSON.stringify(currentAssignments.bookIds) &&
+    JSON.stringify(nextAssignments.noteIds) === JSON.stringify(currentAssignments.noteIds)
+  ) {
+    return sanitizeUser(targetUser);
+  }
+
+  const now = new Date().toISOString();
+  const nextUsers = store.users.map((user) =>
+    user.username === normalizedUsername
+      ? {
+          ...user,
+          assignments: nextAssignments,
+          updatedAt: now,
+        }
+      : user,
+  );
+
+  await writeUserStore(nextUsers);
+  return sanitizeUser(nextUsers.find((user) => user.username === normalizedUsername)!);
+}
+
+async function removeAssignmentFromAllUsers(
+  predicate: (assignments: UserAssignments) => UserAssignments,
+) {
+  const store = await readUserStore();
+  if (!store) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  let changed = false;
+  const nextUsers = store.users.map((user) => {
+    const nextAssignments = predicate(normalizeAssignments(user.assignments));
+    const currentAssignments = normalizeAssignments(user.assignments);
+    if (
+      JSON.stringify(nextAssignments.bookIds) === JSON.stringify(currentAssignments.bookIds) &&
+      JSON.stringify(nextAssignments.noteIds) === JSON.stringify(currentAssignments.noteIds)
+    ) {
+      return user;
+    }
+
+    changed = true;
+    return {
+      ...user,
+      assignments: nextAssignments,
+      updatedAt: now,
+    };
+  });
+
+  if (!changed) {
+    return;
+  }
+
+  await writeUserStore(nextUsers);
+}
+
+export async function removeBookAssignmentFromAllUsers(bookId: string) {
+  await removeAssignmentFromAllUsers((assignments) => ({
+    ...assignments,
+    bookIds: assignments.bookIds.filter((id) => id !== bookId),
+  }));
+}
+
+export async function removeNoteAssignmentFromAllUsers(noteId: string) {
+  await removeAssignmentFromAllUsers((assignments) => ({
+    ...assignments,
+    noteIds: assignments.noteIds.filter((id) => id !== noteId),
+  }));
 }
 
 export async function changeOwnPassword(
