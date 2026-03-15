@@ -6,6 +6,102 @@ import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MarkdownRenderer } from "@/components/markdown/markdown-renderer";
 
+class ResizeObserverMock {
+  static instances: ResizeObserverMock[] = [];
+
+  callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    ResizeObserverMock.instances.push(this);
+  }
+
+  observe() {}
+
+  unobserve() {}
+
+  disconnect() {}
+
+  trigger() {
+    this.callback([], this as unknown as ResizeObserver);
+  }
+
+  static reset() {
+    ResizeObserverMock.instances = [];
+  }
+}
+
+function installResizeObserverMock() {
+  ResizeObserverMock.reset();
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+}
+
+function renderMathInto(elements?: Element[]) {
+  for (const element of elements ?? []) {
+    for (const placeholder of element.querySelectorAll(".math-inline, .math-display")) {
+      if (placeholder.querySelector("mjx-container")) {
+        continue;
+      }
+
+      const rendered = document.createElement("mjx-container");
+      rendered.setAttribute("jax", "SVG");
+      placeholder.appendChild(rendered);
+    }
+  }
+}
+
+function createMathJaxStub(options?: { deferred?: boolean }) {
+  let activeCalls = 0;
+  let maxActiveCalls = 0;
+  const pendingResolvers: Array<() => void> = [];
+  const typesetClear = vi.fn();
+  const typesetPromise = vi.fn((elements?: Element[]) => {
+    activeCalls += 1;
+    maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+
+    if (options?.deferred) {
+      return new Promise<void>((resolve) => {
+        pendingResolvers.push(() => {
+          renderMathInto(elements);
+          activeCalls -= 1;
+          resolve();
+        });
+      });
+    }
+
+    renderMathInto(elements);
+    activeCalls -= 1;
+    return Promise.resolve();
+  });
+
+  window.MathJax = {
+    startup: {
+      promise: Promise.resolve(),
+    },
+    typesetClear,
+    typesetPromise,
+  };
+
+  return {
+    typesetClear,
+    typesetPromise,
+    getMaxActiveCalls: () => maxActiveCalls,
+    resolveNext: async () => {
+      const resolve = pendingResolvers.shift();
+      resolve?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    },
+  };
+}
+
+async function flushEffects() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("MarkdownRenderer source navigation", () => {
   let container: HTMLDivElement | null = null;
   let root: ReturnType<typeof createRoot> | null = null;
@@ -22,6 +118,8 @@ describe("MarkdownRenderer source navigation", () => {
       container = null;
     }
     document.body.innerHTML = "";
+    ResizeObserverMock.reset();
+    delete window.MathJax;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -231,5 +329,172 @@ describe("MarkdownRenderer source navigation", () => {
     });
 
     expect(onRequestSourceLine).toHaveBeenCalled();
+  });
+});
+
+describe("MarkdownRenderer math rendering", () => {
+  let container: HTMLDivElement | null = null;
+  let root: ReturnType<typeof createRoot> | null = null;
+
+  afterEach(async () => {
+    if (root) {
+      await act(async () => {
+        root?.unmount();
+      });
+      root = null;
+    }
+    if (container) {
+      document.body.removeChild(container);
+      container = null;
+    }
+    document.body.innerHTML = "";
+    ResizeObserverMock.reset();
+    delete window.MathJax;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("requests initial MathJax typesetting for rendered math nodes", async () => {
+    installResizeObserverMock();
+    const mathJax = createMathJaxStub();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-1"
+          requester="admin"
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(mathJax.typesetClear).toHaveBeenCalledTimes(1);
+    expect(mathJax.typesetPromise).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("mjx-container")).not.toHaveLength(0);
+  });
+
+  it("re-typesets unchanged markdown when a later rerender loses rendered equations", async () => {
+    installResizeObserverMock();
+    const mathJax = createMathJaxStub();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-2"
+          requester="admin"
+          className="render-pass-a"
+        />,
+      );
+    });
+    await flushEffects();
+
+    container.querySelectorAll("mjx-container").forEach((element) => element.remove());
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-2"
+          requester="admin"
+          className="render-pass-b"
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(mathJax.typesetPromise).toHaveBeenCalledTimes(2);
+    expect(container.querySelectorAll("mjx-container")).not.toHaveLength(0);
+  });
+
+  it("re-typesets missing equations after a layout-driven resize callback", async () => {
+    installResizeObserverMock();
+    const mathJax = createMathJaxStub();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-3"
+          requester="admin"
+        />,
+      );
+    });
+    await flushEffects();
+
+    container.querySelectorAll("mjx-container").forEach((element) => element.remove());
+    await act(async () => {
+      ResizeObserverMock.instances[0]?.trigger();
+    });
+    await flushEffects();
+
+    expect(mathJax.typesetPromise).toHaveBeenCalledTimes(2);
+    expect(container.querySelectorAll("mjx-container")).not.toHaveLength(0);
+  });
+
+  it("does not overlap MathJax work during repeated rerenders", async () => {
+    installResizeObserverMock();
+    const mathJax = createMathJaxStub({ deferred: true });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-4"
+          requester="admin"
+          className="render-pass-a"
+        />,
+      );
+    });
+    await flushEffects();
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-4"
+          requester="admin"
+          className="render-pass-b"
+        />,
+      );
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-4"
+          requester="admin"
+          className="render-pass-c"
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(mathJax.typesetPromise).toHaveBeenCalledTimes(1);
+    expect(mathJax.getMaxActiveCalls()).toBe(1);
+
+    await mathJax.resolveNext();
+    await flushEffects();
+
+    expect(container.querySelectorAll("mjx-container")).not.toHaveLength(0);
+    expect(mathJax.getMaxActiveCalls()).toBe(1);
   });
 });

@@ -3,7 +3,7 @@ import { unified } from "unified";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
-import { visit } from "unist-util-visit";
+import { EXIT, visit } from "unist-util-visit";
 import { toString } from "mdast-util-to-string";
 import type { Root } from "mdast";
 import type { ManifestEntry } from "@/lib/content/schemas";
@@ -221,10 +221,29 @@ export function extractToc(markdown: string) {
   return toc;
 }
 
+function normalizeSupportedMathDelimiters(markdown: string) {
+  return markdown
+    .replace(/\\\[((?:[\s\S]*?))\\\]/g, (_, content: string) => `$$\n${content}\n$$`)
+    .replace(/\\\(((?:[\s\S]*?))\\\)/g, (_, content: string) => `$${content}$`);
+}
+
 export function containsMathSyntax(markdown: string) {
-  return /(?:\$\$[\s\S]+?\$\$|(?<!\$)\$[^$\n]+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/.test(
-    markdown,
-  );
+  const tree = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath, { singleDollarTextMath: true })
+    .parse(normalizeSupportedMathDelimiters(markdown)) as Root;
+
+  let hasMath = false;
+  visit(tree, (node) => {
+    if (node.type === "inlineMath" || node.type === "math") {
+      hasMath = true;
+      return EXIT;
+    }
+    return undefined;
+  });
+
+  return hasMath;
 }
 
 export function extractCodeCells(markdown: string) {

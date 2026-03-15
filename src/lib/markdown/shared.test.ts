@@ -69,7 +69,21 @@ oops
   it("detects math syntax without flagging ordinary currency text", () => {
     expect(containsMathSyntax("Inline $x^2$ and display $$y=x$$")).toBe(true);
     expect(containsMathSyntax("Escaped \\(a+b\\) still counts")).toBe(true);
+    expect(
+      containsMathSyntax(`Escaped block math also counts:\n\\[\nA x = b\n\\]`),
+    ).toBe(true);
+    expect(
+      containsMathSyntax(`$$
+\\begin{aligned}
+f(x) &= x^2 \\\\
+g(x) &= x^3
+\\end{aligned}
+$$`),
+    ).toBe(true);
     expect(containsMathSyntax("Price: $25 per book")).toBe(false);
+    expect(containsMathSyntax("A fenced code block with $x$ is not real math:\n```txt\n$x$\n```")).toBe(
+      false,
+    );
     expect(containsMathSyntax("No math markers here")).toBe(false);
   });
 

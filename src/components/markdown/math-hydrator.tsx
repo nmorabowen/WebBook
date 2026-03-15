@@ -2,18 +2,6 @@
 
 import { useEffect } from "react";
 
-declare global {
-  interface Window {
-    MathJax?: {
-      startup?: {
-        promise?: Promise<void>;
-      };
-      typesetClear?: (elements?: Element[]) => void;
-      typesetPromise?: (elements?: Element[]) => Promise<void>;
-    };
-  }
-}
-
 export function MathHydrator() {
   useEffect(() => {
     const existingConfig = document.getElementById("mathjax-config");

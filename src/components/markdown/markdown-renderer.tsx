@@ -7,6 +7,7 @@ import {
   cloneElement,
   isValidElement,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   type CSSProperties,
@@ -27,6 +28,10 @@ import {
   findSourceLineRestoreTarget,
   findVisibleSourceLine,
 } from "@/components/markdown/source-navigation";
+import {
+  hasUnrenderedMath,
+  queueMathJaxTypeset,
+} from "@/components/markdown/mathjax-runtime";
 import {
   createWikiLinkPlugin,
   headingId,
@@ -528,6 +533,8 @@ export function MarkdownRenderer({
   linkRel,
 }: MarkdownRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const mathTypesetInFlightRef = useRef(false);
+  const mathTypesetCancelRef = useRef<(() => void) | null>(null);
   const normalizedMarkdown = useMemo(
     () => normalizeImageSizingMarkdown(normalizeYouTubeIframes(markdown)),
     [markdown],
@@ -574,45 +581,65 @@ export function MarkdownRenderer({
     return resolveWikiTargetFromManifest(manifest, trimmedTarget);
   };
 
-  useEffect(() => {
+  const requestMathTypeset = useEffectEvent(() => {
     const node = containerRef.current;
     if (!node || typeof window === "undefined") {
       return;
     }
 
+    if (!hasUnrenderedMath(node) || mathTypesetInFlightRef.current) {
+      return;
+    }
+
     let cancelled = false;
-
-    const typeset = async () => {
-      for (let attempt = 0; attempt < 30; attempt += 1) {
-        if (cancelled) {
-          return;
-        }
-
-        const mathJax = window.MathJax;
-        if (mathJax?.typesetPromise) {
-          if (mathJax.startup?.promise) {
-            await mathJax.startup.promise.catch(() => undefined);
-          }
-
-          if (cancelled) {
-            return;
-          }
-
-          mathJax.typesetClear?.([node]);
-          await mathJax.typesetPromise([node]).catch(() => undefined);
-          return;
-        }
-
-        await new Promise((resolve) => window.setTimeout(resolve, 150));
-      }
-    };
-
-    void typeset();
-
-    return () => {
+    mathTypesetInFlightRef.current = true;
+    mathTypesetCancelRef.current = () => {
       cancelled = true;
     };
-  }, [normalizedMarkdown]);
+
+    void queueMathJaxTypeset(node, {
+      shouldCancel: () => cancelled || containerRef.current !== node,
+    }).finally(() => {
+      if (containerRef.current === node) {
+        mathTypesetInFlightRef.current = false;
+      }
+      if (mathTypesetCancelRef.current) {
+        mathTypesetCancelRef.current = null;
+      }
+    });
+  });
+
+  useEffect(() => {
+    requestMathTypeset();
+  });
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const handleMathLayoutChange = () => {
+      requestMathTypeset();
+    };
+
+    const resizeObserver = new ResizeObserver(handleMathLayoutChange);
+    resizeObserver.observe(node);
+    document.addEventListener("visibilitychange", handleMathLayoutChange);
+
+    return () => {
+      resizeObserver.disconnect();
+      document.removeEventListener("visibilitychange", handleMathLayoutChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      mathTypesetCancelRef.current?.();
+      mathTypesetCancelRef.current = null;
+      mathTypesetInFlightRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const node = containerRef.current;
