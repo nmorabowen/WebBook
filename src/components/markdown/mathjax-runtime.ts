@@ -14,7 +14,10 @@ declare global {
   }
 }
 
+export const MATHJAX_READY_EVENT = "webbook:mathjax-ready";
+
 let typesetQueue = Promise.resolve();
+const DEFAULT_TYPESET_ATTEMPTS = 4;
 
 function delay(durationMs: number) {
   return new Promise<void>((resolve) => {
@@ -62,21 +65,30 @@ export function hasUnrenderedMath(node: ParentNode) {
 
 export function queueMathJaxTypeset(
   node: Element,
-  options?: { shouldCancel?: () => boolean },
+  options?: { shouldCancel?: () => boolean; maxAttempts?: number },
 ) {
   const shouldCancel = options?.shouldCancel;
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? DEFAULT_TYPESET_ATTEMPTS);
   const run = async () => {
     if (shouldCancel?.() || !node.isConnected) {
       return;
     }
 
-    const mathJax = await waitForMathJaxRuntime(shouldCancel);
-    if (!mathJax || shouldCancel?.() || !node.isConnected) {
-      return;
-    }
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const mathJax = await waitForMathJaxRuntime(shouldCancel);
+      if (!mathJax || shouldCancel?.() || !node.isConnected) {
+        return;
+      }
 
-    mathJax.typesetClear?.([node]);
-    await mathJax.typesetPromise?.([node]).catch(() => undefined);
+      mathJax.typesetClear?.([node]);
+      await mathJax.typesetPromise?.([node]).catch(() => undefined);
+
+      if (!hasUnrenderedMath(node)) {
+        return;
+      }
+
+      await delay(120 * (attempt + 1));
+    }
   };
 
   typesetQueue = typesetQueue.catch(() => undefined).then(run);

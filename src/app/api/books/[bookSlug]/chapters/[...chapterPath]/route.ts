@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  appendContentEditActivity,
+  buildActivityLogContent,
+  createActivityActor,
+} from "@/lib/activity-log";
 import { requireSession } from "@/lib/auth";
 import { deleteChapter, getChapter, updateChapterContent } from "@/lib/content/service";
 import { buildWorkspaceAccessScope, canAccessChapter } from "@/lib/workspace-access";
@@ -35,9 +40,16 @@ export async function PUT(
     if (!canAccessChapter(scope, chapter)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json(
-      await updateChapterContent(bookSlug, chapterPath ?? [], await request.json()),
+    const updatedChapter = await updateChapterContent(
+      bookSlug,
+      chapterPath ?? [],
+      await request.json(),
     );
+    await appendContentEditActivity({
+      actor: createActivityActor(session),
+      content: buildActivityLogContent(updatedChapter),
+    }).catch(() => undefined);
+    return NextResponse.json(updatedChapter);
   } catch (error) {
     return NextResponse.json(
       {

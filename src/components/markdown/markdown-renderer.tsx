@@ -30,6 +30,7 @@ import {
 } from "@/components/markdown/source-navigation";
 import {
   hasUnrenderedMath,
+  MATHJAX_READY_EVENT,
   queueMathJaxTypeset,
 } from "@/components/markdown/mathjax-runtime";
 import {
@@ -632,6 +633,22 @@ export function MarkdownRenderer({
       document.removeEventListener("visibilitychange", handleMathLayoutChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleMathJaxReady = () => {
+      requestMathTypeset();
+    };
+
+    window.addEventListener(MATHJAX_READY_EVENT, handleMathJaxReady);
+
+    return () => {
+      window.removeEventListener(MATHJAX_READY_EVENT, handleMathJaxReady);
+    };
+  }, [requestMathTypeset]);
 
   useEffect(() => {
     return () => {

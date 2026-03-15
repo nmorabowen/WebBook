@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  appendContentEditActivity,
+  buildActivityLogContent,
+  createActivityActor,
+} from "@/lib/activity-log";
 import { requireSession } from "@/lib/auth";
 import { deleteNote, getNote, updateNote } from "@/lib/content/service";
 import { buildWorkspaceAccessScope, canAccessNote } from "@/lib/workspace-access";
@@ -35,7 +40,12 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   try {
-    return NextResponse.json(await updateNote(slug, await request.json()));
+    const updatedNote = await updateNote(slug, await request.json());
+    await appendContentEditActivity({
+      actor: createActivityActor(session),
+      content: buildActivityLogContent(updatedNote),
+    }).catch(() => undefined);
+    return NextResponse.json(updatedNote);
   } catch (error) {
     return NextResponse.json(
       {

@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  appendContentEditActivity,
+  buildActivityLogContent,
+  createActivityActor,
+} from "@/lib/activity-log";
 import { requireSession } from "@/lib/auth";
 import {
   deleteBook,
@@ -38,7 +43,12 @@ export async function PUT(
     if (!canAccessBook(scope, book)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json(await updateBook(bookSlug, await request.json()));
+    const updatedBook = await updateBook(bookSlug, await request.json());
+    await appendContentEditActivity({
+      actor: createActivityActor(session),
+      content: buildActivityLogContent(updatedBook),
+    }).catch(() => undefined);
+    return NextResponse.json(updatedBook);
   } catch (error) {
     if (isMissingWorkspaceContentError(error)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });

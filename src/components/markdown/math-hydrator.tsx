@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
+import { MATHJAX_READY_EVENT } from "@/components/markdown/mathjax-runtime";
 
 export function MathHydrator() {
   useEffect(() => {
+    const announceReady = () => {
+      window.dispatchEvent(new CustomEvent(MATHJAX_READY_EVENT));
+    };
+
     const existingConfig = document.getElementById("mathjax-config");
     if (!existingConfig) {
       const config = document.createElement("script");
@@ -37,12 +42,18 @@ export function MathHydrator() {
       document.head.appendChild(config);
     }
 
-    if (!document.getElementById("mathjax-script")) {
+    const existingScript = document.getElementById("mathjax-script") as HTMLScriptElement | null;
+    if (!existingScript) {
       const script = document.createElement("script");
       script.id = "mathjax-script";
       script.src = "https://cdn.jsdelivr.net/npm/mathjax@4/tex-svg.js";
       script.async = true;
+      script.addEventListener("load", announceReady, { once: true });
       document.head.appendChild(script);
+    } else if (window.MathJax?.typesetPromise) {
+      announceReady();
+    } else {
+      existingScript.addEventListener("load", announceReady, { once: true });
     }
   }, []);
 

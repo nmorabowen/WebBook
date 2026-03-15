@@ -1071,6 +1071,11 @@ export function AuthoringSidebar({
                 />
               ) : null}
               <NavLink
+                href="/app/settings/activity"
+                label="Activity"
+                active={currentPath === "/app/settings/activity"}
+              />
+              <NavLink
                 href="/app/settings/access"
                 label="Access"
                 active={currentPath === "/app/settings/access"}

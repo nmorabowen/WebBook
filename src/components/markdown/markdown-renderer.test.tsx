@@ -50,10 +50,11 @@ function renderMathInto(elements?: Element[]) {
   }
 }
 
-function createMathJaxStub(options?: { deferred?: boolean }) {
+function createMathJaxStub(options?: { deferred?: boolean; initialNoopCalls?: number }) {
   let activeCalls = 0;
   let maxActiveCalls = 0;
   const pendingResolvers: Array<() => void> = [];
+  let remainingNoopCalls = options?.initialNoopCalls ?? 0;
   const typesetClear = vi.fn();
   const typesetPromise = vi.fn((elements?: Element[]) => {
     activeCalls += 1;
@@ -69,7 +70,11 @@ function createMathJaxStub(options?: { deferred?: boolean }) {
       });
     }
 
-    renderMathInto(elements);
+    if (remainingNoopCalls > 0) {
+      remainingNoopCalls -= 1;
+    } else {
+      renderMathInto(elements);
+    }
     activeCalls -= 1;
     return Promise.resolve();
   });
@@ -378,6 +383,30 @@ describe("MarkdownRenderer math rendering", () => {
     expect(container.querySelectorAll("mjx-container")).not.toHaveLength(0);
   });
 
+  it("retries initial startup when the first typeset pass does not render math", async () => {
+    installResizeObserverMock();
+    const mathJax = createMathJaxStub({ initialNoopCalls: 1 });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-startup-retry"
+          requester="admin"
+        />,
+      );
+    });
+    await flushEffects();
+    await flushEffects();
+
+    expect(mathJax.typesetPromise).toHaveBeenCalledTimes(2);
+    expect(container.querySelectorAll("mjx-container")).not.toHaveLength(0);
+  });
+
   it("re-typesets unchanged markdown when a later rerender loses rendered equations", async () => {
     installResizeObserverMock();
     const mathJax = createMathJaxStub();
@@ -439,6 +468,35 @@ describe("MarkdownRenderer math rendering", () => {
     container.querySelectorAll("mjx-container").forEach((element) => element.remove());
     await act(async () => {
       ResizeObserverMock.instances[0]?.trigger();
+    });
+    await flushEffects();
+
+    expect(mathJax.typesetPromise).toHaveBeenCalledTimes(2);
+    expect(container.querySelectorAll("mjx-container")).not.toHaveLength(0);
+  });
+
+  it("re-typesets when MathJax announces readiness after the preview has mounted", async () => {
+    installResizeObserverMock();
+    const mathJax = createMathJaxStub();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MarkdownRenderer
+          markdown={"Inline $x^2$ and\n\n$$y=x$$"}
+          manifest={[]}
+          pageId="math-ready-event"
+          requester="admin"
+        />,
+      );
+    });
+    await flushEffects();
+
+    container.querySelectorAll("mjx-container").forEach((element) => element.remove());
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("webbook:mathjax-ready"));
     });
     await flushEffects();
 

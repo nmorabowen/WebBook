@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { appendLoginActivity } from "@/lib/activity-log";
 import {
   createSessionToken,
   setSessionCookie,
@@ -24,5 +25,9 @@ export async function POST(request: Request) {
     role: user.role,
   });
   await setSessionCookie(token);
+  await appendLoginActivity({
+    username: user.username,
+    role: user.role,
+  }).catch(() => undefined);
   return NextResponse.json({ ok: true });
 }
