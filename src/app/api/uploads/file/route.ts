@@ -4,7 +4,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { getGeneralSettings } from "@/lib/content/service";
-import { env } from "@/lib/env";
+import { getWorkspaceStorageLayout } from "@/lib/env";
 
 function toSafeBaseName(fileName: string) {
   const normalized = fileName
@@ -54,12 +54,7 @@ export async function POST(request: Request) {
 
   const targetPathInput = String(formData.get("targetPath") ?? "");
   const targetSegments = normalizeTargetPath(targetPathInput);
-  const uploadsRoot = path.join(
-    process.cwd(),
-    env.contentRoot,
-    ".webbook",
-    "uploads",
-  );
+  const { uploads: uploadsRoot } = getWorkspaceStorageLayout();
   const directory = path.join(uploadsRoot, ...targetSegments);
   await fs.mkdir(directory, { recursive: true });
 

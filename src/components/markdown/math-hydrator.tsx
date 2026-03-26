@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { MATHJAX_READY_EVENT } from "@/components/markdown/mathjax-runtime";
+import { GENERAL_SETTINGS_STORAGE_KEY } from "@/lib/general-settings";
 
 export function MathHydrator() {
   useEffect(() => {
@@ -18,7 +19,7 @@ export function MathHydrator() {
         (() => {
           let storedSettings = {};
           try {
-            storedSettings = JSON.parse(window.localStorage.getItem('webbook.general-settings') || '{}');
+            storedSettings = JSON.parse(window.localStorage.getItem('${GENERAL_SETTINGS_STORAGE_KEY}') || '{}');
           } catch {}
 
           const selectedFont = typeof storedSettings.mathFontFamily === 'string'
@@ -53,7 +54,23 @@ export function MathHydrator() {
     } else if (window.MathJax?.typesetPromise) {
       announceReady();
     } else {
-      existingScript.addEventListener("load", announceReady, { once: true });
+      // Script exists but typesetPromise not yet available — it may have already
+      // fired its load event while MathJax is still initializing. Poll until ready
+      // rather than relying solely on a load listener that may never fire.
+      const poll = window.setInterval(() => {
+        if (window.MathJax?.typesetPromise) {
+          window.clearInterval(poll);
+          announceReady();
+        }
+      }, 50);
+      existingScript.addEventListener(
+        "load",
+        () => {
+          window.clearInterval(poll);
+          announceReady();
+        },
+        { once: true },
+      );
     }
   }, []);
 

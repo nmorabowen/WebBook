@@ -4,7 +4,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { getGeneralSettings } from "@/lib/content/service";
-import { env } from "@/lib/env";
+import { getWorkspaceStorageLayout } from "@/lib/env";
 
 const allowedMimeTypes = new Map<string, string>([
   ["image/png", ".png"],
@@ -49,12 +49,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const uploadsRoot = path.join(
-    process.cwd(),
-    env.contentRoot,
-    ".webbook",
-    "uploads",
-  );
+  const { uploads: uploadsRoot } = getWorkspaceStorageLayout();
   await fs.mkdir(uploadsRoot, { recursive: true });
 
   const timestamp = new Date().toISOString().slice(0, 10);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import {
   duplicateBook,
@@ -17,21 +18,16 @@ export async function POST(
     const book = await getBook(bookSlug);
     const scope = await buildWorkspaceAccessScope(session);
     if (!canAccessBook(scope, book)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     if (session.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return apiError(403, "Forbidden");
     }
     return NextResponse.json(await duplicateBook(bookSlug), { status: 201 });
   } catch (error) {
     if (isMissingWorkspaceContentError(error)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Book duplication failed",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Book duplication failed");
   }
 }

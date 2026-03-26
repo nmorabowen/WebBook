@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { getWorkspaceStorageLayout } from "@/lib/env";
 
 const mimeTypes = new Map<string, string>([
   [".png", "image/png"],
@@ -18,12 +18,7 @@ export async function GET(
   { params }: { params: Promise<{ assetPath: string[] }> },
 ) {
   const { assetPath } = await params;
-  const uploadsRoot = path.join(
-    process.cwd(),
-    env.contentRoot,
-    ".webbook",
-    "uploads",
-  );
+  const { uploads: uploadsRoot } = getWorkspaceStorageLayout();
   const resolvedPath = path.resolve(uploadsRoot, ...assetPath);
 
   if (!resolvedPath.startsWith(path.resolve(uploadsRoot))) {

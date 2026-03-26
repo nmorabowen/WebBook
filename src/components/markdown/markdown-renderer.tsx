@@ -603,6 +603,8 @@ export function MarkdownRenderer({
     }).finally(() => {
       if (containerRef.current === node) {
         mathTypesetInFlightRef.current = false;
+        // Re-check after completion in case content changed while in-flight.
+        requestMathTypeset();
       }
       if (mathTypesetCancelRef.current) {
         mathTypesetCancelRef.current = null;

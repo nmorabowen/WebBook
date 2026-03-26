@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import { getContentById, restoreRevision } from "@/lib/content/service";
 import {
@@ -10,15 +11,15 @@ export async function POST(request: Request) {
   const session = await requireSession();
   const payload = (await request.json()) as { id?: string };
   if (!payload.id) {
-    return NextResponse.json({ error: "Missing content id" }, { status: 400 });
+    return apiError(400, "Missing content id");
   }
   const currentContent = await getContentById(payload.id);
   if (!currentContent) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(404, "Not found");
   }
   const scope = await buildWorkspaceAccessScope(session);
   if (!canAccessContentRecord(scope, currentContent)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(404, "Not found");
   }
   const content = await restoreRevision(payload);
   return NextResponse.json(content);

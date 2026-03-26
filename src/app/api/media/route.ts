@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import {
   getMediaReferences,
@@ -31,7 +32,7 @@ export async function DELETE(request: Request) {
     | null;
   const url = body?.url?.trim();
   if (!url) {
-    return NextResponse.json({ error: "Missing media URL" }, { status: 400 });
+    return apiError(400, "Missing media URL");
   }
 
   try {
@@ -42,7 +43,7 @@ export async function DELETE(request: Request) {
         references.length === 0 ||
         references.some((reference) => !canAccessMediaReference(scope, reference))
       ) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return apiError(404, "Not found");
       }
     }
     const result = await removeMediaAsset(url, body?.force === true);
@@ -63,12 +64,7 @@ export async function DELETE(request: Request) {
       references: result.references,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Media removal failed",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Media removal failed");
   }
 }
 
@@ -81,10 +77,7 @@ export async function PATCH(request: Request) {
   const url = body?.url?.trim();
   const newBaseName = body?.newBaseName?.trim();
   if (!url || !newBaseName) {
-    return NextResponse.json(
-      { error: "Missing media URL or target name" },
-      { status: 400 },
-    );
+    return apiError(400, "Missing media URL or target name");
   }
 
   try {
@@ -95,7 +88,7 @@ export async function PATCH(request: Request) {
         references.length === 0 ||
         references.some((reference) => !canAccessMediaReference(scope, reference))
       ) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return apiError(404, "Not found");
       }
     }
     const result = await renameMediaAsset(
@@ -105,11 +98,6 @@ export async function PATCH(request: Request) {
     );
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Media rename failed",
-      },
-      { status: statusFromError(error) },
-    );
+    return apiError(statusFromError(error), error, "Media rename failed");
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiError } from "@/lib/api-error";
 import { getSession } from "@/lib/auth";
 import { getContentById, getPublicChapter } from "@/lib/content/service";
 import { createRequestKey, executePython } from "@/lib/execution";
@@ -19,45 +20,34 @@ export async function POST(request: Request) {
   const content = await getContentById(input.pageId);
 
   if (!content) {
-    return NextResponse.json({ error: "Content not found" }, { status: 404 });
+    return apiError(404, "Content not found");
   }
 
   if (requester === "public") {
     if (content.kind === "book" && content.meta.status !== "published") {
-      return NextResponse.json({ error: "Content not found" }, { status: 404 });
+      return apiError(404, "Content not found");
     }
     if (content.kind === "note" && content.meta.status !== "published") {
-      return NextResponse.json({ error: "Content not found" }, { status: 404 });
+      return apiError(404, "Content not found");
     }
     if (content.kind === "chapter") {
       const publicChapter = await getPublicChapter(content.meta.bookSlug, content.path);
       if (!publicChapter) {
-        return NextResponse.json({ error: "Content not found" }, { status: 404 });
+        return apiError(404, "Content not found");
       }
     }
     if (content.kind === "note" && !content.meta.allowExecution) {
-      return NextResponse.json(
-        { error: "Execution is disabled for this note." },
-        { status: 403 },
-      );
+      return apiError(403, "Execution is disabled for this note.");
     }
     if (content.kind === "chapter" && !content.meta.allowExecution) {
-      return NextResponse.json(
-        { error: "Execution is disabled for this chapter." },
-        { status: 403 },
-      );
+      return apiError(403, "Execution is disabled for this chapter.");
     }
 
     const forwardedFor = request.headers.get("x-forwarded-for");
     const ip = forwardedFor?.split(",")[0]?.trim() || "127.0.0.1";
     const allowed = await enforcePublicExecutionLimit(ip);
     if (!allowed.ok) {
-      return NextResponse.json(
-        {
-          error: `Rate limit reached. Try again in ${allowed.retryAfter} seconds.`,
-        },
-        { status: 429 },
-      );
+      return apiError(429, `Rate limit reached. Try again in ${allowed.retryAfter} seconds.`);
     }
   }
 

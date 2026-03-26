@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import {
   getGeneralSettings,
@@ -12,14 +13,14 @@ import {
 export async function POST(request: Request) {
   const session = await requireSession();
   if (session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiError(403, "Forbidden");
   }
 
   const formData = await request.formData();
   const file = formData.get("archive");
 
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Archive file is required" }, { status: 400 });
+    return apiError(400, "Archive file is required");
   }
 
   const settings = await getGeneralSettings();
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
 
   if (file.size > maxArchiveBytes) {
     const error = new WorkspaceArchiveTooLargeError(maxArchiveBytes);
-    return NextResponse.json({ error: error.message }, { status: 413 });
+    return apiError(413, error.message);
   }
 
   const archiveBuffer = Buffer.from(await file.arrayBuffer());
@@ -38,11 +39,6 @@ export async function POST(request: Request) {
     const result = await importWorkspaceArchive(archiveBuffer);
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not import the workspace archive";
-    return NextResponse.json(
-      { error: message },
-      { status: error instanceof WorkspaceArchiveTooLargeError ? 413 : 400 },
-    );
+    return apiError(error instanceof WorkspaceArchiveTooLargeError ? 413 : 400, error, "Could not import the workspace archive");
   }
 }

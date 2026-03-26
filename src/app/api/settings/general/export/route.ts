@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import { exportWorkspaceArchive } from "@/lib/content/service";
 import { WorkspaceArchiveTooLargeError } from "@/lib/workspace-transfer";
@@ -6,7 +7,7 @@ import { WorkspaceArchiveTooLargeError } from "@/lib/workspace-transfer";
 export async function GET() {
   const session = await requireSession();
   if (session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiError(403, "Forbidden");
   }
 
   try {
@@ -22,10 +23,6 @@ export async function GET() {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not export the workspace";
-    return NextResponse.json(
-      { error: message },
-      { status: error instanceof WorkspaceArchiveTooLargeError ? 413 : 500 },
-    );
+    return apiError(error instanceof WorkspaceArchiveTooLargeError ? 413 : 500, error, "Could not export the workspace");
   }
 }

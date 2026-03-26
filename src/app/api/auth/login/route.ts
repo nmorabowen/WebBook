@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiError } from "@/lib/api-error";
 import { appendLoginActivity } from "@/lib/activity-log";
 import {
   createSessionToken,
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   const user = await verifyCredentials(input.username, input.password);
 
   if (!user) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    return apiError(401, "Invalid credentials");
   }
 
   const token = await createSessionToken({

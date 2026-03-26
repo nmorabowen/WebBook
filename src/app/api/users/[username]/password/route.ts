@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import { adminResetPasswordSchema, updateUserPassword } from "@/lib/user-store";
 
@@ -8,7 +9,7 @@ export async function PUT(
 ) {
   const session = await requireSession();
   if (session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiError(403, "Forbidden");
   }
 
   try {
@@ -17,12 +18,6 @@ export async function PUT(
     const user = await updateUserPassword(username, payload.password);
     return NextResponse.json(user);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Could not update password",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Could not update password");
   }
 }

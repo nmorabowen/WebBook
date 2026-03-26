@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import { getContentById, publishContentById } from "@/lib/content/service";
 import {
@@ -16,11 +17,11 @@ export async function POST(request: Request) {
   const input = schema.parse(await request.json());
   const contentRecord = await getContentById(input.id);
   if (!contentRecord) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(404, "Not found");
   }
   const scope = await buildWorkspaceAccessScope(session);
   if (!canAccessContentRecord(scope, contentRecord)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(404, "Not found");
   }
   const content = await publishContentById(input.id, true);
   return NextResponse.json(content);

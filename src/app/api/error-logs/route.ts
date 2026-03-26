@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import {
   appendErrorLog,
@@ -20,7 +21,7 @@ const createErrorLogSchema = z.object({
 export async function GET(request: Request) {
   const session = await requireSession();
   if (session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiError(403, "Forbidden");
   }
 
   const { searchParams } = new URL(request.url);
@@ -56,11 +57,6 @@ export async function POST(request: Request) {
       canViewLogs: session.role === "admin",
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Could not record the error log",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Could not record the error log");
   }
 }

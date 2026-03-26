@@ -59,7 +59,7 @@ export function hasUnrenderedMath(node: ParentNode) {
     }
 
     const text = placeholder.textContent?.trim() ?? "";
-    return text.startsWith("\\(") || text.startsWith("\\[") || text.length > 0;
+    return text.startsWith("\\(") || text.startsWith("\\[");
   });
 }
 

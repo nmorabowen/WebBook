@@ -75,12 +75,12 @@ const CHAPTER_MOVE_ENDPOINT_HINT =
 const INDEXES_TAG = "webbook-indexes";
 const PUBLIC_INDEXES_TAG = "webbook-public-indexes";
 const SETTINGS_TAG = "webbook-settings";
+const SEARCH_TAG = "webbook-search-index";
 let ensureContentScaffoldPromise: Promise<void> | null = null;
 
 type IndexState = {
   manifest: ManifestEntry[];
   backlinks: Record<string, ManifestEntry[]>;
-  search: string;
 };
 
 type PublicIndexState = {
@@ -210,17 +210,19 @@ async function indexesExist() {
 }
 
 async function readIndexesFromDisk(): Promise<IndexState> {
-  const [manifestContent, backlinksContent, searchContent] = await Promise.all([
+  const [manifestContent, backlinksContent] = await Promise.all([
     fs.readFile(indexFile("manifest.json"), "utf8"),
     fs.readFile(indexFile("backlinks.json"), "utf8"),
-    fs.readFile(indexFile("search.json"), "utf8"),
   ]);
 
   return {
     manifest: safeJsonParse<ManifestEntry[]>(manifestContent, []),
     backlinks: safeJsonParse<Record<string, ManifestEntry[]>>(backlinksContent, {}),
-    search: searchContent,
   };
+}
+
+async function readSearchIndexFromDisk(): Promise<string> {
+  return fs.readFile(indexFile("search.json"), "utf8");
 }
 
 async function readPublicIndexesFromDisk(): Promise<PublicIndexState> {
@@ -268,6 +270,14 @@ const loadGeneralSettingsCached = unstable_cache(
   ["webbook:settings"],
   {
     tags: [SETTINGS_TAG],
+  },
+);
+
+const loadSearchIndexCached = unstable_cache(
+  readSearchIndexFromDisk,
+  ["webbook:search-index"],
+  {
+    tags: [SEARCH_TAG],
   },
 );
 
@@ -2075,10 +2085,10 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
     }
   }
 
+  const searchJson = JSON.stringify(buildSearch(documents));
   const state: IndexState = {
     manifest,
     backlinks,
-    search: JSON.stringify(buildSearch(documents)),
   };
   const publicState: PublicIndexState = {
     tree: toContentTree(content.books, content.notes, { publicOnly: true }),
@@ -2095,7 +2105,7 @@ async function writeIndexes(content: { books: BookRecord[]; notes: NoteRecord[] 
   await Promise.all([
     writeFileAtomic(indexFile("manifest.json"), JSON.stringify(state.manifest, null, 2)),
     writeFileAtomic(indexFile("backlinks.json"), JSON.stringify(state.backlinks, null, 2)),
-    writeFileAtomic(indexFile("search.json"), state.search),
+    writeFileAtomic(indexFile("search.json"), searchJson),
     writeFileAtomic(indexFile("public-tree.json"), JSON.stringify(publicState.tree, null, 2)),
     writeFileAtomic(
       indexFile("public-manifest.json"),
@@ -2304,6 +2314,7 @@ export async function rebuildIndexes() {
   await writeIndexes({ books, notes });
   safeRevalidateTag(INDEXES_TAG);
   safeRevalidateTag(PUBLIC_INDEXES_TAG);
+  safeRevalidateTag(SEARCH_TAG);
 }
 
 function toContentTree(
@@ -2397,8 +2408,13 @@ export async function loadIndexes() {
   return loadIndexesCached();
 }
 
+async function loadSearchIndex() {
+  await ensureContentScaffold();
+  return loadSearchIndexCached();
+}
+
 export async function searchContent(query: string) {
-  const { search } = await loadIndexes();
+  const search = await loadSearchIndex();
   const miniSearch = MiniSearch.loadJSON<SearchDocument>(search, {
     fields: ["title", "summary", "body"],
     storeFields: [
@@ -2434,7 +2450,7 @@ export async function getManifest() {
 }
 
 export async function searchPublicContent(query: string) {
-  const { manifest, search } = await loadIndexes();
+  const [{ manifest }, search] = await Promise.all([loadIndexes(), loadSearchIndex()]);
   const publicIds = new Set(filterPublishedManifestEntries(manifest).map((entry) => entry.id));
   const miniSearch = MiniSearch.loadJSON<SearchDocument>(search, {
     fields: ["title", "summary", "body"],
@@ -3880,6 +3896,24 @@ export async function deleteBook(bookSlug: string) {
       ),
   );
   await removeBookAssignmentFromAllUsers(existing.id);
+
+  // Trash associated media uploads. ENOENT is fine (no uploads for this book).
+  // Any other failure is logged but does not block the deletion.
+  const bookUploadsDir = path.join(uploadsRoot, "books", canonicalBookSlug);
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const trashDest = path.join(trashUploadsRoot, "books", `${canonicalBookSlug}-${timestamp}`);
+    await ensureDirectory(path.dirname(trashDest));
+    await fs.rename(bookUploadsDir, trashDest);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(
+        `[webbook] Failed to trash media uploads for deleted book "${canonicalBookSlug}":`,
+        error,
+      );
+    }
+  }
+
   await rebuildIndexes();
 }
 
@@ -3994,6 +4028,24 @@ export async function deleteNote(slug: string) {
       ),
   );
   await removeNoteAssignmentFromAllUsers(existing.id);
+
+  // Trash associated media uploads. ENOENT is fine (no uploads for this note).
+  // Any other failure is logged but does not block the deletion.
+  const noteUploadsDir = path.join(uploadsRoot, "notes", canonicalSlug);
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const trashDest = path.join(trashUploadsRoot, "notes", `${canonicalSlug}-${timestamp}`);
+    await ensureDirectory(path.dirname(trashDest));
+    await fs.rename(noteUploadsDir, trashDest);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(
+        `[webbook] Failed to trash media uploads for deleted note "${canonicalSlug}":`,
+        error,
+      );
+    }
+  }
+
   await rebuildIndexes();
 }
 

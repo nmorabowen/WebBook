@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import {
   appendContentEditActivity,
   buildActivityLogContent,
@@ -16,11 +17,11 @@ export async function GET(
   const { bookSlug, chapterPath } = await params;
   const chapter = await getChapter(bookSlug, chapterPath ?? []);
   if (!chapter) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(404, "Not found");
   }
   const scope = await buildWorkspaceAccessScope(session);
   if (!canAccessChapter(scope, chapter)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(404, "Not found");
   }
   return NextResponse.json(chapter);
 }
@@ -34,11 +35,11 @@ export async function PUT(
     const { bookSlug, chapterPath } = await params;
     const chapter = await getChapter(bookSlug, chapterPath ?? []);
     if (!chapter) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     const scope = await buildWorkspaceAccessScope(session);
     if (!canAccessChapter(scope, chapter)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     const updatedChapter = await updateChapterContent(
       bookSlug,
@@ -51,12 +52,7 @@ export async function PUT(
     }).catch(() => undefined);
     return NextResponse.json(updatedChapter);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Chapter update failed",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Chapter update failed");
   }
 }
 
@@ -69,20 +65,15 @@ export async function DELETE(
     const { bookSlug, chapterPath } = await params;
     const chapter = await getChapter(bookSlug, chapterPath ?? []);
     if (!chapter) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     const scope = await buildWorkspaceAccessScope(session);
     if (!canAccessChapter(scope, chapter)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     await deleteChapter(bookSlug, chapterPath ?? []);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Chapter deletion failed",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Chapter deletion failed");
   }
 }

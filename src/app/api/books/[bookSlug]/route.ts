@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import {
   appendContentEditActivity,
   buildActivityLogContent,
@@ -23,11 +24,11 @@ export async function GET(
     const book = await getBook(bookSlug);
     const scope = await buildWorkspaceAccessScope(session);
     if (!canAccessBook(scope, book)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     return NextResponse.json(book);
   } catch {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(404, "Not found");
   }
 }
 
@@ -41,7 +42,7 @@ export async function PUT(
     const book = await getBook(bookSlug);
     const scope = await buildWorkspaceAccessScope(session);
     if (!canAccessBook(scope, book)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     const updatedBook = await updateBook(bookSlug, await request.json());
     await appendContentEditActivity({
@@ -51,14 +52,9 @@ export async function PUT(
     return NextResponse.json(updatedBook);
   } catch (error) {
     if (isMissingWorkspaceContentError(error)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Book update failed",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Book update failed");
   }
 }
 
@@ -72,22 +68,17 @@ export async function DELETE(
     const book = await getBook(bookSlug);
     const scope = await buildWorkspaceAccessScope(session);
     if (!canAccessBook(scope, book)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
     if (session.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return apiError(403, "Forbidden");
     }
     await deleteBook(bookSlug);
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (isMissingWorkspaceContentError(error)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError(404, "Not found");
     }
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Book deletion failed",
-      },
-      { status: 400 },
-    );
+    return apiError(400, error, "Book deletion failed");
   }
 }
