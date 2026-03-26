@@ -42,10 +42,12 @@ export async function PUT(
   }
   try {
     const updatedNote = await updateNote(slug, await request.json());
-    await appendContentEditActivity({
-      actor: createActivityActor(session),
-      content: buildActivityLogContent(updatedNote),
-    }).catch(() => undefined);
+    if (updatedNote) {
+      await appendContentEditActivity({
+        actor: createActivityActor(session),
+        content: buildActivityLogContent(updatedNote),
+      }).catch(() => undefined);
+    }
     return NextResponse.json(updatedNote);
   } catch (error) {
     return apiError(400, error, "Note update failed");
