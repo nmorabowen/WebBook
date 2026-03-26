@@ -13,6 +13,7 @@ import remarkMath from "remark-math";
 import { ExecutableCodeBlock } from "@/components/markdown/executable-code-block";
 import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { CopyCodeButton } from "@/components/markdown/copy-code-button";
+import { PublicMathTrigger } from "@/components/markdown/public-math-trigger";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import type { ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -686,7 +687,7 @@ export function PublicMarkdownRenderer({
   };
 
   return (
-    <div
+    <PublicMathTrigger
       className={cn("book-prose", className)}
       data-font-preset={fontPreset}
       style={bookTypographyStyle(typography)}
@@ -742,6 +743,6 @@ export function PublicMarkdownRenderer({
           )}
         </div>
       ))}
-    </div>
+    </PublicMathTrigger>
   );
 }
