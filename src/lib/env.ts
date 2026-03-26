@@ -36,7 +36,11 @@ if (!parsed.success) {
   throw new Error(`Invalid environment configuration:\n${messages}`);
 }
 
-if (isProd) {
+// Skip runtime-only checks during `next build` — env vars are injected at
+// container startup, not available to the build process.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
+if (isProd && !isBuildPhase) {
   const secret = process.env.SESSION_SECRET ?? DEV_SESSION_SECRET;
   if (secret === DEV_SESSION_SECRET) {
     throw new Error(
