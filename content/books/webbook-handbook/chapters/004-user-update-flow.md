@@ -1,13 +1,17 @@
 ---
+id: 17eef031-b1d8-4f2f-960f-8da628862bd7
 title: User Update Flow
 slug: user-update-flow
 createdAt: '2026-03-03T03:05:00.000Z'
-updatedAt: '2026-03-03T03:05:00.000Z'
+updatedAt: '2026-04-18T19:54:29.232Z'
 publishedAt: '2026-03-03T03:05:00.000Z'
+routeAliases: []
 kind: chapter
 bookSlug: webbook-handbook
-order: 5
-summary: 'How an administrator or operator updates content, settings, backups, and restores in a deployed instance.'
+order: 4
+summary: >-
+  How an administrator or operator updates content, settings, backups, and
+  restores in a deployed instance.
 status: published
 allowExecution: false
 fontPreset: source-serif
@@ -74,4 +78,4 @@ WebBook also includes a workspace export and import flow. That is useful for:
 - taking a manual off-site snapshot
 - restoring content into a clean instance
 
-For infrastructure sizing, continue with [[webbook-handbook/proxmox-vps-recommendations]].
+For infrastructure sizing, continue with [[doubly-reinforced-coupling-beam/proxmox-vps-recommendations]].

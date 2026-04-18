@@ -2,11 +2,11 @@
 title: Python SetUp
 slug: python-setup
 createdAt: '2026-03-03T04:17:18.932Z'
-updatedAt: '2026-03-03T04:48:27.498Z'
+updatedAt: '2026-04-18T19:42:06.833Z'
 publishedAt: '2026-03-03T04:17:27.358Z'
 kind: note
 summary: How to setup python using virtual enviroments
-order: 2
+order: 1
 status: published
 allowExecution: true
 fontPreset: source-serif
@@ -18,6 +18,8 @@ typography:
   headingIndentStep: 0
   paragraphSpacing: 1
   contentWidth: 75
+id: d2d2d4f9-2d3b-417b-b827-d52ff1f84dec
+routeAliases: []
 ---
 # New note
 

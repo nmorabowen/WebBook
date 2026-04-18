@@ -1,12 +1,18 @@
 ---
+id: c654aaca-2455-4c95-95d7-56ae797f6460
 title: Plane Stress Element
 slug: plane-stress-element
 createdAt: '2026-03-02T02:58:47.271Z'
-updatedAt: '2026-03-03T06:31:36.913Z'
+updatedAt: '2026-04-18T19:41:55.434Z'
 publishedAt: '2026-03-02T02:59:32.325Z'
+routeAliases:
+  - kind: chapter
+    location: fem/plane-stress-element
+  - kind: chapter
+    location: gmsh-to-opensees/plane-stress-element
 kind: chapter
-bookSlug: fem
-order: 2
+bookSlug: doubly-reinforced-coupling-beam
+order: 3
 summary: A fresh chapter.
 status: published
 allowExecution: false

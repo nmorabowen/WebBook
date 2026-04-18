@@ -1,11 +1,15 @@
 ---
+id: c38bdeb1-75ed-447c-b7b9-db37c64c145d
 title: About WebBook
 slug: about-webbook
 createdAt: '2026-03-03T03:05:00.000Z'
-updatedAt: '2026-03-03T03:05:00.000Z'
+updatedAt: '2026-04-18T19:41:55.434Z'
 publishedAt: '2026-03-03T03:05:00.000Z'
+routeAliases:
+  - kind: chapter
+    location: webbook-handbook/about-webbook
 kind: chapter
-bookSlug: webbook-handbook
+bookSlug: doubly-reinforced-coupling-beam
 order: 1
 summary: 'What WebBook is, why it exists, and how the main parts fit together.'
 status: published
@@ -65,4 +69,4 @@ WebBook is aimed at authors who want:
 - technical writing with equations and code
 - self-hosted control over content and deployment
 
-For a feature-level overview, continue with [[webbook-handbook/core-functions]].
+For a feature-level overview, continue with [[core-functions]].

@@ -2,15 +2,17 @@
 title: Math Usage Guide
 slug: math-usage-guide
 createdAt: '2026-03-03T15:05:00.000Z'
-updatedAt: '2026-03-03T15:05:00.000Z'
+updatedAt: '2026-04-18T19:54:29.232Z'
 publishedAt: '2026-03-03T15:05:00.000Z'
 kind: chapter
 bookSlug: webbook-handbook
-order: 7
+order: 5
 summary: 'How to write, style, and troubleshoot MathJax equations in WebBook.'
 status: published
 allowExecution: false
 fontPreset: source-serif
+id: 1fcdff5d-2ad1-4059-8adf-5dad8cc7be72
+routeAliases: []
 ---
 # Math Usage Guide
 

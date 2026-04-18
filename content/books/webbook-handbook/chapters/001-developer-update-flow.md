@@ -1,13 +1,19 @@
 ---
+id: 729fd0ab-6ab3-4316-8286-99c392247e70
 title: Developer Update Flow
 slug: developer-update-flow
 createdAt: '2026-03-03T03:05:00.000Z'
-updatedAt: '2026-03-03T03:05:00.000Z'
+updatedAt: '2026-04-18T19:54:29.232Z'
 publishedAt: '2026-03-03T03:05:00.000Z'
+routeAliases:
+  - kind: chapter
+    location: webbook-handbook/developer-update-flow
+  - kind: chapter
+    location: webbook-handbook/installation-guide/developer-update-flow
 kind: chapter
 bookSlug: webbook-handbook
-order: 4
-summary: 'How code changes move from the developer machine to the production server.'
+order: 1
+summary: How code changes move from the developer machine to the production server.
 status: published
 allowExecution: false
 fontPreset: source-serif

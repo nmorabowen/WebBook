@@ -1,13 +1,19 @@
 ---
+id: cad7dcbe-84b1-44c1-aa0e-e8c46cb3c30e
 title: Proxmox VPS Recommendations
 slug: proxmox-vps-recommendations
 createdAt: '2026-03-03T03:05:00.000Z'
-updatedAt: '2026-03-03T03:05:00.000Z'
+updatedAt: '2026-04-18T19:41:55.434Z'
 publishedAt: '2026-03-03T03:05:00.000Z'
+routeAliases:
+  - kind: chapter
+    location: webbook-handbook/proxmox-vps-recommendations
 kind: chapter
-bookSlug: webbook-handbook
-order: 6
-summary: 'Recommended Proxmox VM sizing and configuration for running WebBook in production.'
+bookSlug: doubly-reinforced-coupling-beam
+order: 2
+summary: >-
+  Recommended Proxmox VM sizing and configuration for running WebBook in
+  production.
 status: published
 allowExecution: false
 fontPreset: source-serif

@@ -1,13 +1,17 @@
 ---
+id: 602e2325-b6d5-4290-aeb0-644951eeef56
 title: Installation Guide
 slug: installation-guide
 createdAt: '2026-03-03T03:05:00.000Z'
-updatedAt: '2026-03-03T03:05:00.000Z'
+updatedAt: '2026-04-18T19:54:29.232Z'
 publishedAt: '2026-03-03T03:05:00.000Z'
+routeAliases: []
 kind: chapter
 bookSlug: webbook-handbook
-order: 3
-summary: 'How to install WebBook locally and on a Debian VPS and prepare the server for later updates.'
+order: 2
+summary: >-
+  How to install WebBook locally and on a Debian VPS and prepare the server for
+  later updates.
 status: published
 allowExecution: false
 fontPreset: source-serif

@@ -1,16 +1,32 @@
 ---
+id: 82c5f67a-d199-468d-9a08-5e63594d13f4
+kind: note
 title: Shortcuts Guide
 slug: shortcuts-guide
-createdAt: '2026-03-03T15:25:00.000Z'
-updatedAt: '2026-03-03T15:25:00.000Z'
-publishedAt: '2026-03-03T15:25:00.000Z'
-kind: chapter
-bookSlug: webbook-handbook
-order: 8
-summary: 'How keyboard shortcuts work in the markdown editor and how to remap them.'
+routeAliases:
+  - kind: chapter
+    location: webbook-handbook/shortcuts-guide
+summary: How keyboard shortcuts work in the markdown editor and how to remap them.
+order: 3
 status: published
 allowExecution: false
 fontPreset: source-serif
+typography:
+  bodyFontSize: 1
+  bodyLineHeight: 1.05
+  headingBaseSize: 2.5
+  headingScale: 1.25
+  headingIndentStep: 0
+  paragraphSpacing: 1
+  contentWidth: 75
+  codeBlockFontSize: 0.78
+  codeBlockPaddingY: 0.55
+  codeBlockPaddingX: 0.9
+  codeBlockInsetLeft: 0
+  codeBlockInsetRight: 0
+createdAt: '2026-03-03T15:25:00.000Z'
+updatedAt: '2026-04-18T19:42:06.833Z'
+publishedAt: '2026-03-03T15:25:00.000Z'
 ---
 # Shortcuts Guide
 

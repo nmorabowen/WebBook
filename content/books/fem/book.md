@@ -21,6 +21,8 @@ typography:
   headingIndentStep: 1
   paragraphSpacing: 1
   contentWidth: 75
+id: 12de686c-51bc-4c7b-b324-a2f27cf349f2
+routeAliases: []
 ---
 :::align-center
 **Universidad de los Andes**

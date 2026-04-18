@@ -21,6 +21,8 @@ typography:
   headingIndentStep: 0
   paragraphSpacing: 1
   contentWidth: 46
+id: f86b15aa-42e0-4a79-a1dd-17c09d2162ad
+routeAliases: []
 ---
 # New book
 
