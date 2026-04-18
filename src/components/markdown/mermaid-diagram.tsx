@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type MermaidDiagramProps = {
   code: string;
@@ -37,11 +38,29 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
+function triggerSvgDownload(svg: string, filename: string) {
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function MermaidDiagram({ code, id, sourceLine }: MermaidDiagramProps) {
   const reactId = useId();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +121,27 @@ export function MermaidDiagram({ code, id, sourceLine }: MermaidDiagramProps) {
     };
   }, [code, id, reactId]);
 
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handler);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreen]);
+
+  const handleDownload = useCallback(() => {
+    if (!svg) return;
+    triggerSvgDownload(svg, `${id ?? "mermaid-diagram"}.svg`);
+  }, [svg, id]);
+
   if (error) {
     return (
       <div
@@ -119,14 +159,82 @@ export function MermaidDiagram({ code, id, sourceLine }: MermaidDiagramProps) {
 
   if (svg) {
     return (
-      <div
-        ref={hostRef}
-        className="mermaid-frame"
-        data-source-line={sourceLine}
-        role="img"
-        aria-label="Mermaid diagram"
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
+      <>
+        <div
+          ref={hostRef}
+          className="mermaid-frame"
+          data-source-line={sourceLine}
+        >
+          <div
+            className="mermaid-frame__content"
+            role="img"
+            aria-label="Mermaid diagram"
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+          <div
+            className="mermaid-frame__toolbar"
+            role="toolbar"
+            aria-label="Diagram actions"
+          >
+            <button
+              type="button"
+              className="mermaid-frame__action"
+              onClick={() => setIsFullscreen(true)}
+              aria-label="Open diagram fullscreen"
+              title="Open fullscreen"
+            >
+              Expand
+            </button>
+            <button
+              type="button"
+              className="mermaid-frame__action"
+              onClick={handleDownload}
+              aria-label="Download diagram as SVG"
+              title="Download SVG"
+            >
+              Download
+            </button>
+          </div>
+        </div>
+        {mounted && isFullscreen
+          ? createPortal(
+              <div
+                className="mermaid-fullscreen"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Mermaid diagram fullscreen view"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) {
+                    setIsFullscreen(false);
+                  }
+                }}
+              >
+                <div className="mermaid-fullscreen__toolbar">
+                  <button
+                    type="button"
+                    className="mermaid-fullscreen__action"
+                    onClick={handleDownload}
+                  >
+                    Download SVG
+                  </button>
+                  <button
+                    type="button"
+                    className="mermaid-fullscreen__close"
+                    onClick={() => setIsFullscreen(false)}
+                    aria-label="Close fullscreen"
+                  >
+                    Close
+                  </button>
+                </div>
+                <div
+                  className="mermaid-fullscreen__stage"
+                  dangerouslySetInnerHTML={{ __html: svg }}
+                />
+              </div>,
+              document.body,
+            )
+          : null}
+      </>
     );
   }
 
