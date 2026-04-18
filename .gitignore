@@ -47,3 +47,7 @@ content/.webbook/indexes/
 content/.webbook/revisions/
 content/.webbook/uploads/
 content/.webbook/users.json
+
+# local backup zips + transient test extracts
+/backup/
+.tmp-*
