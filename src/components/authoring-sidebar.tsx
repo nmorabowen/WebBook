@@ -24,6 +24,7 @@ import {
 import { ChapterMoveDialog } from "@/components/chapter-move-dialog";
 import type { SessionPayload } from "@/lib/auth";
 import { ContentSearchLauncher } from "@/components/content-search-launcher";
+import { ContentTreeSidebar } from "@/components/workspace/content-tree-sidebar";
 import { WorkspaceOrganizerLauncher } from "@/components/workspace/workspace-organizer-modal";
 import type {
   ChapterTreeNode,
@@ -1002,6 +1003,17 @@ export function AuthoringSidebar({
         buttonClassName="justify-center"
         canManageTopLevel={canManageTopLevel}
       />
+
+      {process.env.NEXT_PUBLIC_CONTENT_TREE_SIDEBAR === "1" ? (
+        <section className="grid gap-2 rounded-[16px] border border-[rgba(73,57,38,0.12)] bg-[rgba(255,255,255,0.4)] p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--paper-muted)]">
+              Content tree (preview)
+            </p>
+          </div>
+          <ContentTreeSidebar currentPath={currentPath} initialTree={localTree} />
+        </section>
+      ) : null}
 
       {actionError ? (
         <div

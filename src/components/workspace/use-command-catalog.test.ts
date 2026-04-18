@@ -8,6 +8,8 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
       {
         meta: {
           kind: "book",
+          id: "book-a",
+          routeAliases: [],
           title: "Book A",
           slug: "book-a",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -19,6 +21,8 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
           {
             meta: {
               kind: "chapter",
+              id: "book-a:part-one",
+              routeAliases: [],
               bookSlug: "book-a",
               title: "Part One",
               slug: "part-one",
@@ -35,6 +39,8 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
           {
             meta: {
               kind: "chapter",
+              id: "book-a:part-two",
+              routeAliases: [],
               bookSlug: "book-a",
               title: "Part Two",
               slug: "part-two",
@@ -53,6 +59,8 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
       {
         meta: {
           kind: "book",
+          id: "book-b",
+          routeAliases: [],
           title: "Book B",
           slug: "book-b",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -67,6 +75,8 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
       {
         meta: {
           kind: "note",
+          id: "note-a",
+          routeAliases: [],
           title: "Note A",
           slug: "note-a",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -79,6 +89,8 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
       {
         meta: {
           kind: "note",
+          id: "note-b",
+          routeAliases: [],
           title: "Note B",
           slug: "note-b",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -89,7 +101,7 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
         route: "/notes/note-b",
       },
     ],
-  } as Pick<ContentTree, "books" | "notes">;
+  };
 }
 
 describe("buildWorkspaceCommandCatalog", () => {

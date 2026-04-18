@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getContentTree, getPublicContentTree } from "@/lib/content/service";
+import {
+  getContentRevision,
+  getContentTree,
+  getPublicContentTree,
+} from "@/lib/content/service";
 import {
   buildWorkspaceAccessScope,
   filterContentTreeForScope,
@@ -9,10 +13,14 @@ import {
 export async function GET() {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json(await getPublicContentTree());
+    const tree = await getPublicContentTree();
+    return NextResponse.json({ tree, revision: await getContentRevision() });
   }
 
   const tree = await getContentTree();
   const scope = await buildWorkspaceAccessScope(session, tree);
-  return NextResponse.json(filterContentTreeForScope(tree, scope));
+  return NextResponse.json({
+    tree: filterContentTreeForScope(tree, scope),
+    revision: await getContentRevision(),
+  });
 }

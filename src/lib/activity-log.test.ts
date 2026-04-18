@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "fs";
 import path from "path";
 import type { WorkspaceAccessScope } from "@/lib/workspace-access";
+import type { ActivityLogEntry } from "./activity-log";
 
 const tempRoot = ".tmp-activity-log-test";
 
@@ -224,7 +225,7 @@ describe("activity log", () => {
 
   it("filters visible entries for admins and editors", async () => {
     const activityLog = await loadActivityLog();
-    const entries = [
+    const entries: ActivityLogEntry[] = [
       {
         id: "login-self",
         eventType: "login",
