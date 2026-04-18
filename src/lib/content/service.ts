@@ -1062,7 +1062,10 @@ function buildManifestAliasLookup(manifest: ManifestEntry[]) {
   return aliasLookup;
 }
 
-async function parseBookFile(filePath: string): Promise<BookRecord> {
+async function parseBookFile(
+  filePath: string,
+  { strict = true }: { strict?: boolean } = {},
+): Promise<BookRecord> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = matter(raw);
@@ -1079,7 +1082,7 @@ async function parseBookFile(filePath: string): Promise<BookRecord> {
         : undefined,
     };
     const chaptersDir = path.join(path.dirname(filePath), "chapters");
-    const chapters = await parseChapterDirectory(chaptersDir, meta.slug, []);
+    const chapters = await parseChapterDirectory(chaptersDir, meta.slug, [], { strict });
 
     return {
       id: meta.id,
@@ -1100,13 +1103,26 @@ async function parseChapterDirectory(
   chaptersPath: string,
   bookSlug: string,
   parentPath: string[],
+  { strict = true }: { strict?: boolean } = {},
 ): Promise<ChapterRecord[]> {
   const entries = await listOrderedChapterFilesAtPath(chaptersPath);
-  const chapters: ChapterRecord[] = await Promise.all(
-    entries.map((entry) =>
-      parseChapterFile(entry.filePath, bookSlug, [...parentPath, entry.slug]),
-    ),
-  );
+  const chapters = (
+    await Promise.all(
+      entries.map(async (entry) => {
+        try {
+          return await parseChapterFile(
+            entry.filePath,
+            bookSlug,
+            [...parentPath, entry.slug],
+            { strict },
+          );
+        } catch (error) {
+          if (strict) throw error;
+          return null;
+        }
+      }),
+    )
+  ).filter((chapter): chapter is ChapterRecord => chapter !== null);
   return chapters.sort(
     (left: ChapterRecord, right: ChapterRecord) => left.meta.order - right.meta.order,
   );
@@ -1116,6 +1132,7 @@ async function parseChapterFile(
   filePath: string,
   bookSlug: string,
   chapterPath: string[],
+  { strict = true }: { strict?: boolean } = {},
 ): Promise<ChapterRecord> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
@@ -1141,6 +1158,7 @@ async function parseChapterFile(
       chapterChildrenDirectoryByFile(filePath),
       bookSlug,
       chapterPath,
+      { strict },
     );
 
     return {
@@ -1197,7 +1215,7 @@ async function listBookRecords(): Promise<BookRecord[]> {
         .filter((entry) => entry.isDirectory())
         .map(async (entry) => {
           try {
-            return await parseBookFile(bookFilePath(entry.name));
+            return await parseBookFile(bookFilePath(entry.name), { strict: false });
           } catch {
             return null;
           }
@@ -1511,6 +1529,19 @@ async function resolveChapterRecord(bookSlug: string, chapterPathInput: string |
     for (const chapter of flattenChapters(book.chapters)) {
       if (book.meta.slug === bookSlug && chapterPathsEqual(chapter.path, requestedPath)) {
         return { book, chapter, aliased: false as const };
+      }
+    }
+  }
+
+  if (requestedPath.length === 1) {
+    for (const book of books) {
+      if (book.meta.slug !== bookSlug) continue;
+      const resolution = findChapterByLeafSlug(book.chapters, requestedPath[0]);
+      if (resolution.ok) {
+        const chapter = findChapterByPath(book.chapters, resolution.chapterPath);
+        if (chapter) {
+          return { book, chapter, aliased: false as const };
+        }
       }
     }
   }
@@ -2368,7 +2399,7 @@ export async function getBook(bookSlug: string) {
   if (!resolved) {
     throw new Error("Book not found");
   }
-  return resolved.record;
+  return parseBookFile(resolved.record.filePath, { strict: true });
 }
 
 export async function getChapter(bookSlug: string, chapterPathInput: string | string[]) {
@@ -3853,15 +3884,26 @@ export async function duplicateNote(slug: string) {
 
 export async function deleteBook(bookSlug: string) {
   ensureSafeSlugOrThrow(bookSlug);
-  const existing = await getBook(bookSlug);
-  if (!existing) {
-    throw new Error("Book not found");
-  }
-  const canonicalBookSlug = existing.meta.slug;
   const books = await listOrderedBookFiles();
-  const targetBook = books.find((book) => book.slug === canonicalBookSlug);
-  if (!targetBook) {
-    throw new Error("Book not found");
+  let existingId: string | undefined;
+  let canonicalBookSlug: string;
+  let targetBook: (typeof books)[number];
+  try {
+    const existing = await getBook(bookSlug);
+    existingId = existing.id;
+    canonicalBookSlug = existing.meta.slug;
+    const match = books.find((book) => book.slug === canonicalBookSlug);
+    if (!match) {
+      throw new Error("Book not found");
+    }
+    targetBook = match;
+  } catch {
+    const match = books.find((book) => book.slug === bookSlug);
+    if (!match) {
+      throw new Error("Book not found");
+    }
+    targetBook = match;
+    canonicalBookSlug = match.slug;
   }
 
   const bookRaw = await fs.readFile(targetBook.filePath, "utf8");
@@ -3895,7 +3937,9 @@ export async function deleteBook(bookSlug: string) {
         ),
       ),
   );
-  await removeBookAssignmentFromAllUsers(existing.id);
+  if (existingId) {
+    await removeBookAssignmentFromAllUsers(existingId);
+  }
 
   // Trash associated media uploads. ENOENT is fine (no uploads for this book).
   // Any other failure is logged but does not block the deletion.
@@ -3996,12 +4040,10 @@ export async function deleteChapter(bookSlug: string, chapterPathInput: string |
 
 export async function deleteNote(slug: string) {
   ensureSafeSlugOrThrow(slug);
-  const existing = await getNote(slug);
-  if (!existing) {
-    throw new Error("Note not found");
-  }
-  const canonicalSlug = existing.meta.slug;
   const notes = await listOrderedNoteFiles();
+  const existing = await getNote(slug);
+  const canonicalSlug = existing?.meta.slug ?? slug;
+  const existingId = existing?.id;
   const note = notes.find((entry) => entry.slug === canonicalSlug);
   if (!note) {
     throw new Error("Note not found");
@@ -4027,7 +4069,9 @@ export async function deleteNote(slug: string) {
         ),
       ),
   );
-  await removeNoteAssignmentFromAllUsers(existing.id);
+  if (existingId) {
+    await removeNoteAssignmentFromAllUsers(existingId);
+  }
 
   // Trash associated media uploads. ENOENT is fine (no uploads for this note).
   // Any other failure is logged but does not block the deletion.
