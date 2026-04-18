@@ -49,20 +49,17 @@ oops
     expect(toc).toEqual([{ depth: 1, value: "Real Heading", id: "real-heading" }]);
   });
 
-  it("extracts executable code cells and metadata", () => {
+  it("extracts code cells and metadata", () => {
     const cells = extractCodeCells(
-      "```python exec id=cell-1\nprint('hi')\n```\n\n```ts\nconsole.log('x')\n```",
+      "```python id=cell-1\nprint('hi')\n```\n\n```ts\nconsole.log('x')\n```",
     );
     expect(cells).toHaveLength(2);
     expect(cells[0]).toMatchObject({
       id: "cell-1",
       language: "python",
-      executable: true,
-      runtime: "python",
     });
     expect(cells[1]).toMatchObject({
       language: "ts",
-      executable: false,
     });
   });
 

@@ -181,7 +181,6 @@ describe("MarkdownRenderer source navigation", () => {
           markdown={`# One\n\nAlpha\n\n## Two`}
           manifest={[]}
           pageId="page-1"
-          requester="admin"
           sourceNavigation
           currentRoute="/notes/page-1"
         />,
@@ -280,7 +279,6 @@ describe("MarkdownRenderer source navigation", () => {
             markdown={`# One\n\nAlpha\n\n## Two`}
             manifest={[]}
             pageId="page-2"
-            requester="admin"
             sourceNavigation
             currentRoute="/notes/page-2"
             sourceNavigationViewportRef={viewportRef}
@@ -433,7 +431,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-1"
-          requester="admin"
         />,
       );
     });
@@ -458,7 +455,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-startup-retry"
-          requester="admin"
         />,
       );
     });
@@ -486,7 +482,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-2"
-          requester="admin"
           className="render-pass-a"
         />,
       );
@@ -501,7 +496,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-2"
-          requester="admin"
           className="render-pass-b"
         />,
       );
@@ -525,7 +519,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-3"
-          requester="admin"
         />,
       );
     });
@@ -554,7 +547,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-ready-event"
-          requester="admin"
         />,
       );
     });
@@ -583,7 +575,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-4"
-          requester="admin"
           className="render-pass-a"
         />,
       );
@@ -596,7 +587,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-4"
-          requester="admin"
           className="render-pass-b"
         />,
       );
@@ -605,7 +595,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-4"
-          requester="admin"
           className="render-pass-c"
         />,
       );

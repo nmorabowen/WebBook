@@ -6,7 +6,6 @@ WebBook is a markdown-first publishing app for books and standalone notes. It co
 - an authenticated web editor,
 - Obsidian-style `[[wiki links]]` and backlinks,
 - MathJax rendering,
-- live Python execution through a separate FastAPI runner,
 - filesystem-backed markdown storage with revision snapshots.
 
 ## Stack
@@ -15,8 +14,6 @@ WebBook is a markdown-first publishing app for books and standalone notes. It co
 - React 19
 - Tailwind CSS 4
 - Markdown rendering with `react-markdown`
-- Redis-backed rate limiting and execution caching with in-memory fallback
-- FastAPI Python runner for code execution
 
 ## Local development
 
@@ -57,21 +54,15 @@ Tag Manager container ID there. If both are present, WebBook prefers GTM.
 Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` in your environment to enable it. Leave the
 variable empty to keep analytics disabled.
 
-## Python execution
+## Docker
 
-The web app proxies Python execution requests to the service in [`services/python-runner`](/c:/Users/nmb/Desktop/WebBook/services/python-runner).
-
-To run the full stack with Docker:
+To run the app with Docker:
 
 ```bash
 docker compose up --build
 ```
 
-This starts:
-
-- the Next.js app on `:3000`
-- Redis on `:6379`
-- the Python runner on `:8001`
+This starts the Next.js app on `:3000`.
 
 ## Production deployment
 
@@ -153,4 +144,3 @@ npm run build
 - [`src/components`](/c:/Users/nmb/Desktop/WebBook/src/components): UI, editor, markdown rendering
 - [`src/lib/content`](/c:/Users/nmb/Desktop/WebBook/src/lib/content): filesystem content model, indexing, revisions
 - [`src/lib/markdown`](/c:/Users/nmb/Desktop/WebBook/src/lib/markdown): TOC, wiki-link, and code-cell parsing helpers
-- [`services/python-runner`](/c:/Users/nmb/Desktop/WebBook/services/python-runner): isolated Python execution service

@@ -10,7 +10,6 @@ import {
 } from "react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { ExecutableCodeBlock } from "@/components/markdown/executable-code-block";
 import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { CopyCodeButton } from "@/components/markdown/copy-code-button";
 import { MermaidDiagram } from "@/components/markdown/mermaid-diagram";
@@ -36,8 +35,6 @@ type PublicMarkdownRendererProps = {
   markdown: string;
   manifest: ManifestEntry[];
   pageId: string;
-  requester: "admin" | "public";
-  allowExecution?: boolean;
   className?: string;
   fontPreset?: FontPreset;
   typography?: Partial<BookTypography>;
@@ -69,9 +66,8 @@ type CalloutMeta = {
 
 function parseCodeMeta(meta?: string | null) {
   const value = meta ?? "";
-  const executable = /\bexec\b/.test(value);
   const id = value.match(/\bid=([A-Za-z0-9_-]+)/)?.[1];
-  return { executable, id };
+  return { id };
 }
 
 function collectNodeText(node: ReactNode): string {
@@ -386,8 +382,6 @@ export function PublicMarkdownRenderer({
   markdown,
   manifest,
   pageId,
-  requester,
-  allowExecution = false,
   className,
   fontPreset = "source-serif",
   typography,
@@ -556,7 +550,7 @@ export function PublicMarkdownRenderer({
               node && "meta" in node && typeof node.meta === "string"
                 ? node.meta
                 : undefined;
-            const { executable, id } = parseCodeMeta(meta);
+            const { id } = parseCodeMeta(meta);
             const value = String(children).replace(/\n$/, "");
             const isInlineMath = codeClassName?.includes("math-inline") ?? false;
             const isDisplayMath = codeClassName?.includes("math-display") ?? false;
@@ -590,19 +584,6 @@ export function PublicMarkdownRenderer({
                 <code className={codeClassName} {...props}>
                   {children}
                 </code>
-              );
-            }
-
-            if (executable && language === "python") {
-              return (
-                <ExecutableCodeBlock
-                  code={value}
-                  language={language}
-                  pageId={pageId}
-                  cellId={id ?? `${pageId}-${language}`}
-                  executionEnabled={allowExecution}
-                  requester={requester}
-                />
               );
             }
 

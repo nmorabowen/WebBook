@@ -276,7 +276,6 @@ export function useWorkspaceTreeActions(currentPath?: string) {
             summary: "A fresh standalone note.",
             body: "# New note\n\nStart writing here.",
             status: "draft",
-            allowExecution: true,
             typography: {
               bodyFontSize: 1,
               bodyLineHeight: 1,
@@ -322,7 +321,6 @@ export function useWorkspaceTreeActions(currentPath?: string) {
             summary: "A fresh chapter.",
             body: "# New chapter\n\nStart writing here.",
             status: "draft",
-            allowExecution: true,
             order: order ?? nextChapterOrder(tree, bookSlug, parentChapterPath),
           }),
         },

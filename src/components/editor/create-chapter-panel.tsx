@@ -46,7 +46,6 @@ export function CreateChapterPanel({
             summary: "A fresh chapter.",
             body: "# New chapter\n\nStart writing here.",
             status: "draft",
-            allowExecution: true,
             order,
           }),
         });

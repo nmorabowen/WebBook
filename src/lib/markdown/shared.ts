@@ -18,8 +18,6 @@ export type CodeCell = {
   id: string;
   language: string;
   source: string;
-  executable: boolean;
-  runtime?: "python";
 };
 
 export type ResolvedWikiTarget = {
@@ -255,15 +253,12 @@ export function extractCodeCells(markdown: string) {
   const codeCells: CodeCell[] = [];
   visit(tree, "code", (node) => {
     const meta = node.meta ?? "";
-    const executable = /\bexec\b/.test(meta);
     const idMatch = meta.match(/\bid=([A-Za-z0-9_-]+)/);
     const language = node.lang ?? "text";
     codeCells.push({
       id: idMatch?.[1] ?? `${language}-${codeCells.length + 1}`,
       language,
       source: node.value,
-      executable,
-      runtime: executable && language === "python" ? "python" : undefined,
     });
   });
   return codeCells;

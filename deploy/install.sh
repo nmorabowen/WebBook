@@ -8,7 +8,6 @@ WEBBOOK_ENV_FILE="${WEBBOOK_ENV_FILE:-$WEBBOOK_ROOT/.env.production}"
 WEBBOOK_CONTENT_HOST_PATH="${WEBBOOK_CONTENT_HOST_PATH:-$WEBBOOK_ROOT/content}"
 DEPLOY_USER="${SUDO_USER:-$(id -un)}"
 DEFAULT_WEB_IMAGE="${DEFAULT_WEB_IMAGE:-webbook-web:local}"
-DEFAULT_PYTHON_IMAGE="${DEFAULT_PYTHON_IMAGE:-webbook-python-runner:local}"
 
 require_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
@@ -124,15 +123,7 @@ ADMIN_USERNAME=$(quote_env_value "$admin_username")
 ADMIN_PASSWORD_HASH=$(quote_env_value "$admin_password_hash")
 SESSION_SECRET=$(quote_env_value "$session_secret")
 
-REDIS_URL=$(quote_env_value "redis://redis:6379")
-PYTHON_RUNNER_URL=$(quote_env_value "http://python-runner:8001/execute")
-PYTHON_TIMEOUT_SECONDS=$(quote_env_value "5")
-
-EXECUTION_PER_MINUTE_LIMIT=$(quote_env_value "5")
-EXECUTION_PER_HOUR_LIMIT=$(quote_env_value "20")
-
 WEB_IMAGE=$(quote_env_value "$DEFAULT_WEB_IMAGE")
-PYTHON_IMAGE=$(quote_env_value "$DEFAULT_PYTHON_IMAGE")
 
 BACKUP_LOCAL_DIR=$(quote_env_value "$WEBBOOK_ROOT/backups/local")
 BACKUP_RETENTION_DAYS=$(quote_env_value "14")
@@ -180,9 +171,9 @@ run_initial_deploy() {
     --project-name webbook \
     --env-file "$WEBBOOK_ENV_FILE" \
     -f "$WEBBOOK_REPO_DIR/docker-compose.production.yml" \
-    build web python-runner
+    build web
 
-  compose_cmd up -d redis python-runner web
+  compose_cmd up -d web
 }
 
 compose_cmd() {

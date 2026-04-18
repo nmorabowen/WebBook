@@ -35,7 +35,7 @@ The installer will:
 4. render `/opt/webbook/.env.production`
 5. install `webbookctl`
 6. configure Caddy
-7. build the `web` and `python-runner` images locally on the VPS
+7. build the `web` image locally on the VPS
 8. start the production Compose stack
 9. enable the daily backup timer
 
@@ -60,8 +60,8 @@ webbookctl update <ref>
 ```
 
 `webbookctl update` fetches the repo, checks out the requested ref, rebuilds the
-`web` and `python-runner` images locally on the VPS, restarts the stack, and then
-waits for health checks to pass.
+`web` image locally on the VPS, restarts the stack, and then waits for health
+checks to pass.
 
 ## How code reaches the VPS
 
@@ -106,7 +106,6 @@ Use these on the server:
 webbookctl status
 webbookctl update
 webbookctl logs web
-webbookctl logs python-runner
 webbookctl backup
 webbookctl restore <backup-id>
 webbookctl rollback
@@ -147,7 +146,6 @@ webbookctl rollback
 Production health checks use:
 
 - `GET /api/healthz` for the web app
-- `GET /healthz` for the Python runner
 
 ## Notes
 

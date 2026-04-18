@@ -66,7 +66,7 @@ apply_restore() {
   cp -a "$restored_state_path" "$WEBBOOK_ROOT/deploy/state"
   cp -a "$restored_env_path" "$WEBBOOK_ENV_FILE"
 
-  compose up -d redis python-runner web
+  compose up -d web
   wait_for_release_health
   echo "Restore completed."
 }

@@ -86,7 +86,6 @@ export default async function EditorPreviewPage({
                 manifest={filteredManifest}
                 pageId={loaded.content.id}
                 requester="admin"
-                allowExecution={loaded.content.meta.allowExecution}
                 fontPreset={loaded.content.meta.fontPreset ?? "source-serif"}
                 typography={loaded.content.meta.typography}
                 generalSettings={generalSettings}
@@ -187,7 +186,6 @@ export default async function EditorPreviewPage({
                 manifest={filteredManifest}
                 pageId={chapter.id}
                 requester="admin"
-                allowExecution={chapter.meta.allowExecution}
                 fontPreset={chapter.meta.fontPreset ?? book.meta.fontPreset ?? "source-serif"}
                 typography={book.meta.typography}
                 generalSettings={generalSettings}

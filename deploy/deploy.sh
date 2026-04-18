@@ -14,12 +14,12 @@ EOF
 }
 
 rebuild_release() {
-  if ! compose build web python-runner; then
+  if ! compose build web; then
     echo "docker compose build failed." >&2
     return 1
   fi
 
-  if ! compose up -d redis python-runner web; then
+  if ! compose up -d web; then
     echo "docker compose up failed." >&2
     return 1
   fi

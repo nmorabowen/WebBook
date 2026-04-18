@@ -96,7 +96,6 @@ type EditorShellProps = {
     status: "draft" | "published";
     featured?: boolean;
     coverColor?: string;
-    allowExecution?: boolean;
     fontPreset?: FontPreset;
     typography?: Partial<BookTypography>;
   };
@@ -171,7 +170,6 @@ type EditorSavePayload = {
   status: "draft" | "published";
   featured?: boolean;
   coverColor?: string;
-  allowExecution?: boolean;
   summary?: string;
   description?: string;
   fontPreset?: FontPreset;
@@ -207,7 +205,6 @@ function buildEditorSavePayload(input: {
   status: "draft" | "published";
   featured: boolean;
   coverColor: string;
-  allowExecution: boolean;
   summary: string;
   fontPreset: FontPreset;
   typography: BookTypography;
@@ -219,7 +216,6 @@ function buildEditorSavePayload(input: {
     status: input.status,
     featured: input.mode === "book" ? input.featured : undefined,
     coverColor: input.mode === "book" ? input.coverColor : undefined,
-    allowExecution: input.allowExecution,
     summary: input.mode === "note" || input.mode === "chapter" ? input.summary : undefined,
     description: input.mode === "book" ? input.summary : undefined,
     fontPreset: input.fontPreset,
@@ -567,7 +563,6 @@ export function EditorShell({
   const [status, setStatus] = useState<"draft" | "published">(initialValues.status);
   const [featured, setFeatured] = useState(initialValues.featured ?? false);
   const [coverColor, setCoverColor] = useState(initialValues.coverColor ?? "#292118");
-  const [allowExecution, setAllowExecution] = useState(initialValues.allowExecution ?? true);
   const [fontPreset, setFontPreset] = useState<FontPreset>(
     initialValues.fontPreset ?? "archivo-narrow",
   );
@@ -651,7 +646,6 @@ export function EditorShell({
         status: initialValues.status,
         featured: initialValues.featured ?? false,
         coverColor: initialValues.coverColor ?? "#292118",
-        allowExecution: initialValues.allowExecution ?? true,
         summary: initialValues.summary ?? initialValues.description ?? "",
         fontPreset: initialValues.fontPreset ?? "archivo-narrow",
         typography: normalizeBookTypography(
@@ -980,13 +974,11 @@ export function EditorShell({
         status,
         featured,
         coverColor,
-        allowExecution,
         summary,
         fontPreset,
         typography,
       }),
     [
-      allowExecution,
       body,
       fontPreset,
       mode,
@@ -2318,18 +2310,6 @@ export function EditorShell({
               ))}
             </select>
           </div>
-          {mode !== "book" ? (
-            <label className="flex items-center gap-3 rounded-[18px] border border-[var(--paper-border)] bg-[rgba(255,255,255,0.5)] px-4 py-3">
-              <input
-                type="checkbox"
-                checked={allowExecution}
-                onChange={(event) => setAllowExecution(event.target.checked)}
-              />
-              <span className="text-sm text-[var(--paper-muted)]">
-                Allow Python execution on the public page
-              </span>
-            </label>
-          ) : null}
         </div>
       </div>
 
@@ -3481,7 +3461,6 @@ export function EditorShell({
               markdown={deferredPreviewBody}
               manifest={manifest}
               pageId={currentPageId}
-              allowExecution={allowExecution}
               fontPreset={deferredPreviewFontPreset}
               typography={deferredPreviewTypography}
               generalSettings={generalSettings}

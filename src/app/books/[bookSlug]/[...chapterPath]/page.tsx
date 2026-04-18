@@ -105,7 +105,6 @@ export default async function ChapterPage({
           manifest={manifest}
           pageId={chapter.id}
           requester="public"
-          allowExecution={chapter.meta.allowExecution}
           fontPreset={chapter.meta.fontPreset ?? book.meta.fontPreset ?? "source-serif"}
           typography={book.meta.typography}
           generalSettings={generalSettings}

@@ -18,16 +18,6 @@ const envSchema = z.object({
   ADMIN_USERNAME: z.string().optional(),
   ADMIN_PASSWORD: z.string().optional(),
   ADMIN_PASSWORD_HASH: z.string().optional(),
-  PYTHON_RUNNER_URL: z.string().url().optional(),
-  REDIS_URL: z.string().optional(),
-  EXECUTION_PER_MINUTE_LIMIT: z
-    .string()
-    .regex(/^\d+$/, "EXECUTION_PER_MINUTE_LIMIT must be a positive integer")
-    .optional(),
-  EXECUTION_PER_HOUR_LIMIT: z
-    .string()
-    .regex(/^\d+$/, "EXECUTION_PER_HOUR_LIMIT must be a positive integer")
-    .optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -76,13 +66,6 @@ export const env = {
   adminUsername: process.env.ADMIN_USERNAME ?? "admin",
   adminPassword: process.env.ADMIN_PASSWORD ?? "webbook-admin",
   adminPasswordHash: process.env.ADMIN_PASSWORD_HASH ?? DEV_ADMIN_PASSWORD_HASH,
-  pythonRunnerUrl:
-    process.env.PYTHON_RUNNER_URL ?? "http://python-runner:8001/execute",
-  redisUrl: process.env.REDIS_URL ?? "",
-  executionWindowMinute:
-    Number(process.env.EXECUTION_PER_MINUTE_LIMIT ?? "5") || 5,
-  executionWindowHour:
-    Number(process.env.EXECUTION_PER_HOUR_LIMIT ?? "20") || 20,
 };
 
 export function resolveContentRoot() {

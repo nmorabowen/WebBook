@@ -14,6 +14,8 @@ import {
  * effects (e.g. layout-change observers) without re-implementing the
  * in-flight/cancel bookkeeping.
  */
+const MATHJAX_TYPESET_TIMEOUT_MS = 5000;
+
 export function useMathTypeset(containerRef: RefObject<HTMLElement | null>) {
   const inFlightRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
@@ -30,13 +32,20 @@ export function useMathTypeset(containerRef: RefObject<HTMLElement | null>) {
 
     let cancelled = false;
     inFlightRef.current = true;
+
+    const timeoutId = window.setTimeout(() => {
+      cancelled = true;
+    }, MATHJAX_TYPESET_TIMEOUT_MS);
+
     cancelRef.current = () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
     };
 
     void queueMathJaxTypeset(node, {
       shouldCancel: () => cancelled || containerRef.current !== node,
     }).finally(() => {
+      window.clearTimeout(timeoutId);
       if (containerRef.current === node) {
         inFlightRef.current = false;
         // Re-check after completion in case content changed while in-flight.
