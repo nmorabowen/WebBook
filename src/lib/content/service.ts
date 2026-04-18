@@ -61,6 +61,7 @@ import {
   restoreWorkspaceArchive,
   workspaceTransferLimitMbToBytes,
 } from "@/lib/workspace-transfer";
+import type { ContentRef } from "@/lib/content/content-ref";
 
 const contentRoot = path.join(process.cwd(), env.contentRoot);
 const booksRoot = path.join(contentRoot, "books");
@@ -1725,6 +1726,50 @@ async function resolveChapterRecord(bookSlug: string, chapterPathInput: string |
   }
 
   return null;
+}
+
+/**
+ * Unified resolver for any {@link ContentRef}. Phase-2 refactor pivot:
+ * routes, services, and the sidebar will migrate to this in place of the
+ * three kind-specific resolvers above. For Slice J this is an additive
+ * delegation — behavior is identical to calling the legacy resolvers
+ * directly, but the caller contract is now kind-agnostic.
+ */
+export type ResolvedContentRef =
+  | { kind: "book"; record: BookRecord; aliased: boolean }
+  | {
+      kind: "chapter";
+      book: BookRecord;
+      chapter: ChapterRecord;
+      aliased: boolean;
+    }
+  | { kind: "note"; record: NoteRecord; aliased: boolean };
+
+export async function resolveContentRef(
+  ref: ContentRef,
+): Promise<ResolvedContentRef | null> {
+  if (ref.kind === "book") {
+    const resolved = await resolveBookRecord(ref.bookSlug);
+    return resolved
+      ? { kind: "book", record: resolved.record, aliased: resolved.aliased }
+      : null;
+  }
+
+  if (ref.kind === "note") {
+    const resolved = await resolveNoteRecord(ref.slug);
+    return resolved
+      ? { kind: "note", record: resolved.record, aliased: resolved.aliased }
+      : null;
+  }
+
+  const resolved = await resolveChapterRecord(ref.bookSlug, ref.chapterPath);
+  if (!resolved) return null;
+  return {
+    kind: "chapter",
+    book: resolved.book,
+    chapter: resolved.chapter,
+    aliased: resolved.aliased,
+  };
 }
 
 export async function resolveWorkspaceBookRoute(bookSlug: string) {
