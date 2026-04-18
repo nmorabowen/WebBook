@@ -2672,6 +2672,37 @@ export async function getPublicContentTree(): Promise<PublicContentTree> {
   return tree;
 }
 
+/**
+ * Unified read entry point. Returns the canonical record for any
+ * {@link ContentRef}, or null if it does not exist. Phase-2 callers (API
+ * routes, sidebar, search) migrate to this in place of getBook/getChapter/
+ * getNote so a single ref shape carries through the stack.
+ */
+export async function getContent(ref: ContentRef): Promise<ContentRecord | null> {
+  const resolved = await resolveContentRef(ref);
+  if (!resolved) return null;
+  if (resolved.kind === "book") return resolved.record;
+  if (resolved.kind === "note") return resolved.record;
+  return resolved.chapter;
+}
+
+/**
+ * Unified delete entry point. Dispatches to the kind-specific deleters and
+ * preserves their behavior (admin checks, scope filtering, cleanup of user
+ * assignments) while exposing a single signature to the caller.
+ */
+export async function deleteContent(ref: ContentRef): Promise<void> {
+  if (ref.kind === "book") {
+    await deleteBook(ref.bookSlug);
+    return;
+  }
+  if (ref.kind === "note") {
+    await deleteNote(ref.slug);
+    return;
+  }
+  await deleteChapter(ref.bookSlug, ref.chapterPath);
+}
+
 export async function getBook(bookSlug: string) {
   const resolved = await resolveBookRecord(bookSlug);
   if (!resolved) {
