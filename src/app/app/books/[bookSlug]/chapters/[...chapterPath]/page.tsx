@@ -109,26 +109,26 @@ export default async function AppChapterPage({
         }}
         updateEndpoint={`/api/books/${bookSlug}/chapters/${chapterRoutePath}`}
         shortcutScopeKey={session.username}
-        extraActions={
-          <>
-            <PageMoveControls
-              mode="chapter"
-              bookSlug={book.meta.slug}
-              chapterPath={loaded.content.path}
-              chapterTitle={loaded.content.meta.title}
-              bookChapters={book.chapters}
-              workspaceTree={tree}
-              currentPath={`/app/books/${bookSlug}/chapters/${chapterRoutePath}`}
-              canManageTopLevel={session.role === "admin"}
-            />
-            <CreateChapterPanel
-              bookSlug={book.meta.slug}
-              rootNextOrder={nextRootChapterOrder}
-              currentChapterPath={loaded.content.path}
-              subchapterNextOrder={nextSubchapterOrder}
-            />
-          </>
-        }
+        extraActions={[
+          <PageMoveControls
+            key="move-controls"
+            mode="chapter"
+            bookSlug={book.meta.slug}
+            chapterPath={loaded.content.path}
+            chapterTitle={loaded.content.meta.title}
+            bookChapters={book.chapters}
+            workspaceTree={tree}
+            currentPath={`/app/books/${bookSlug}/chapters/${chapterRoutePath}`}
+            canManageTopLevel={session.role === "admin"}
+          />,
+          <CreateChapterPanel
+            key="create-chapter"
+            bookSlug={book.meta.slug}
+            rootNextOrder={nextRootChapterOrder}
+            currentChapterPath={loaded.content.path}
+            subchapterNextOrder={nextSubchapterOrder}
+          />,
+        ]}
       />
     </AppShell>
   );

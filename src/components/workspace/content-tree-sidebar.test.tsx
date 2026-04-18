@@ -160,7 +160,7 @@ describe("ContentTreeSidebar", () => {
     ).toBeNull();
   });
 
-  it("opens context menu and invokes delete action", async () => {
+  it("opens context menu via right-click and invokes delete action", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response("{}", { status: 200 }))
@@ -174,17 +174,15 @@ describe("ContentTreeSidebar", () => {
       root.render(<ContentTreeSidebar initialTree={tree} initialRevision="rev-1" />);
     });
 
-    // Find the menu toggle for the "Scratchpad" note.
-    const noteRow = Array.from(container.querySelectorAll("div")).find((el) =>
-      el.textContent?.includes("Scratchpad"),
+    const scratchpadLink = container.querySelector<HTMLAnchorElement>(
+      'a[href="/app/notes/scratchpad"]',
     );
-    const menuToggle = noteRow?.querySelector<HTMLButtonElement>(
-      'button[aria-label="Open actions"]',
-    );
-    expect(menuToggle).toBeTruthy();
+    expect(scratchpadLink).toBeTruthy();
+    const noteRow = scratchpadLink!.closest("div.group") as HTMLDivElement | null;
+    expect(noteRow).toBeTruthy();
 
     await act(async () => {
-      menuToggle!.click();
+      noteRow!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
     });
 
     const deleteBtn = Array.from(

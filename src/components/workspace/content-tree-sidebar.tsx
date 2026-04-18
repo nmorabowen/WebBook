@@ -13,9 +13,10 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { BookMarked, ChevronDown, ChevronRight, Ellipsis, FileText } from "lucide-react";
+import { BookMarked, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { useContentTreeModel } from "@/components/workspace/use-content-tree-model";
 import type {
   ChapterTreeNode,
@@ -107,6 +108,12 @@ export function ContentTreeSidebar({
       ? { initialTree, ...(initialRevision ? { initialRevision } : {}) }
       : undefined,
   );
+  // Skip SSR rendering: @dnd-kit allocates internal IDs from a shared counter
+  // that drifts between server and client, causing hydration mismatches on
+  // aria-describedby. Rendering only after mount sidesteps the problem and
+  // is acceptable for an authoring-only sidebar.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [expanded, setExpanded] = useState<ExpandState>(() => loadExpandState());
   const [activeDrag, setActiveDrag] = useState<NodeRef | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
@@ -116,6 +123,10 @@ export function ContentTreeSidebar({
   const doDrop = useTreeDrop(model);
   const treeActions = useTreeActions(model);
   const [menuFor, setMenuFor] = useState<NodeRef | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<{
+    overId: string;
+    position: DropPosition;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -165,19 +176,51 @@ export function ContentTreeSidebar({
   }, []);
 
   const computePosition = useCallback(
-    (overRect: { top: number; height: number }): DropPosition => {
+    (overRect: { top: number; height: number }, destKind: NodeRef["kind"]): DropPosition => {
       const y = pointerYRef.current;
       const ratio = (y - overRect.top) / Math.max(overRect.height, 1);
-      if (ratio < 0.25) return "before";
-      if (ratio > 0.75) return "after";
+      // Books and notes can't contain children at the tree level, so an
+      // "inside" gesture would reject or embed awkwardly — resolve purely to
+      // before/after based on midpoint.
+      if (destKind === "book" || destKind === "note") {
+        return ratio < 0.5 ? "before" : "after";
+      }
+      // Chapters and notes-root support "inside" (nest / add-to-end).
+      if (ratio < 0.35) return "before";
+      if (ratio > 0.65) return "after";
       return "inside";
     },
     [],
   );
 
+  const handleDragOver = useCallback(
+    (ev: DragOverEvent) => {
+      if (!ev.over) {
+        setHoverInfo(null);
+        return;
+      }
+      const dest = ev.over.data.current?.ref as NodeRef | undefined;
+      if (!dest) {
+        setHoverInfo(null);
+        return;
+      }
+      const position: DropPosition =
+        dest.kind === "notes-root"
+          ? "inside"
+          : computePosition({ top: ev.over.rect.top, height: ev.over.rect.height }, dest.kind);
+      const nextId = String(ev.over.id);
+      setHoverInfo((prev) => {
+        if (prev && prev.overId === nextId && prev.position === position) return prev;
+        return { overId: nextId, position };
+      });
+    },
+    [computePosition],
+  );
+
   const handleDragEnd = useCallback(
     async (ev: DragEndEvent) => {
       setActiveDrag(null);
+      setHoverInfo(null);
       const source = ev.active.data.current?.ref as NodeRef | undefined;
       const dest = ev.over?.data.current?.ref as NodeRef | undefined;
       if (!source || !dest || !ev.over) return;
@@ -186,7 +229,7 @@ export function ContentTreeSidebar({
       const position: DropPosition =
         dest.kind === "notes-root"
           ? "inside"
-          : computePosition({ top: overRect.top, height: overRect.height });
+          : computePosition({ top: overRect.top, height: overRect.height }, dest.kind);
 
       setDropping(true);
       const outcome = await doDrop(source, dest, position);
@@ -237,47 +280,51 @@ export function ContentTreeSidebar({
   const buildMenu = useCallback(
     (ref: NodeRef): React.ReactNode => {
       if (ref.kind === "chapter") {
-        return (
-          <>
-            <RowMenuButton
-              label="Demote to note"
-              onClick={() => void runAction(treeActions.demoteChapterToNote(ref))}
-            />
-            <RowMenuButton
-              label="Delete"
-              danger
-              onClick={() => {
-                if (typeof window === "undefined" || window.confirm("Delete this chapter?")) {
-                  void runAction(treeActions.remove(ref));
-                }
-              }}
-            />
-          </>
-        );
+        return [
+          <RowMenuButton
+            key="demote"
+            label="Demote to note"
+            onClick={() => void runAction(treeActions.demoteChapterToNote(ref))}
+          />,
+          <RowMenuButton
+            key="delete"
+            label="Delete"
+            danger
+            onClick={() => {
+              if (typeof window === "undefined" || window.confirm("Delete this chapter?")) {
+                void runAction(treeActions.remove(ref));
+              }
+            }}
+          />,
+        ];
       }
       if (ref.kind === "note") {
         const firstBook = model.tree?.books[0];
-        return (
-          <>
-            {firstBook ? (
-              <RowMenuButton
-                label={`Promote to chapter in "${firstBook.meta.title}"`}
-                onClick={() =>
-                  void runAction(treeActions.promoteNoteToBook(ref, firstBook.meta.slug))
-                }
-              />
-            ) : null}
+        const items: React.ReactNode[] = [];
+        if (firstBook) {
+          items.push(
             <RowMenuButton
-              label="Delete"
-              danger
-              onClick={() => {
-                if (typeof window === "undefined" || window.confirm("Delete this note?")) {
-                  void runAction(treeActions.remove(ref));
-                }
-              }}
-            />
-          </>
+              key="promote"
+              label={`Promote to chapter in "${firstBook.meta.title}"`}
+              onClick={() =>
+                void runAction(treeActions.promoteNoteToBook(ref, firstBook.meta.slug))
+              }
+            />,
+          );
+        }
+        items.push(
+          <RowMenuButton
+            key="delete"
+            label="Delete"
+            danger
+            onClick={() => {
+              if (typeof window === "undefined" || window.confirm("Delete this note?")) {
+                void runAction(treeActions.remove(ref));
+              }
+            }}
+          />,
         );
+        return items;
       }
       if (ref.kind === "book") {
         return (
@@ -302,12 +349,18 @@ export function ContentTreeSidebar({
 
   const menuIdFor = menuFor ? refId(menuFor) : null;
 
+  const hoverPositionFor = useCallback(
+    (rowId: string): DropPosition | null =>
+      hoverInfo && hoverInfo.overId === `drop:${rowId}` ? hoverInfo.position : null,
+    [hoverInfo],
+  );
+
   const dragPreview = useMemo(
     () => (activeDrag ? refLabel(activeDrag, model.tree) : null),
     [activeDrag, model.tree],
   );
 
-  if (model.loading && !model.tree) {
+  if (!mounted || (model.loading && !model.tree)) {
     return (
       <div
         className="text-sm text-[var(--paper-muted)]"
@@ -343,6 +396,7 @@ export function ContentTreeSidebar({
       sensors={sensors}
       collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       accessibility={{ announcements }}
     >
@@ -381,6 +435,7 @@ export function ContentTreeSidebar({
                 menuOpen={menuIdFor === rowId}
                 onMenuToggle={() => setMenuFor((prev) => (prev && refId(prev) === rowId ? null : ref))}
                 menuContent={buildMenu(ref)}
+                hoverPosition={hoverPositionFor(rowId)}
                 chevron={
                   <button
                     type="button"
@@ -408,6 +463,7 @@ export function ContentTreeSidebar({
                     menuIdFor={menuIdFor}
                     setMenuFor={setMenuFor}
                     buildMenu={buildMenu}
+                    hoverPositionFor={hoverPositionFor}
                   />
                 </div>
               ) : null}
@@ -421,6 +477,8 @@ export function ContentTreeSidebar({
           menuIdFor={menuIdFor}
           setMenuFor={setMenuFor}
           buildMenu={buildMenu}
+          hoverPositionFor={hoverPositionFor}
+          hoverInfo={hoverInfo}
         />
       </nav>
 
@@ -446,6 +504,7 @@ function TreeRow({
   menuOpen,
   onMenuToggle,
   menuContent,
+  hoverPosition,
 }: {
   id: string;
   ref_: NodeRef;
@@ -457,6 +516,7 @@ function TreeRow({
   menuOpen?: boolean;
   onMenuToggle?: () => void;
   menuContent?: React.ReactNode;
+  hoverPosition?: DropPosition | null;
 }) {
   const {
     attributes,
@@ -464,7 +524,7 @@ function TreeRow({
     setNodeRef: setDragRef,
     isDragging,
   } = useDraggable({ id: `drag:${id}`, data: { ref: ref_ } });
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
+  const { setNodeRef: setDropRef } = useDroppable({
     id: `drop:${id}`,
     data: { ref: ref_ },
   });
@@ -474,7 +534,8 @@ function TreeRow({
       ref={setDropRef}
       className={cn(
         "group relative flex items-center gap-1 rounded",
-        isOver && "bg-[rgba(73,57,38,0.08)] ring-1 ring-[rgba(73,57,38,0.25)]",
+        hoverPosition === "inside" &&
+          "bg-[rgba(73,57,38,0.08)] ring-1 ring-[rgba(73,57,38,0.3)]",
         isDragging && "opacity-40",
       )}
       onContextMenu={
@@ -486,6 +547,18 @@ function TreeRow({
           : undefined
       }
     >
+      {hoverPosition === "before" ? (
+        <span
+          className="pointer-events-none absolute inset-x-1 -top-px h-0.5 rounded-full bg-[var(--paper-accent,rgba(73,57,38,0.6))]"
+          aria-hidden
+        />
+      ) : null}
+      {hoverPosition === "after" ? (
+        <span
+          className="pointer-events-none absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--paper-accent,rgba(73,57,38,0.6))]"
+          aria-hidden
+        />
+      ) : null}
       {chevron ?? <span className="h-5 w-5 shrink-0" aria-hidden />}
       {icon}
       <div
@@ -500,32 +573,14 @@ function TreeRow({
             "block truncate rounded px-1 py-0.5 hover:bg-[rgba(73,57,38,0.06)]",
             active && "font-semibold",
           )}
-          onClick={(e) => {
-            if (isDragging) e.preventDefault();
-          }}
         >
           {title}
         </Link>
       </div>
-      {onMenuToggle ? (
-        <button
-          type="button"
-          aria-label="Open actions"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen ?? false}
-          onClick={(e) => {
-            e.stopPropagation();
-            onMenuToggle();
-          }}
-          className="invisible h-5 w-5 shrink-0 rounded hover:bg-[rgba(73,57,38,0.08)] focus:visible group-hover:visible group-focus-within:visible aria-expanded:visible"
-        >
-          <Ellipsis className="h-3 w-3" />
-        </button>
-      ) : null}
       {menuOpen && menuContent ? (
         <div
           role="menu"
-          className="absolute right-0 top-full z-20 mt-1 grid min-w-[160px] gap-1 rounded-[12px] border border-[var(--paper-border)] bg-[rgba(255,250,240,0.98)] p-1 text-xs shadow-[0_18px_45px_rgba(47,34,21,0.16)]"
+          className="absolute left-4 top-full z-20 mt-1 grid min-w-[180px] max-w-[240px] gap-1 rounded-[12px] border border-[var(--paper-border)] bg-[rgba(255,250,240,0.98)] p-1 text-xs shadow-[0_18px_45px_rgba(47,34,21,0.16)]"
         >
           {menuContent}
         </div>
@@ -570,6 +625,7 @@ function ChapterTreeRows({
   menuIdFor,
   setMenuFor,
   buildMenu,
+  hoverPositionFor,
 }: {
   bookSlug: string;
   chapters: ChapterTreeNode[];
@@ -579,6 +635,7 @@ function ChapterTreeRows({
   menuIdFor: string | null;
   setMenuFor: React.Dispatch<React.SetStateAction<NodeRef | null>>;
   buildMenu: (ref: NodeRef) => React.ReactNode;
+  hoverPositionFor: (rowId: string) => DropPosition | null;
 }) {
   return (
     <>
@@ -603,6 +660,7 @@ function ChapterTreeRows({
                 setMenuFor((prev) => (prev && refId(prev) === rowId ? null : ref))
               }
               menuContent={buildMenu(ref)}
+              hoverPosition={hoverPositionFor(rowId)}
               chevron={
                 hasChildren ? (
                   <button
@@ -632,6 +690,7 @@ function ChapterTreeRows({
                   menuIdFor={menuIdFor}
                   setMenuFor={setMenuFor}
                   buildMenu={buildMenu}
+                  hoverPositionFor={hoverPositionFor}
                 />
               </div>
             ) : null}
@@ -648,24 +707,29 @@ function NotesSection({
   menuIdFor,
   setMenuFor,
   buildMenu,
+  hoverPositionFor,
+  hoverInfo,
 }: {
   tree: ContentTree;
   currentPath?: string;
   menuIdFor: string | null;
   setMenuFor: React.Dispatch<React.SetStateAction<NodeRef | null>>;
   buildMenu: (ref: NodeRef) => React.ReactNode;
+  hoverPositionFor: (rowId: string) => DropPosition | null;
+  hoverInfo: { overId: string; position: DropPosition } | null;
 }) {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: "drop:notes-root",
     data: { ref: { kind: "notes-root" } satisfies NodeRef },
   });
+  const notesRootHovered = hoverInfo?.overId === "drop:notes-root";
 
   return (
     <div
       ref={setNodeRef}
       className={cn(
         "mt-3 grid gap-0.5 rounded p-1",
-        isOver && "bg-[rgba(73,57,38,0.08)] ring-1 ring-[rgba(73,57,38,0.25)]",
+        notesRootHovered && "bg-[rgba(73,57,38,0.08)] ring-1 ring-[rgba(73,57,38,0.3)]",
       )}
       data-testid="notes-drop-zone"
     >
@@ -689,6 +753,7 @@ function NotesSection({
               setMenuFor((prev) => (prev && refId(prev) === rowId ? null : ref))
             }
             menuContent={buildMenu(ref)}
+            hoverPosition={hoverPositionFor(rowId)}
           />
         );
       })}
