@@ -19,6 +19,7 @@ import remarkMath from "remark-math";
 import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { CopyCodeButton } from "@/components/markdown/copy-code-button";
 import { MermaidDiagram } from "@/components/markdown/mermaid-diagram";
+import { SeafileLinkCard } from "@/components/markdown/seafile-link-card";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import type { ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -40,6 +41,7 @@ import {
   normalizeYouTubeIframes,
   parseInlineTextStyleHref,
   parseImageSizingFromUrl,
+  parseSeafileShareUrl,
 } from "@/lib/utils";
 
 type MarkdownRendererProps = {
@@ -854,7 +856,7 @@ export function MarkdownRenderer({
               }
 
               if (
-                isValidElement<{ href?: string }>(child) &&
+                isValidElement<{ href?: string; children?: ReactNode }>(child) &&
                 typeof child.props.href === "string"
               ) {
                 const videoId = extractYouTubeVideoId(child.props.href);
@@ -869,6 +871,23 @@ export function MarkdownRenderer({
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         referrerPolicy="strict-origin-when-cross-origin"
                         allowFullScreen
+                      />
+                    </div>,
+                    "source-nav-media",
+                  );
+                }
+
+                const seafile = parseSeafileShareUrl(child.props.href);
+                if (seafile) {
+                  const label = normalizeNodeText(child.props.children);
+                  return wrapWithSourceNavigation(
+                    line,
+                    <div className="seafile-link-card-block" data-source-line={line}>
+                      <SeafileLinkCard
+                        info={seafile}
+                        label={label || undefined}
+                        target={linkTarget}
+                        rel={linkRel}
                       />
                     </div>,
                     "source-nav-media",

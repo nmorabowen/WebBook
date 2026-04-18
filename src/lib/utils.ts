@@ -90,6 +90,47 @@ export function extractYouTubeVideoId(url: string) {
   return null;
 }
 
+export type SeafileShareInfo = {
+  kind: "file" | "directory";
+  host: string;
+  name: string | null;
+  url: string;
+};
+
+export function parseSeafileShareUrl(url: string): SeafileShareInfo | null {
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+
+    const match = parsed.pathname.match(/^\/(f|d)\/([A-Za-z0-9_-]+)\/?/);
+    if (!match) {
+      return null;
+    }
+
+    const kind = match[1] === "f" ? "file" : "directory";
+    const subpath = parsed.searchParams.get("p");
+    let name: string | null = null;
+
+    if (subpath) {
+      const segments = subpath.split("/").filter(Boolean);
+      if (segments.length > 0) {
+        name = decodeURIComponent(segments[segments.length - 1]);
+      }
+    }
+
+    return {
+      kind,
+      host: parsed.host,
+      name,
+      url: parsed.toString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeYouTubeEmbedInput(input: string) {
   const videoId = extractYouTubeVideoId(input);
   if (!videoId) {
