@@ -19,8 +19,8 @@ function note(slug: string): NoteMeta {
 const tree: ContentTree = {
   books: [{ meta: book("alpha"), route: "/b/alpha", chapters: [] }],
   notes: [
-    { meta: note("n1"), route: "/n/n1" },
-    { meta: note("n2"), route: "/n/n2" },
+    { meta: note("n1"), route: "/n/n1", location: { kind: "root" } },
+    { meta: note("n2"), route: "/n/n2", location: { kind: "root" } },
   ],
 };
 

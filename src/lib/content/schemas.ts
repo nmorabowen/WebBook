@@ -158,6 +158,19 @@ export type ChapterRecord = {
   children: ChapterRecord[];
 };
 
+/**
+ * Where a note lives on disk. Phase-2 expansion: notes can sit at the
+ * legacy `content/notes/` root (kind="root"), inside a book's
+ * `<book>/notes/` directory (kind="book"), or inside a chapter's
+ * `<chapter-stem>/notes/` directory (kind="chapter"). The "root" variant
+ * preserves the pre-Phase-2 URL `/notes/<slug>`; scoped variants get
+ * path-aware routes added by Slice O.
+ */
+export type NoteLocation =
+  | { kind: "root" }
+  | { kind: "book"; bookSlug: string }
+  | { kind: "chapter"; bookSlug: string; chapterPath: string[] };
+
 export type NoteRecord = {
   id: string;
   kind: "note";
@@ -166,6 +179,8 @@ export type NoteRecord = {
   body: string;
   raw: string;
   route: string;
+  /** Where the note lives. Defaults to root for legacy callers / fixtures. */
+  location: NoteLocation;
 };
 
 export type ContentRecord = BookRecord | ChapterRecord | NoteRecord;
@@ -179,6 +194,7 @@ export type ContentTree = {
   notes: Array<{
     meta: NoteMeta;
     route: string;
+    location: NoteLocation;
   }>;
 };
 

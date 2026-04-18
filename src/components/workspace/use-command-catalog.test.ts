@@ -85,6 +85,7 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
           allowExecution: true,
         },
         route: "/notes/note-a",
+        location: { kind: "root" },
       },
       {
         meta: {
@@ -99,6 +100,7 @@ function createTree(): Pick<ContentTree, "books" | "notes"> {
           allowExecution: true,
         },
         route: "/notes/note-b",
+        location: { kind: "root" },
       },
     ],
   };

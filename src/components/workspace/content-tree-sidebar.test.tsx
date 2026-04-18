@@ -67,7 +67,11 @@ const tree: ContentTree = {
     },
   ],
   notes: [
-    { meta: noteMeta("scratchpad", "Scratchpad"), route: "/notes/scratchpad" },
+    {
+      meta: noteMeta("scratchpad", "Scratchpad"),
+      route: "/notes/scratchpad",
+      location: { kind: "root" } as const,
+    },
   ],
 };
 

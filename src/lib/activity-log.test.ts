@@ -77,6 +77,7 @@ describe("activity log", () => {
         status: "draft",
         allowExecution: true,
       },
+      location: { kind: "root" },
     });
 
     await activityLog.appendContentEditActivity({

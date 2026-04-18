@@ -94,6 +94,7 @@ function createTree(): ContentTree {
           allowExecution: true,
         },
         route: "/notes/note-a",
+        location: { kind: "root" },
       },
       {
         meta: {
@@ -108,6 +109,7 @@ function createTree(): ContentTree {
           allowExecution: true,
         },
         route: "/notes/note-b",
+        location: { kind: "root" },
       },
     ],
   };

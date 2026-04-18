@@ -18,7 +18,7 @@ function note(slug: string): NoteMeta {
 
 const tree: ContentTree = {
   books: [{ meta: book("alpha"), route: "/b/alpha", chapters: [] }],
-  notes: [{ meta: note("n1"), route: "/n/n1" }],
+  notes: [{ meta: note("n1"), route: "/n/n1", location: { kind: "root" } }],
 };
 
 type Harness = { actions: ReturnType<typeof useTreeActions> };

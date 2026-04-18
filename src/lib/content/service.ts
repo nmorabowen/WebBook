@@ -17,6 +17,7 @@ import {
   type ManifestEntry,
   type MediaAsset,
   type MediaReference,
+  type NoteLocation,
   type NoteMeta,
   type NoteRecord,
   type RouteAlias,
@@ -1192,7 +1193,10 @@ async function parseChapterFile(
   }
 }
 
-async function parseNoteFile(filePath: string): Promise<NoteRecord> {
+async function parseNoteFile(
+  filePath: string,
+  location: NoteLocation = { kind: "root" },
+): Promise<NoteRecord> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = matter(raw);
@@ -1215,11 +1219,89 @@ async function parseNoteFile(filePath: string): Promise<NoteRecord> {
       meta,
       body: parsed.content.trim(),
       raw: backfilledRaw ?? raw,
-      route: `/notes/${meta.slug}`,
+      route: noteRouteFor(location, meta.slug),
+      location,
     };
   } catch (error) {
     throw wrapContentFileError(filePath, error);
   }
+}
+
+/**
+ * Public URL for a note based on where it lives. Scoped routes mirror the
+ * chapter URL convention (slug-joined paths, no `/chapters/` separator
+ * between segments).
+ */
+function noteRouteFor(location: NoteLocation, slug: string): string {
+  switch (location.kind) {
+    case "root":
+      return `/notes/${slug}`;
+    case "book":
+      return `/books/${location.bookSlug}/notes/${slug}`;
+    case "chapter":
+      return `/books/${location.bookSlug}/chapters/${location.chapterPath.join("/")}/notes/${slug}`;
+  }
+}
+
+/**
+ * Walks every `<book>/notes/` and `<chapter-folder>/notes/` directory and
+ * returns the notes it finds, each stamped with a `NoteLocation` that
+ * captures where on disk it lives. Root notes are NOT included — those are
+ * still produced by {@link listNoteRecords}.
+ *
+ * Phase-2 building block: callers (Slice L+) will merge these with root
+ * notes when populating the unified content tree.
+ */
+async function listScopedNoteRecords(books: BookRecord[]): Promise<NoteRecord[]> {
+  const out: NoteRecord[] = [];
+
+  for (const book of books) {
+    const bookDir = bookDirectory(book.meta.slug);
+
+    // Book-level notes: <book>/notes/*.md
+    out.push(
+      ...(await readNotesAt(path.join(bookDir, "notes"), {
+        kind: "book",
+        bookSlug: book.meta.slug,
+      })),
+    );
+
+    // Chapter-level notes: walk every chapter's companion folder.
+    for (const chapter of flattenChapters(book.chapters)) {
+      const chapterFolder = path.join(
+        path.dirname(chapter.filePath),
+        path.basename(chapter.filePath, ".md"),
+      );
+      out.push(
+        ...(await readNotesAt(path.join(chapterFolder, "notes"), {
+          kind: "chapter",
+          bookSlug: book.meta.slug,
+          chapterPath: chapter.path,
+        })),
+      );
+    }
+  }
+
+  return out;
+}
+
+async function readNotesAt(
+  directory: string,
+  location: NoteLocation,
+): Promise<NoteRecord[]> {
+  const entries = await readDirectoryEntries(directory);
+  const notes = await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map(async (entry) => {
+        try {
+          return await parseNoteFile(path.join(directory, entry.name), location);
+        } catch {
+          return null;
+        }
+      }),
+  );
+  return notes.filter((note): note is NoteRecord => note !== null);
 }
 
 async function listBookRecords(): Promise<BookRecord[]> {
@@ -2522,13 +2604,21 @@ export async function importWorkspaceArchive(archiveBuffer: Buffer) {
 
 export async function listContent() {
   await ensureContentScaffold();
-  const [books, notes] = await Promise.all([listBookRecords(), listNoteRecords()]);
-  return { books, notes };
+  const books = await listBookRecords();
+  const [rootNotes, scopedNotes] = await Promise.all([
+    listNoteRecords(),
+    listScopedNoteRecords(books),
+  ]);
+  return { books, notes: [...rootNotes, ...scopedNotes] };
 }
 
 export async function rebuildIndexes() {
-  const [books, notes] = await Promise.all([listBookRecords(), listNoteRecords()]);
-  await writeIndexes({ books, notes });
+  const books = await listBookRecords();
+  const [rootNotes, scopedNotes] = await Promise.all([
+    listNoteRecords(),
+    listScopedNoteRecords(books),
+  ]);
+  await writeIndexes({ books, notes: [...rootNotes, ...scopedNotes] });
   await writeRevision();
   safeRevalidateTag(INDEXES_TAG);
   safeRevalidateTag(PUBLIC_INDEXES_TAG);
@@ -2566,6 +2656,7 @@ function toContentTree(
       .map((note) => ({
         meta: note.meta,
         route: note.route,
+        location: note.location,
       })),
   };
 }
