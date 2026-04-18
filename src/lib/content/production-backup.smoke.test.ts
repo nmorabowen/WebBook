@@ -15,7 +15,26 @@ import JSZip from "jszip";
 
 const repoRoot = process.cwd();
 const backupDir = path.join(repoRoot, "backup");
-const tempRoot = ".tmp-prod-backup-test";
+
+let tempRootCounter = 0;
+function nextTempRoot(): string {
+  tempRootCounter += 1;
+  return `.tmp-prod-backup-${process.pid}-${Date.now()}-${tempRootCounter}`;
+}
+
+async function safeRm(target: string) {
+  // Windows occasionally returns EBUSY/ENOTEMPTY when a recently-loaded
+  // module still holds a file handle. Retry once after a short delay.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await fs.rm(target, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      if (attempt === 2) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+}
 
 function findBackupZip(): string | null {
   if (!existsSync(backupDir)) return null;
@@ -47,14 +66,18 @@ const zipPath = findBackupZip();
 const skip = !zipPath;
 
 describe.skipIf(skip)("Slice J resolver against production backup", () => {
+  let tempRoot = "";
+  let targetRoot = "";
+
   afterEach(async () => {
     delete process.env.CONTENT_ROOT;
-    await fs.rm(path.join(repoRoot, tempRoot), { recursive: true, force: true });
+    if (targetRoot) await safeRm(targetRoot);
   });
 
-  it("resolves every book and note advertised by the workspace tree", async () => {
+  it("resolves every book and note advertised by the workspace tree", { timeout: 30000 }, async () => {
     expect(zipPath).not.toBeNull();
-    const targetRoot = path.join(repoRoot, tempRoot);
+    tempRoot = nextTempRoot();
+    targetRoot = path.join(repoRoot, tempRoot);
     await extractBackupTo(targetRoot, zipPath!);
 
     process.env.CONTENT_ROOT = tempRoot;
@@ -99,4 +122,63 @@ describe.skipIf(skip)("Slice J resolver against production backup", () => {
       expect(resolved!.kind).toBe("chapter");
     }
   });
+
+  it("repairOrphans cleans interrupted-move staging dirs left in production", { timeout: 60000 }, async () => {
+    expect(zipPath).not.toBeNull();
+    tempRoot = nextTempRoot();
+    targetRoot = path.join(repoRoot, tempRoot);
+    await extractBackupTo(targetRoot, zipPath!);
+
+    process.env.CONTENT_ROOT = tempRoot;
+    vi.resetModules();
+    const service = await import("./service");
+
+    // Pre-flight: count any `.chapters-*` siblings under any book directory.
+    const orphansBefore = await countChaptersOrphans(
+      path.join(targetRoot, "books"),
+    );
+
+    const report = await service.repairOrphans();
+    expect(report.scannedDirs).toBeGreaterThan(0);
+    // Combined removed/restored count should match what we saw on disk.
+    const cleaned =
+      report.deletedStaging.length +
+      report.deletedBackups.length +
+      report.restoredBackups.length;
+    expect(cleaned).toBe(orphansBefore);
+
+    const orphansAfter = await countChaptersOrphans(
+      path.join(targetRoot, "books"),
+    );
+    expect(orphansAfter).toBe(0);
+
+    // Tree must still load after the cleanup — verifies we did not lose the
+    // canonical chapters/ directories.
+    const tree = await service.getContentTree();
+    expect(tree.books.length).toBeGreaterThan(0);
+  });
 });
+
+async function countChaptersOrphans(root: string): Promise<number> {
+  let count = 0;
+  const walk = async (dir: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.name.startsWith(".chapters-")) {
+        count += 1;
+        continue;
+      }
+      if (entry.name.startsWith(".")) continue;
+      await walk(full);
+    }
+  };
+  await walk(root);
+  return count;
+}
