@@ -1977,18 +1977,17 @@ button {
 }
 
 .mermaid-frame {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: block;
   width: 100%;
   margin: var(--book-block-spacing, 1rem) 0;
   padding: 0.75rem 0;
-  overflow-x: auto;
-  color: var(--paper-ink);
+  color: #1f1d1a;
 }
 
 .mermaid-frame svg {
-  max-width: 100%;
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
   height: auto;
 }
 

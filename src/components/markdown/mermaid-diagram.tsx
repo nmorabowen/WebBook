@@ -1,23 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { GENERAL_SETTINGS_EVENT } from "@/lib/general-settings";
 
 type MermaidDiagramProps = {
   code: string;
   id?: string;
   sourceLine?: number;
-};
-
-type PaletteSnapshot = {
-  cream: string;
-  ink: string;
-  muted: string;
-  border: string;
-  accent: string;
-  accentSoft: string;
-  panel: string;
-  panelStrong: string;
 };
 
 type MermaidModule = typeof import("mermaid").default;
@@ -31,21 +19,15 @@ function loadMermaid(): Promise<MermaidModule> {
   return mermaidModulePromise;
 }
 
-function readPalette(element: HTMLElement): PaletteSnapshot {
-  const styles = getComputedStyle(element);
-  const read = (name: string, fallback: string) =>
-    styles.getPropertyValue(name).trim() || fallback;
-  return {
-    cream: read("--paper-cream", "#ffffff"),
-    ink: read("--paper-ink", "#1a1a1a"),
-    muted: read("--paper-muted", "#666666"),
-    border: read("--paper-border", "#d4d4d4"),
-    accent: read("--paper-accent", "#2563eb"),
-    accentSoft: read("--paper-accent-soft", "#dbeafe"),
-    panel: read("--paper-panel", "#f5f5f5"),
-    panelStrong: read("--paper-panel-strong", "#e5e5e5"),
-  };
-}
+const LIGHT_PALETTE = {
+  cream: "#fdfbf5",
+  ink: "#1f1d1a",
+  muted: "#6b645a",
+  border: "#d6cfc1",
+  accentSoft: "#e8efff",
+  panel: "#f4efe4",
+  panelStrong: "#e8e1d0",
+} as const;
 
 function stableHash(value: string): string {
   let hash = 5381;
@@ -60,17 +42,6 @@ export function MermaidDiagram({ code, id, sourceLine }: MermaidDiagramProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paletteVersion, setPaletteVersion] = useState(0);
-
-  useEffect(() => {
-    const handler = () => setPaletteVersion((v) => v + 1);
-    window.addEventListener(GENERAL_SETTINGS_EVENT, handler);
-    window.addEventListener("storage", handler);
-    return () => {
-      window.removeEventListener(GENERAL_SETTINGS_EVENT, handler);
-      window.removeEventListener("storage", handler);
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,8 +51,7 @@ export function MermaidDiagram({ code, id, sourceLine }: MermaidDiagramProps) {
     (async () => {
       try {
         const mermaid = await loadMermaid();
-        const host = hostRef.current ?? document.documentElement;
-        const palette = readPalette(host);
+        const palette = LIGHT_PALETTE;
 
         mermaid.initialize({
           startOnLoad: false,
@@ -130,7 +100,7 @@ export function MermaidDiagram({ code, id, sourceLine }: MermaidDiagramProps) {
     return () => {
       cancelled = true;
     };
-  }, [code, id, reactId, paletteVersion]);
+  }, [code, id, reactId]);
 
   if (error) {
     return (
