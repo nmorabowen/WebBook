@@ -4,31 +4,31 @@ import { requireSession } from "@/lib/auth";
 import {
   getBook,
   isMissingWorkspaceContentError,
-  reorderBookChapters,
+  moveChapterToNote,
 } from "@/lib/content/service";
 import { checkContentRevision } from "@/lib/content/revision-check";
 import { buildWorkspaceAccessScope, canAccessBook } from "@/lib/workspace-access";
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ bookSlug: string }> },
-) {
+export async function POST(request: Request) {
   const session = await requireSession();
+  if (session.role !== "admin") {
+    return apiError(403, "Forbidden");
+  }
   try {
-    const { bookSlug } = await params;
-    const book = await getBook(bookSlug);
-    const scope = await buildWorkspaceAccessScope(session);
-    if (!canAccessBook(scope, book)) {
-      return apiError(404, "Not found");
-    }
     const payload = await request.json();
     const staleResponse = await checkContentRevision(payload);
     if (staleResponse) return staleResponse;
-    return NextResponse.json(await reorderBookChapters(bookSlug, payload));
+
+    const sourceBook = await getBook(String(payload?.bookSlug ?? ""));
+    const scope = await buildWorkspaceAccessScope(session);
+    if (!canAccessBook(scope, sourceBook)) {
+      return apiError(404, "Not found");
+    }
+    return NextResponse.json(await moveChapterToNote(payload));
   } catch (error) {
     if (isMissingWorkspaceContentError(error)) {
       return apiError(404, "Not found");
     }
-    return apiError(400, error, "Chapter reorder failed");
+    return apiError(400, error, "Unable to demote this chapter to a note.");
   }
 }

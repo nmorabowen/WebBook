@@ -81,6 +81,116 @@ describe("content service", () => {
     expect(searchResults[0]?.publicRoute).toBe("/books/webbook-handbook/computational-chapter");
   });
 
+  it("repairs orphan backup directories left by a crashed move", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Crash Book",
+      slug: "crash-book",
+      description: "simulate crash",
+      body: "# Crash",
+      status: "draft",
+      theme: "paper",
+    });
+    await service.createChapter("crash-book", {
+      title: "Chapter One",
+      slug: "chapter-one",
+      summary: "stays",
+      body: "# One",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+
+    const bookRoot = path.join(process.cwd(), tempRoot, "books", "crash-book");
+    const chaptersPath = path.join(bookRoot, "chapters");
+    const backupPath = path.join(bookRoot, `.chapters-backup-${Date.now()}`);
+
+    // Simulate a crash between the two renames: chapters/ is gone, backup is waiting.
+    await fs.rename(chaptersPath, backupPath);
+    // Also leave an abandoned staging dir, as a real crash would.
+    const stagingPath = path.join(bookRoot, `.chapters-reorder-${Date.now() + 1}`);
+    await fs.mkdir(stagingPath, { recursive: true });
+    await fs.writeFile(path.join(stagingPath, "001-chapter-one.md"), "partial", "utf8");
+
+    await expect(fs.access(chaptersPath)).rejects.toThrow();
+
+    const report = await service.repairOrphans();
+
+    expect(report.restoredBackups).toContain(backupPath);
+    expect(report.deletedStaging).toContain(stagingPath);
+    await expect(fs.access(chaptersPath)).resolves.toBeUndefined();
+    await expect(fs.access(backupPath)).rejects.toThrow();
+    await expect(fs.access(stagingPath)).rejects.toThrow();
+
+    // Content is recoverable through the service after repair.
+    const book = await service.getBook("crash-book");
+    expect(book.chapters.find((entry) => entry.meta.slug === "chapter-one")).toBeTruthy();
+  });
+
+  it("deletes stale backup and staging siblings when chapters/ already exists", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Leftover Book",
+      slug: "leftover-book",
+      description: "stale leftovers",
+      body: "# Leftover",
+      status: "draft",
+      theme: "paper",
+    });
+
+    const bookRoot = path.join(process.cwd(), tempRoot, "books", "leftover-book");
+    const staleBackup = path.join(bookRoot, `.chapters-backup-${Date.now()}`);
+    const staleStaging = path.join(bookRoot, `.chapters-write-${Date.now() + 1}`);
+    await fs.mkdir(staleBackup, { recursive: true });
+    await fs.mkdir(staleStaging, { recursive: true });
+
+    const report = await service.repairOrphans();
+
+    expect(report.deletedBackups).toContain(staleBackup);
+    expect(report.deletedStaging).toContain(staleStaging);
+    await expect(fs.access(staleBackup)).rejects.toThrow();
+    await expect(fs.access(staleStaging)).rejects.toThrow();
+    // chapters/ still present.
+    await expect(fs.access(path.join(bookRoot, "chapters"))).resolves.toBeUndefined();
+  });
+
+  it("publishes a content revision that changes on every mutation", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    const initialRevision = await service.getContentRevision();
+    expect(initialRevision).toBeTruthy();
+    expect(initialRevision).not.toBe("0");
+
+    await service.createNote({
+      title: "Revision Note",
+      slug: "revision-note",
+      summary: "",
+      body: "# Revision Note",
+      status: "draft",
+      allowExecution: false,
+    });
+
+    const afterCreate = await service.getContentRevision();
+    expect(afterCreate).not.toBe(initialRevision);
+
+    await service.updateNote("revision-note", {
+      title: "Revision Note",
+      slug: "revision-note",
+      summary: "",
+      body: "# Revision Note — updated",
+      status: "draft",
+      allowExecution: false,
+    });
+
+    const afterUpdate = await service.getContentRevision();
+    expect(afterUpdate).not.toBe(afterCreate);
+  });
+
   it("exports a persisted user store with the workspace archive", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
@@ -2381,6 +2491,135 @@ describe("content service", () => {
 
     const referrer = await service.getNote("book-referrer");
     expect(referrer?.body).toContain("[[renamed-book/intro]]");
+  });
+
+  it("demotes a chapter into a note, preserving id and redirecting the old chapter route", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Source Book",
+      slug: "source-book",
+      description: "Source",
+      body: "# Source",
+      status: "draft",
+      theme: "paper",
+    });
+    await service.createChapter("source-book", {
+      title: "Demote Me",
+      slug: "demote-me",
+      summary: "to note",
+      body: "# Demote Me\n\n/media/books/source-book/chapters/demote-me/figure.png",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createNote({
+      title: "Referrer",
+      slug: "referrer",
+      summary: "Links to chapter",
+      body: "[[source-book/demote-me]]",
+      status: "draft",
+      allowExecution: true,
+    });
+
+    const chapterMediaPath = path.join(
+      process.cwd(),
+      tempRoot,
+      ".webbook",
+      "uploads",
+      "books",
+      "source-book",
+      "chapters",
+      "demote-me",
+      "figure.png",
+    );
+    await fs.mkdir(path.dirname(chapterMediaPath), { recursive: true });
+    await fs.writeFile(chapterMediaPath, "image", "utf8");
+
+    const book = await service.getBook("source-book");
+    const originalChapter = book.chapters.find(
+      (entry) => entry.meta.slug === "demote-me",
+    );
+    expect(originalChapter).toBeTruthy();
+    const originalId = originalChapter!.meta.id;
+
+    const demoted = await service.moveChapterToNote({
+      bookSlug: "source-book",
+      chapterPath: ["demote-me"],
+    });
+
+    expect(demoted?.id).toBe(originalId);
+    expect(demoted?.meta.slug).toBe("demote-me");
+    expect(demoted?.meta.kind).toBe("note");
+    expect(demoted?.meta.routeAliases).toContainEqual({
+      kind: "chapter",
+      location: "source-book/demote-me",
+    });
+
+    const updatedBook = await service.getBook("source-book");
+    expect(
+      updatedBook.chapters.find((entry) => entry.meta.slug === "demote-me"),
+    ).toBeUndefined();
+
+    const referrer = await service.getNote("referrer");
+    expect(referrer?.body).toContain("[[demote-me]]");
+    expect(referrer?.body).not.toContain("source-book/demote-me");
+
+    await expect(fs.access(chapterMediaPath)).rejects.toThrow();
+    await expect(
+      fs.access(
+        path.join(
+          process.cwd(),
+          tempRoot,
+          ".webbook",
+          "uploads",
+          "notes",
+          "demote-me",
+          "figure.png",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses to demote a chapter that has child chapters", async () => {
+    const service = await loadService();
+    await service.ensureContentScaffold();
+
+    await service.createBook({
+      title: "Nested Book",
+      slug: "nested-book",
+      description: "Has nested",
+      body: "# Nested",
+      status: "draft",
+      theme: "paper",
+    });
+    await service.createChapter("nested-book", {
+      title: "Parent Chapter",
+      slug: "parent-chapter",
+      summary: "has child",
+      body: "# Parent",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+    });
+    await service.createChapter("nested-book", {
+      title: "Child Chapter",
+      slug: "child-chapter",
+      summary: "child",
+      body: "# Child",
+      status: "draft",
+      allowExecution: true,
+      order: 1,
+      parentChapterPath: ["parent-chapter"],
+    });
+
+    await expect(
+      service.moveChapterToNote({
+        bookSlug: "nested-book",
+        chapterPath: ["parent-chapter"],
+      }),
+    ).rejects.toThrow(/child chapters/i);
   });
 
   it("moves notes into books as chapters while preserving ids and redirecting old note routes", async () => {

@@ -7,6 +7,7 @@ import {
   isMissingWorkspaceContentError,
   moveNoteToBook,
 } from "@/lib/content/service";
+import { checkContentRevision } from "@/lib/content/revision-check";
 import {
   buildWorkspaceAccessScope,
   canAccessBook,
@@ -32,6 +33,8 @@ export async function POST(
       return apiError(403, "Forbidden");
     }
     const payload = await request.json();
+    const staleResponse = await checkContentRevision(payload);
+    if (staleResponse) return staleResponse;
     const destinationBook = await getBook(String(payload?.destinationBookSlug ?? ""));
     if (!canAccessBook(scope, destinationBook)) {
       return apiError(404, "Not found");

@@ -23,6 +23,7 @@ import {
   type ContentSearchResult,
   noteMetaSchema,
   moveChapterSchema,
+  moveChapterToNoteSchema,
   moveNoteToBookSchema,
   reorderBooksSchema,
   reorderChaptersSchema,
@@ -76,6 +77,7 @@ const INDEXES_TAG = "webbook-indexes";
 const PUBLIC_INDEXES_TAG = "webbook-public-indexes";
 const SETTINGS_TAG = "webbook-settings";
 const SEARCH_TAG = "webbook-search-index";
+const REVISION_FILENAME = "revision.json";
 let ensureContentScaffoldPromise: Promise<void> | null = null;
 
 type IndexState = {
@@ -195,6 +197,7 @@ async function indexesExist() {
     "public-tree.json",
     "public-manifest.json",
     "public-backlinks.json",
+    REVISION_FILENAME,
   ];
 
   const results = await Promise.all(
@@ -239,6 +242,30 @@ async function readPublicIndexesFromDisk(): Promise<PublicIndexState> {
   };
 }
 
+type RevisionFile = { revision: string; updatedAt: string };
+
+async function readRevisionFromDisk(): Promise<string> {
+  try {
+    const raw = await fs.readFile(indexFile(REVISION_FILENAME), "utf8");
+    const parsed = safeJsonParse<Partial<RevisionFile>>(raw, {});
+    if (typeof parsed.revision === "string" && parsed.revision.length > 0) {
+      return parsed.revision;
+    }
+  } catch {}
+  return "0";
+}
+
+async function writeRevision(): Promise<string> {
+  const revision = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  const payload: RevisionFile = {
+    revision,
+    updatedAt: new Date().toISOString(),
+  };
+  await ensureDirectory(indexesRoot);
+  await writeFileAtomic(indexFile(REVISION_FILENAME), JSON.stringify(payload, null, 2));
+  return revision;
+}
+
 async function readGeneralSettingsFromDisk(): Promise<GeneralSettings> {
   try {
     const raw = await fs.readFile(settingsFilePath, "utf8");
@@ -280,6 +307,11 @@ const loadSearchIndexCached = unstable_cache(
     tags: [SEARCH_TAG],
   },
 );
+
+export async function getContentRevision(): Promise<string> {
+  await ensureContentScaffold();
+  return readRevisionFromDisk();
+}
 
 function safeRevalidateTag(tag: string) {
   try {
@@ -1367,29 +1399,169 @@ async function writeChapterFileTreeToDirectory(
   }
 }
 
-async function replaceBookChaptersDirectoryFromFileTree(
-  bookSlug: string,
-  chapters: ChapterFileNode[],
-) {
-  const chaptersPath = path.join(bookDirectory(bookSlug), "chapters");
-  const bookRoot = bookDirectory(bookSlug);
-  const stagingPath = path.join(bookRoot, `.chapters-write-${Date.now()}`);
-  const backupPath = path.join(bookRoot, `.chapters-backup-${Date.now()}`);
+/**
+ * Stage-then-swap atomic replacement of a directory.
+ *
+ * Populates a sibling staging dir, renames the current target to a sibling
+ * backup, then renames staging into place. On any failure it restores the
+ * backup and deletes staging. The two renames are the narrow window where
+ * the directory is not at its canonical path; orphan scans
+ * (`.chapters-backup-*`, `.chapters-<op>-<ts>`) can detect crashes between
+ * them and recover.
+ *
+ * `stagingPrefix` names the staging dir (e.g. "write", "reorder",
+ * "note-move") so orphan surfaces reveal which operation crashed.
+ */
+async function withTransactionalMove<T>(options: {
+  targetPath: string;
+  stagingPrefix: string;
+  populate: (stagingPath: string) => Promise<T>;
+}): Promise<T> {
+  const parentDirectory = path.dirname(options.targetPath);
+  const stamp = Date.now();
+  const stagingPath = path.join(
+    parentDirectory,
+    `.chapters-${options.stagingPrefix}-${stamp}`,
+  );
+  const backupPath = path.join(parentDirectory, `.chapters-backup-${stamp}`);
 
   await ensureDirectory(stagingPath);
-  await writeChapterFileTreeToDirectory(stagingPath, chapters);
-  await ensureDirectory(chaptersPath);
-  await fs.rename(chaptersPath, backupPath);
-
+  let result: T;
   try {
-    await fs.rename(stagingPath, chaptersPath);
+    result = await options.populate(stagingPath);
   } catch (error) {
-    await fs.rename(backupPath, chaptersPath).catch(() => undefined);
+    await fs.rm(stagingPath, { recursive: true, force: true });
+    throw error;
+  }
+
+  await ensureDirectory(options.targetPath);
+  await fs.rename(options.targetPath, backupPath);
+  try {
+    await fs.rename(stagingPath, options.targetPath);
+  } catch (error) {
+    await fs.rename(backupPath, options.targetPath).catch(() => undefined);
     await fs.rm(stagingPath, { recursive: true, force: true });
     throw error;
   }
 
   await fs.rm(backupPath, { recursive: true, force: true });
+  return result;
+}
+
+async function replaceBookChaptersDirectoryFromFileTree(
+  bookSlug: string,
+  chapters: ChapterFileNode[],
+) {
+  const chaptersPath = path.join(bookDirectory(bookSlug), "chapters");
+  await withTransactionalMove({
+    targetPath: chaptersPath,
+    stagingPrefix: "write",
+    populate: async (stagingPath) => {
+      await writeChapterFileTreeToDirectory(stagingPath, chapters);
+    },
+  });
+}
+
+export type RepairOrphansReport = {
+  scannedDirs: number;
+  restoredBackups: string[]; // dirs where .chapters-backup-* was promoted to chapters/
+  deletedBackups: string[]; // dirs where a stale backup was removed (target intact)
+  deletedStaging: string[]; // dirs where orphan .chapters-<op>-* staging was removed
+};
+
+/**
+ * Recovers filesystem state from interrupted `withTransactionalMove` operations.
+ *
+ * The two-rename swap leaves orphan siblings on crash:
+ *  - `.chapters-backup-<ts>`: the pre-swap contents, waiting to be deleted
+ *  - `.chapters-<op>-<ts>`: the populated staging that never swapped in
+ *
+ * Rules, applied at every directory that contains a `chapters/` subdir or any
+ * `.chapters-*` sibling:
+ *  - If `chapters/` is missing and a backup exists → restore backup (the swap
+ *    crashed between the two renames). Any staging is then stale; delete it.
+ *  - If `chapters/` exists, delete any orphan `.chapters-*` siblings.
+ *
+ * Only runs when explicitly invoked (boot, admin action). Do not auto-run from
+ * `rebuildIndexes()` — the hot path should not touch storage beyond indexes.
+ */
+export async function repairOrphans(): Promise<RepairOrphansReport> {
+  const report: RepairOrphansReport = {
+    scannedDirs: 0,
+    restoredBackups: [],
+    deletedBackups: [],
+    deletedStaging: [],
+  };
+
+  const visit = async (directory: string): Promise<void> => {
+    const entries = await readDirectoryEntries(directory);
+    if (entries.length === 0) return;
+    report.scannedDirs += 1;
+
+    const backups: string[] = [];
+    const stagings: string[] = [];
+    let hasChapters = false;
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name === "chapters") {
+        hasChapters = true;
+        continue;
+      }
+      if (entry.name.startsWith(".chapters-backup-")) {
+        backups.push(path.join(directory, entry.name));
+        continue;
+      }
+      if (entry.name.startsWith(".chapters-")) {
+        stagings.push(path.join(directory, entry.name));
+      }
+    }
+
+    if (!hasChapters && backups.length > 0) {
+      // Pick the most recent backup (lexicographic works: prefix + epoch ms).
+      backups.sort();
+      const chosen = backups[backups.length - 1];
+      await fs.rename(chosen, path.join(directory, "chapters"));
+      report.restoredBackups.push(chosen);
+      hasChapters = true;
+      // Any remaining backups are older duplicates — drop them.
+      for (const stale of backups.slice(0, -1)) {
+        await fs.rm(stale, { recursive: true, force: true });
+        report.deletedBackups.push(stale);
+      }
+    } else if (hasChapters && backups.length > 0) {
+      for (const backup of backups) {
+        await fs.rm(backup, { recursive: true, force: true });
+        report.deletedBackups.push(backup);
+      }
+    }
+
+    // Staging is never load-bearing once we've decided on chapters/. Drop it.
+    for (const staging of stagings) {
+      await fs.rm(staging, { recursive: true, force: true });
+      report.deletedStaging.push(staging);
+    }
+
+    // Recurse into chapter-stem directories inside chapters/ to catch nested
+    // transactional moves.
+    if (hasChapters) {
+      const chaptersDir = path.join(directory, "chapters");
+      const chapterEntries = await readDirectoryEntries(chaptersDir);
+      for (const entry of chapterEntries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith(".")) continue;
+        await visit(path.join(chaptersDir, entry.name));
+      }
+    }
+  };
+
+  const bookEntries = await readDirectoryEntries(booksRoot);
+  for (const entry of bookEntries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith(".")) continue;
+    await visit(path.join(booksRoot, entry.name));
+  }
+
+  return report;
 }
 
 function rewriteMovedChapterTree(
@@ -2312,6 +2484,7 @@ export async function listContent() {
 export async function rebuildIndexes() {
   const [books, notes] = await Promise.all([listBookRecords(), listNoteRecords()]);
   await writeIndexes({ books, notes });
+  await writeRevision();
   safeRevalidateTag(INDEXES_TAG);
   safeRevalidateTag(PUBLIC_INDEXES_TAG);
   safeRevalidateTag(SEARCH_TAG);
@@ -3186,11 +3359,6 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
   }
 
   const now = new Date().toISOString();
-  const parentDirectory = path.dirname(currentChaptersPath);
-  const stagingPath = path.join(parentDirectory, `.chapters-reorder-${Date.now()}`);
-  const backupPath = path.join(parentDirectory, `.chapters-backup-${Date.now()}`);
-
-  await ensureDirectory(stagingPath);
 
   for (const chapter of chapterEntries) {
     const chapterRaw = await fs.readFile(chapter.filePath, "utf8");
@@ -3204,39 +3372,39 @@ export async function reorderBookChapters(bookSlug: string, input: unknown) {
     );
   }
 
-  for (const [index, slug] of data.chapterSlugs.entries()) {
-    const chapter = chapterMap.get(slug);
-    if (!chapter) {
-      throw new Error(`Unknown chapter slug: ${slug}`);
-    }
+  await withTransactionalMove({
+    targetPath: currentChaptersPath,
+    stagingPrefix: "reorder",
+    populate: async (stagingPath) => {
+      for (const [index, slug] of data.chapterSlugs.entries()) {
+        const chapter = chapterMap.get(slug);
+        if (!chapter) {
+          throw new Error(`Unknown chapter slug: ${slug}`);
+        }
 
-    const nextOrder = index + 1;
-    const raw = await fs.readFile(chapter.filePath, "utf8");
-    const nextRaw = rewriteFrontMatterScalar(
-      rewriteFrontMatterScalar(raw, "order", nextOrder),
-      "updatedAt",
-      now,
-    );
+        const nextOrder = index + 1;
+        const raw = await fs.readFile(chapter.filePath, "utf8");
+        const nextRaw = rewriteFrontMatterScalar(
+          rewriteFrontMatterScalar(raw, "order", nextOrder),
+          "updatedAt",
+          now,
+        );
 
-    await fs.writeFile(
-      path.join(stagingPath, `${chapterStem(nextOrder, slug)}.md`),
-      nextRaw,
-      "utf8",
-    );
-    await copyChapterSubtree(currentChaptersPath, chapter, stagingPath, nextOrder, slug);
-  }
-
-  await fs.rename(currentChaptersPath, backupPath);
-
-  try {
-    await fs.rename(stagingPath, currentChaptersPath);
-  } catch (error) {
-    await fs.rename(backupPath, currentChaptersPath);
-    await fs.rm(stagingPath, { recursive: true, force: true });
-    throw error;
-  }
-
-  await fs.rm(backupPath, { recursive: true, force: true });
+        await fs.writeFile(
+          path.join(stagingPath, `${chapterStem(nextOrder, slug)}.md`),
+          nextRaw,
+          "utf8",
+        );
+        await copyChapterSubtree(
+          currentChaptersPath,
+          chapter,
+          stagingPath,
+          nextOrder,
+          slug,
+        );
+      }
+    },
+  });
   await rebuildIndexes();
   try {
     return await getBook(canonicalBookSlug);
@@ -3477,73 +3645,64 @@ export async function moveNoteToBook(slug: string, input: unknown) {
     );
   }
 
-  const parentDirectory = path.dirname(destinationChaptersPath);
-  const stagingPath = path.join(parentDirectory, `.chapters-note-move-${Date.now()}`);
-  const backupPath = path.join(parentDirectory, `.chapters-backup-${Date.now()}`);
-  await ensureDirectory(stagingPath);
-
   const insertedPath = [...parentChapterPath, existing.meta.slug];
-  for (let index = 0; index < chapterEntries.length + 1; index += 1) {
-    const nextOrder = index + 1;
-    if (index === requestedOrder - 1) {
-      const nextPath = path.join(
-        stagingPath,
-        `${chapterStem(nextOrder, existing.meta.slug)}.md`,
-      );
-      const nextMeta: ChapterMeta = {
-        id: existing.meta.id,
-        kind: "chapter",
-        bookSlug: canonicalBookSlug,
-        title: existing.meta.title,
-        slug: existing.meta.slug,
-        routeAliases: normalizeRouteAliases([
-          ...existing.meta.routeAliases,
-          { kind: "note", location: existing.meta.slug },
-        ]),
-        order: nextOrder,
-        summary: existing.meta.summary,
-        status: existing.meta.status,
-        allowExecution: existing.meta.allowExecution,
-        fontPreset: existing.meta.fontPreset,
-        createdAt: existing.meta.createdAt,
-        updatedAt: now,
-        publishedAt: existing.meta.publishedAt,
-      };
-      await fs.writeFile(nextPath, renderMatter(nextMeta, existing.body), "utf8");
-      continue;
-    }
+  await withTransactionalMove({
+    targetPath: destinationChaptersPath,
+    stagingPrefix: "note-move",
+    populate: async (stagingPath) => {
+      for (let index = 0; index < chapterEntries.length + 1; index += 1) {
+        const nextOrder = index + 1;
+        if (index === requestedOrder - 1) {
+          const nextPath = path.join(
+            stagingPath,
+            `${chapterStem(nextOrder, existing.meta.slug)}.md`,
+          );
+          const nextMeta: ChapterMeta = {
+            id: existing.meta.id,
+            kind: "chapter",
+            bookSlug: canonicalBookSlug,
+            title: existing.meta.title,
+            slug: existing.meta.slug,
+            routeAliases: normalizeRouteAliases([
+              ...existing.meta.routeAliases,
+              { kind: "note", location: existing.meta.slug },
+            ]),
+            order: nextOrder,
+            summary: existing.meta.summary,
+            status: existing.meta.status,
+            allowExecution: existing.meta.allowExecution,
+            fontPreset: existing.meta.fontPreset,
+            createdAt: existing.meta.createdAt,
+            updatedAt: now,
+            publishedAt: existing.meta.publishedAt,
+          };
+          await fs.writeFile(nextPath, renderMatter(nextMeta, existing.body), "utf8");
+          continue;
+        }
 
-    const sourceIndex = index < requestedOrder - 1 ? index : index - 1;
-    const chapter = chapterEntries[sourceIndex];
-    const nextPath = path.join(
-      stagingPath,
-      `${chapterStem(nextOrder, chapter.slug)}.md`,
-    );
-    const raw = await fs.readFile(chapter.filePath, "utf8");
-    const nextRaw = rewriteFrontMatterScalar(
-      rewriteFrontMatterScalar(raw, "order", nextOrder),
-      "updatedAt",
-      now,
-    );
-    await fs.writeFile(nextPath, nextRaw, "utf8");
-    await copyChapterSubtree(
-      destinationChaptersPath,
-      chapter,
-      stagingPath,
-      nextOrder,
-      chapter.slug,
-    );
-  }
-
-  await fs.rename(destinationChaptersPath, backupPath);
-  try {
-    await fs.rename(stagingPath, destinationChaptersPath);
-  } catch (error) {
-    await fs.rename(backupPath, destinationChaptersPath).catch(() => undefined);
-    await fs.rm(stagingPath, { recursive: true, force: true });
-    throw error;
-  }
-  await fs.rm(backupPath, { recursive: true, force: true });
+        const sourceIndex = index < requestedOrder - 1 ? index : index - 1;
+        const chapter = chapterEntries[sourceIndex];
+        const nextPath = path.join(
+          stagingPath,
+          `${chapterStem(nextOrder, chapter.slug)}.md`,
+        );
+        const raw = await fs.readFile(chapter.filePath, "utf8");
+        const nextRaw = rewriteFrontMatterScalar(
+          rewriteFrontMatterScalar(raw, "order", nextOrder),
+          "updatedAt",
+          now,
+        );
+        await fs.writeFile(nextPath, nextRaw, "utf8");
+        await copyChapterSubtree(
+          destinationChaptersPath,
+          chapter,
+          stagingPath,
+          nextOrder,
+          chapter.slug,
+        );
+      }
+    },
+  });
 
   await fs.rm(existing.filePath, { force: true });
   const notes = await listOrderedNoteFiles();
@@ -3586,6 +3745,167 @@ export async function moveNoteToBook(slug: string, input: unknown) {
     canonicalBookSlug,
     insertedPath,
   );
+}
+
+export async function moveChapterToNote(input: unknown) {
+  const data = moveChapterToNoteSchema.parse(input);
+  ensureSafeSlugOrThrow(toSlug(data.bookSlug));
+  const chapterPath = normalizeChapterPathInput(data.chapterPath);
+  const sourceResolution = await resolveChapterEntryLocation(data.bookSlug, chapterPath);
+  if (!sourceResolution.ok) {
+    if (sourceResolution.reason === "ambiguous") {
+      throw new Error("Chapter path is ambiguous");
+    }
+    throw new Error("Chapter not found");
+  }
+
+  const canonicalBookSlug = sourceResolution.canonicalBookSlug;
+  const canonicalChapterPath = sourceResolution.location.chapterPath;
+  const chapter = await parseChapterFile(
+    sourceResolution.location.entry.filePath,
+    canonicalBookSlug,
+    canonicalChapterPath,
+  );
+
+  if (chapter.children.length > 0) {
+    throw new Error(
+      "Cannot demote a chapter that has child chapters. Move or delete its children first.",
+    );
+  }
+
+  const targetSlug = chapter.meta.slug;
+  ensureSafeSlugOrThrow(targetSlug);
+  const existingNotes = await listOrderedNoteFiles();
+  if (existingNotes.some((note) => note.slug === targetSlug)) {
+    throw new Error("A note with that slug already exists");
+  }
+
+  const parentChapterPath = canonicalChapterPath.slice(0, -1);
+  const resolvedSiblingChaptersPath = path.dirname(sourceResolution.location.entry.filePath);
+
+  const siblingEntries = await listOrderedChapterFilesAtPath(resolvedSiblingChaptersPath);
+  const remainingSiblings = siblingEntries.filter((entry) => entry.slug !== chapter.meta.slug);
+
+  const requestedOrder = data.order ?? existingNotes.length + 1;
+  if (requestedOrder < 1 || requestedOrder > existingNotes.length + 1) {
+    throw new Error(
+      `Destination note order must be between 1 and ${existingNotes.length + 1}`,
+    );
+  }
+
+  const now = new Date().toISOString();
+  await createRevision(chapter.id, chapter.raw);
+  for (const sibling of remainingSiblings) {
+    const siblingRaw = await fs.readFile(sibling.filePath, "utf8");
+    await createRevision(
+      contentIdFromRaw(
+        "chapter",
+        siblingRaw,
+        chapterLocation(canonicalBookSlug, [...parentChapterPath, sibling.slug]),
+      ),
+      siblingRaw,
+    );
+  }
+
+  await withTransactionalMove({
+    targetPath: resolvedSiblingChaptersPath,
+    stagingPrefix: "chapter-demote",
+    populate: async (stagingPath) => {
+      for (const [index, sibling] of remainingSiblings.entries()) {
+        const nextOrder = index + 1;
+        const raw = await fs.readFile(sibling.filePath, "utf8");
+        const nextRaw = rewriteFrontMatterScalar(
+          rewriteFrontMatterScalar(raw, "order", nextOrder),
+          "updatedAt",
+          now,
+        );
+        await fs.writeFile(
+          path.join(stagingPath, `${chapterStem(nextOrder, sibling.slug)}.md`),
+          nextRaw,
+          "utf8",
+        );
+        await copyChapterSubtree(
+          resolvedSiblingChaptersPath,
+          sibling,
+          stagingPath,
+          nextOrder,
+          sibling.slug,
+        );
+      }
+    },
+  });
+
+  // Write the new note at a temporary order (will be re-sequenced below).
+  const nextMeta: NoteMeta = {
+    id: chapter.meta.id,
+    kind: "note",
+    title: chapter.meta.title,
+    slug: targetSlug,
+    routeAliases: normalizeRouteAliases([
+      ...chapter.meta.routeAliases,
+      { kind: "chapter", location: chapterLocation(canonicalBookSlug, canonicalChapterPath) },
+    ]),
+    summary: chapter.meta.summary,
+    order: requestedOrder,
+    status: chapter.meta.status,
+    allowExecution: chapter.meta.allowExecution,
+    fontPreset: chapter.meta.fontPreset,
+    typography: defaultNoteTypography,
+    createdAt: chapter.meta.createdAt,
+    updatedAt: now,
+    publishedAt: chapter.meta.publishedAt,
+  };
+  await fs.writeFile(
+    noteFilePath(targetSlug),
+    renderMatter(nextMeta, chapter.body),
+    { encoding: "utf8", flag: "wx" },
+  );
+
+  // Re-sequence all note files so `order` matches the final list position.
+  const notesAfterInsert = await listOrderedNoteFiles();
+  const ordered: typeof notesAfterInsert = [];
+  const insertee = notesAfterInsert.find((n) => n.slug === targetSlug);
+  const others = notesAfterInsert.filter((n) => n.slug !== targetSlug);
+  for (let index = 0; index < others.length + 1; index += 1) {
+    if (index === requestedOrder - 1 && insertee) {
+      ordered.push(insertee);
+      continue;
+    }
+    const sourceIndex = index < requestedOrder - 1 ? index : index - 1;
+    if (others[sourceIndex]) ordered.push(others[sourceIndex]);
+  }
+  await Promise.all(
+    ordered.map((entry, index) =>
+      fs.readFile(entry.filePath, "utf8").then((raw) =>
+        writeFileAtomic(
+          entry.filePath,
+          rewriteFrontMatterScalar(
+            rewriteFrontMatterScalar(raw, "order", index + 1),
+            "updatedAt",
+            now,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  await moveMediaDirectory(
+    chapterMediaPath(canonicalBookSlug, canonicalChapterPath),
+    noteMediaPath(targetSlug),
+  );
+  await rewriteReferencesAcrossContent(
+    new Map([[chapterLocation(canonicalBookSlug, canonicalChapterPath), targetSlug]]),
+    [
+      {
+        oldPrefix: `/media/${chapterMediaPath(canonicalBookSlug, canonicalChapterPath)}`,
+        newPrefix: `/media/${noteMediaPath(targetSlug)}`,
+      },
+    ],
+    new Set([chapter.id]),
+  );
+
+  await rebuildIndexes();
+  return getNote(targetSlug);
 }
 
 async function duplicateChapterTreeToPath(

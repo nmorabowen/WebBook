@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { requireSession } from "@/lib/auth";
 import { reorderBooks } from "@/lib/content/service";
+import { checkContentRevision } from "@/lib/content/revision-check";
 
 export async function POST(request: Request) {
   const session = await requireSession();
@@ -9,7 +10,10 @@ export async function POST(request: Request) {
     return apiError(403, "Forbidden");
   }
   try {
-    const tree = await reorderBooks(await request.json());
+    const payload = await request.json();
+    const staleResponse = await checkContentRevision(payload);
+    if (staleResponse) return staleResponse;
+    const tree = await reorderBooks(payload);
     return NextResponse.json(tree);
   } catch (error) {
     return apiError(400, error, "Book reorder failed");

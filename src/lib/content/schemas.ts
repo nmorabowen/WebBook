@@ -303,6 +303,7 @@ export const restoreRevisionSchema = z.object({
 export const reorderChaptersSchema = z.object({
   parentChapterPath: z.array(z.string().min(1)).default([]),
   chapterSlugs: z.array(z.string().min(1)).min(1),
+  revision: z.string().min(1).optional(),
 });
 
 export const moveChapterSchema = z.object({
@@ -310,20 +311,31 @@ export const moveChapterSchema = z.object({
   destinationBookSlug: z.string().min(1).optional(),
   parentChapterPath: z.array(z.string().min(1)).default([]),
   order: z.number().int().positive().optional(),
+  revision: z.string().min(1).optional(),
 });
 
 export const reorderBooksSchema = z.object({
   bookSlugs: z.array(z.string().min(1)).min(1),
+  revision: z.string().min(1).optional(),
 });
 
 export const reorderNotesSchema = z.object({
   noteSlugs: z.array(z.string().min(1)).min(1),
+  revision: z.string().min(1).optional(),
 });
 
 export const moveNoteToBookSchema = z.object({
   destinationBookSlug: z.string().min(1),
   parentChapterPath: z.array(z.string().min(1)).default([]),
   order: z.number().int().positive().optional(),
+  revision: z.string().min(1).optional(),
+});
+
+export const moveChapterToNoteSchema = z.object({
+  bookSlug: z.string().min(1),
+  chapterPath: z.array(z.string().min(1)).min(1),
+  order: z.number().int().positive().optional(),
+  revision: z.string().min(1).optional(),
 });
 
 export const generalSettingsSchema = z.object({
