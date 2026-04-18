@@ -249,6 +249,9 @@ export function GeneralSettingsPanel({
         }),
       );
       if (mathFontFamily !== initialSettings.mathFontFamily) {
+        // MathJax only reads `output.font` from window.MathJax during its
+        // own boot — see math-hydrator.tsx. Changing it at runtime has no
+        // effect, so a full reload is the only way to apply the new font.
         window.location.reload();
         return;
       }
