@@ -1975,3 +1975,57 @@ button {
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   }
 }
+
+.mermaid-frame {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin: var(--book-block-spacing, 1rem) 0;
+  padding: 0.75rem 0;
+  overflow-x: auto;
+  color: var(--paper-ink);
+}
+
+.mermaid-frame svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-frame--loading {
+  min-height: 3rem;
+}
+
+.mermaid-frame__placeholder {
+  color: var(--paper-muted);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.mermaid-frame--error {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--paper-danger, #b91c1c);
+  border-radius: var(--workspace-radius-md, 12px);
+  background: color-mix(in srgb, var(--paper-danger, #b91c1c) 8%, transparent);
+  text-align: left;
+}
+
+.mermaid-frame__error-title {
+  font-weight: 600;
+  color: var(--paper-danger, #b91c1c);
+}
+
+.mermaid-frame__error-message,
+.mermaid-frame__error-source {
+  margin: 0;
+  padding: 0.5rem;
+  border-radius: var(--workspace-radius-sm, 8px);
+  background: var(--paper-panel);
+  color: var(--paper-ink);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

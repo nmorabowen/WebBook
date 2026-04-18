@@ -20,6 +20,7 @@ import remarkMath from "remark-math";
 import { ExecutableCodeBlock } from "@/components/markdown/executable-code-block";
 import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { CopyCodeButton } from "@/components/markdown/copy-code-button";
+import { MermaidDiagram } from "@/components/markdown/mermaid-diagram";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import type { ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -1069,6 +1070,17 @@ export function MarkdownRenderer({
                   executionEnabled={allowExecution}
                   requester={requester}
                 />
+              );
+            }
+
+            if (language === "mermaid") {
+              return wrapWithSourceNavigation(
+                segmentSourceLine(node),
+                <MermaidDiagram
+                  code={value}
+                  id={id}
+                  sourceLine={segmentSourceLine(node)}
+                />,
               );
             }
 

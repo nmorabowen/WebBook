@@ -13,6 +13,7 @@ import remarkMath from "remark-math";
 import { ExecutableCodeBlock } from "@/components/markdown/executable-code-block";
 import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { CopyCodeButton } from "@/components/markdown/copy-code-button";
+import { MermaidDiagram } from "@/components/markdown/mermaid-diagram";
 import { PublicMathTrigger } from "@/components/markdown/public-math-trigger";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import type { ManifestEntry } from "@/lib/content/schemas";
@@ -600,6 +601,16 @@ export function PublicMarkdownRenderer({
                   cellId={id ?? `${pageId}-${language}`}
                   executionEnabled={allowExecution}
                   requester={requester}
+                />
+              );
+            }
+
+            if (language === "mermaid") {
+              return (
+                <MermaidDiagram
+                  code={value}
+                  id={id}
+                  sourceLine={segmentSourceLine(node)}
                 />
               );
             }

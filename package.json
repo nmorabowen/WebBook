@@ -20,6 +20,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.575.0",
     "mdast-util-to-string": "^4.0.0",
+    "mermaid": "^11.4.0",
     "minisearch": "^7.2.0",
     "next": "16.1.6",
     "react": "19.2.3",
