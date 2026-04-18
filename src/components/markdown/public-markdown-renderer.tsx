@@ -541,7 +541,8 @@ export function PublicMarkdownRenderer({
 
             if (
               classNames.includes("language-math") ||
-              classNames.includes("math-display")
+              classNames.includes("math-display") ||
+              classNames.includes("language-mermaid")
             ) {
               return <>{children}</>;
             }
