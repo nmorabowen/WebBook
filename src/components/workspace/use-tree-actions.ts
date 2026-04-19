@@ -102,5 +102,57 @@ export function useTreeActions(model: ContentTreeModel) {
     [doRequest, model.revision],
   );
 
-  return { remove, demoteChapterToNote, promoteNoteToBook };
+  /**
+   * Create a new note at a tree-row's location. Prompts the user for a
+   * title (via caller-provided value), derives the slug, and posts to
+   * /api/notes with an optional `location` envelope so the server places
+   * the file in the right folder (<book>/notes or <chapter>/notes).
+   */
+  const createScopedNote = useCallback(
+    async (parent: NodeRef, title: string): Promise<ActionOutcome> => {
+      const trimmed = title.trim();
+      if (!trimmed) return { ok: false, error: "Title required" };
+      const slug = trimmed
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      if (!slug) return { ok: false, error: "Could not derive a slug from the title" };
+
+      let location: unknown = undefined;
+      if (parent.kind === "book") {
+        location = { kind: "book", bookSlug: parent.slug };
+      } else if (parent.kind === "chapter") {
+        location = {
+          kind: "chapter",
+          bookSlug: parent.bookSlug,
+          chapterPath: parent.chapterPath,
+        };
+      } else if (parent.kind === "notes-root") {
+        location = { kind: "root" };
+      } else {
+        return {
+          ok: false,
+          error: "Cannot create a note inside that kind of row",
+        };
+      }
+
+      return doRequest("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: trimmed,
+          slug,
+          summary: "",
+          body: "",
+          status: "draft",
+          allowExecution: true,
+          fontPreset: "source-serif",
+          location,
+        }),
+      });
+    },
+    [doRequest],
+  );
+
+  return { remove, demoteChapterToNote, promoteNoteToBook, createScopedNote };
 }

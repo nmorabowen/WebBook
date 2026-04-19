@@ -3816,21 +3816,53 @@ export async function reorderNotes(input: unknown) {
   return getContentTree();
 }
 
-export async function createNote(input: unknown) {
+export async function createNote(
+  input: unknown,
+  location: NoteLocation = { kind: "root" },
+) {
   const data = saveNoteSchema.parse(input);
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
-  const existingNotes = await listOrderedNoteFiles();
-  if (existingNotes.some((note) => note.slug === slug)) {
+
+  // Slug uniqueness is global today (single shared resolver namespace).
+  // Phase-3 work will tighten this to per-folder once refs carry the
+  // explicit path; for now reject collisions across every location.
+  const books = await listBookRecords();
+  const [rootNotes, scopedNotes] = await Promise.all([
+    listNoteRecords(),
+    listScopedNoteRecords(books),
+  ]);
+  const allNotes = [...rootNotes, ...scopedNotes];
+  if (allNotes.some((note) => note.meta.slug === slug)) {
     throw new Error("A note with that slug already exists");
   }
 
   const now = new Date().toISOString();
+  // Order is per-location: count siblings already at the destination.
+  const siblingsAtLocation = allNotes.filter((note) => {
+    if (note.location.kind !== location.kind) return false;
+    if (location.kind === "root") return true;
+    if (location.kind === "book")
+      return (
+        note.location.kind === "book" && note.location.bookSlug === location.bookSlug
+      );
+    if (
+      note.location.kind === "chapter" &&
+      note.location.bookSlug === location.bookSlug &&
+      note.location.chapterPath.length === location.chapterPath.length
+    ) {
+      return note.location.chapterPath.every(
+        (s, i) => s === location.chapterPath[i],
+      );
+    }
+    return false;
+  });
   const nextOrder =
-    existingNotes.reduce(
-      (highestOrder, note) => Math.max(highestOrder, note.order ?? 0),
+    siblingsAtLocation.reduce(
+      (highestOrder, note) => Math.max(highestOrder, note.meta.order ?? 0),
       0,
     ) + 1;
+
   const raw = renderMatter(
     {
       id: nextContentId(),
@@ -3850,7 +3882,10 @@ export async function createNote(input: unknown) {
     } satisfies NoteMeta,
     data.body,
   );
-  await fs.writeFile(noteFilePath(slug), raw, { encoding: "utf8", flag: "wx" });
+
+  const targetPath = await resolveNoteFilePath(location, slug);
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(targetPath, raw, { encoding: "utf8", flag: "wx" });
   await rebuildIndexes();
   return getNote(slug);
 }

@@ -282,10 +282,25 @@ export function ContentTreeSidebar({
     [],
   );
 
+  const promptCreateNote = useCallback(
+    (parent: NodeRef) => {
+      if (typeof window === "undefined") return;
+      const title = window.prompt("Title for the new note?");
+      if (!title) return;
+      void runAction(treeActions.createScopedNote(parent, title));
+    },
+    [runAction, treeActions],
+  );
+
   const buildMenu = useCallback(
     (ref: NodeRef): React.ReactNode => {
       if (ref.kind === "chapter") {
         return [
+          <RowMenuButton
+            key="create-note"
+            label="Create note here"
+            onClick={() => promptCreateNote(ref)}
+          />,
           <RowMenuButton
             key="demote"
             label="Demote to note"
@@ -332,8 +347,14 @@ export function ContentTreeSidebar({
         return items;
       }
       if (ref.kind === "book") {
-        return (
+        return [
           <RowMenuButton
+            key="create-note"
+            label="Create note here"
+            onClick={() => promptCreateNote(ref)}
+          />,
+          <RowMenuButton
+            key="delete"
             label="Delete"
             danger
             onClick={() => {
@@ -344,12 +365,12 @@ export function ContentTreeSidebar({
                 void runAction(treeActions.remove(ref));
               }
             }}
-          />
-        );
+          />,
+        ];
       }
       return null;
     },
-    [model.tree, runAction, treeActions],
+    [model.tree, promptCreateNote, runAction, treeActions],
   );
 
   const menuIdFor = menuFor ? refId(menuFor) : null;
