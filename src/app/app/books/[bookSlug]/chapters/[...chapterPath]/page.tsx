@@ -5,6 +5,7 @@ import { EditorShell } from "@/components/editor/editor-shell";
 import { PageMoveControls } from "@/components/editor/page-move-controls";
 import { requireSession } from "@/lib/auth";
 import { getChapterNumberByPath } from "@/lib/chapter-numbering";
+import { detectChapterScopedNote } from "@/lib/content/chapter-scoped-note-route";
 import {
   getContentTree,
   getGeneralSettings,
@@ -16,6 +17,7 @@ import {
 import {
   buildWorkspaceAccessScope,
   canAccessChapter,
+  canAccessNote,
   filterBacklinksForScope,
   filterContentTreeForScope,
   filterManifestEntriesForScope,
@@ -32,6 +34,62 @@ export default async function AppChapterPage({
   const session = await requireSession();
   const { bookSlug, chapterPath } = await params;
   const requestedPath = chapterPath ?? [];
+
+  // Chapter-scoped notes ride this catch-all because Next.js does not
+  // allow two catch-all segments in a single route. When the URL ends in
+  // `/notes/<slug>` and a real chapter-scoped note exists, render the
+  // note editor inline instead of falling through to the chapter loader.
+  const scopedNote = await detectChapterScopedNote(bookSlug, requestedPath);
+  if (scopedNote) {
+    const loadedNote = await loadRenderableContent(scopedNote.note.id);
+    if (!loadedNote || loadedNote.content.kind !== "note") notFound();
+    const [rawTreeForNote, manifestForNote, generalSettingsForNote, mediaForNote] =
+      await Promise.all([
+        getContentTree(),
+        getManifest(),
+        getGeneralSettings(),
+        listMediaForPage(loadedNote.content.id),
+      ]);
+    const noteScope = await buildWorkspaceAccessScope(session, rawTreeForNote);
+    if (!canAccessNote(noteScope, loadedNote.content)) notFound();
+    const filteredTreeForNote = filterContentTreeForScope(rawTreeForNote, noteScope);
+    const noteWorkspaceRoute = `/app/books/${bookSlug}/chapters/${scopedNote.chapterPath.join("/")}/notes/${scopedNote.noteSlug}`;
+    return (
+      <AppShell
+        tree={filteredTreeForNote}
+        currentPath={noteWorkspaceRoute}
+        generalSettings={generalSettingsForNote}
+        session={session}
+        rightPanel={<div id="editor-shell-right-panel-root" />}
+      >
+        <EditorShell
+          mode="note"
+          path={`content/books/${bookSlug}/chapters/${scopedNote.chapterPath.join("/")}/notes/${scopedNote.noteSlug}.md`}
+          pageId={loadedNote.content.id}
+          publicRoute={`/books/${bookSlug}/chapters/${scopedNote.chapterPath.join("/")}/notes/${scopedNote.noteSlug}`}
+          manifest={filterManifestEntriesForScope(manifestForNote, noteScope)}
+          initialValues={{
+            title: loadedNote.content.meta.title,
+            slug: loadedNote.content.meta.slug,
+            summary: loadedNote.content.meta.summary,
+            body: loadedNote.content.body,
+            status: loadedNote.content.meta.status,
+            fontPreset: loadedNote.content.meta.fontPreset ?? "archivo-narrow",
+            typography: loadedNote.content.meta.typography,
+          }}
+          backlinks={filterBacklinksForScope(loadedNote.backlinks, noteScope)}
+          unresolvedLinks={loadedNote.unresolvedLinks}
+          revisions={loadedNote.revisions}
+          mediaAssets={filterMediaAssetsForScope(mediaForNote, noteScope)}
+          generalSettings={generalSettingsForNote}
+          previewContext={{ updatedAt: loadedNote.content.meta.updatedAt }}
+          updateEndpoint={`/api/notes/${scopedNote.noteSlug}`}
+          shortcutScopeKey={session.username}
+        />
+      </AppShell>
+    );
+  }
+
   const resolved = await resolveWorkspaceChapterRoute(bookSlug, requestedPath);
   if (!resolved) {
     notFound();

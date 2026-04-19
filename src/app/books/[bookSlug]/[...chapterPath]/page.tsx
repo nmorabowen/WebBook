@@ -13,6 +13,7 @@ import {
   getPublicContentTree,
   resolvePublicChapterRoute,
 } from "@/lib/content/service";
+import { detectChapterScopedNote } from "@/lib/content/chapter-scoped-note-route";
 import { getChapterNumberByPath } from "@/lib/chapter-numbering";
 import { containsMathSyntax, extractToc } from "@/lib/markdown/shared";
 import { buildPublicMetadata } from "@/lib/seo";
@@ -56,6 +57,58 @@ export default async function ChapterPage({
 }) {
   const { bookSlug, chapterPath } = await params;
   const requestedPath = chapterPath ?? [];
+
+  // Chapter-scoped note disguised as a chapter URL — render the note view.
+  const scopedNote = await detectChapterScopedNote(bookSlug, requestedPath);
+  if (scopedNote) {
+    if (scopedNote.note.meta.status !== "published") notFound();
+    const note = scopedNote.note;
+    const [tree, manifest, backlinks, generalSettings] = await Promise.all([
+      getPublicContentTree(),
+      getPublicManifest(),
+      getPublicBacklinks(note.id),
+      getGeneralSettings(),
+    ]);
+    const toc = extractToc(note.body);
+    const hasMath = containsMathSyntax(note.body);
+    return (
+      <PublicStyleFrame generalSettings={generalSettings}>
+        {hasMath ? <MathHydrator /> : null}
+        <PublicShell
+          tree={tree}
+          currentPath={note.route}
+          bookSlug={bookSlug}
+          fontPreset={note.meta.fontPreset ?? "source-serif"}
+          generalSettings={generalSettings}
+          readingWidth={note.meta.typography?.contentWidth}
+          rightPanel={
+            <div className="grid gap-8">
+              <TocPanel toc={toc} />
+              <ReadingMetaPanel
+                backlinks={backlinks}
+                updatedAt={note.meta.updatedAt}
+              />
+            </div>
+          }
+        >
+          <PublicDocumentContent
+            mode="note"
+            title={note.meta.title}
+            summary={note.meta.summary}
+            markdown={note.body}
+            manifest={manifest}
+            pageId={note.id}
+            requester="public"
+            fontPreset={note.meta.fontPreset ?? "source-serif"}
+            typography={note.meta.typography}
+            generalSettings={generalSettings}
+            currentRoute={note.route}
+          />
+        </PublicShell>
+      </PublicStyleFrame>
+    );
+  }
+
   const result = await resolvePublicChapterRoute(bookSlug, requestedPath);
   if (!result) {
     notFound();
