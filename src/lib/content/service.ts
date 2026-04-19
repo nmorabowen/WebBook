@@ -25,6 +25,7 @@ import {
   noteMetaSchema,
   moveChapterSchema,
   moveChapterToNoteSchema,
+  moveContentSchema,
   moveNoteToBookSchema,
   reorderBooksSchema,
   reorderChaptersSchema,
@@ -2701,6 +2702,100 @@ export async function deleteContent(ref: ContentRef): Promise<void> {
     return;
   }
   await deleteChapter(ref.bookSlug, ref.chapterPath);
+}
+
+/**
+ * Unified move dispatcher. Maps every (source.kind, destination.parent.kind,
+ * role) tuple to the existing kind-specific mover so callers never have to
+ * pick which endpoint to hit. Reorders (book↔book, note↔note, sibling
+ * chapters) intentionally stay on their dedicated endpoints — they're a
+ * different operation shape (full ordered list, not a single move).
+ */
+export async function moveContent(input: unknown) {
+  const data = moveContentSchema.parse(input);
+  const { source, destination, revision } = data;
+
+  if (source.kind === "chapter") {
+    if (destination.parent.kind === "notes-root") {
+      return moveChapterToNote({
+        bookSlug: source.bookSlug,
+        chapterPath: source.chapterPath,
+        order: destination.order,
+        revision,
+      });
+    }
+    if (destination.parent.kind === "book") {
+      // role="note" + scoped book destination is reserved for a future slice
+      // (chapter demoted into <book>/notes/). Reject for now to keep the
+      // dispatch table honest about what actually works today.
+      if (destination.role === "note") {
+        throw new Error(
+          "Demoting a chapter into a scoped notes folder is not yet supported",
+        );
+      }
+      return moveChapter(source.bookSlug, {
+        chapterPath: source.chapterPath,
+        destinationBookSlug: destination.parent.bookSlug,
+        parentChapterPath: [],
+        order: destination.order,
+        revision,
+      });
+    }
+    if (destination.parent.kind === "chapter") {
+      if (destination.role === "note") {
+        throw new Error(
+          "Demoting a chapter into a chapter-scoped notes folder is not yet supported",
+        );
+      }
+      return moveChapter(source.bookSlug, {
+        chapterPath: source.chapterPath,
+        destinationBookSlug: destination.parent.bookSlug,
+        parentChapterPath: destination.parent.chapterPath,
+        order: destination.order,
+        revision,
+      });
+    }
+  }
+
+  if (source.kind === "note") {
+    if (destination.parent.kind === "notes-root") {
+      // Notes stay in content/notes/ already; this is the legacy reorder path
+      // surface — for now we leave it to the dedicated /api/notes/reorder.
+      throw new Error(
+        "Note → notes-root: use the notes reorder endpoint for sibling reorder",
+      );
+    }
+    if (destination.parent.kind === "book") {
+      if (destination.role === "note") {
+        throw new Error(
+          "Moving a note into a book's scoped notes folder is not yet supported",
+        );
+      }
+      return moveNoteToBook(source.slug, {
+        destinationBookSlug: destination.parent.bookSlug,
+        parentChapterPath: [],
+        order: destination.order,
+        revision,
+      });
+    }
+    if (destination.parent.kind === "chapter") {
+      if (destination.role === "note") {
+        throw new Error(
+          "Moving a note into a chapter's scoped notes folder is not yet supported",
+        );
+      }
+      return moveNoteToBook(source.slug, {
+        destinationBookSlug: destination.parent.bookSlug,
+        parentChapterPath: destination.parent.chapterPath,
+        order: destination.order,
+        revision,
+      });
+    }
+  }
+
+  throw new Error(
+    `moveContent does not support source kind ${source.kind} -> destination ${destination.parent.kind}`,
+  );
 }
 
 export async function getBook(bookSlug: string) {

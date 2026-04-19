@@ -354,6 +354,42 @@ export const moveChapterToNoteSchema = z.object({
   revision: z.string().min(1).optional(),
 });
 
+/**
+ * Phase-2 unified move payload. The source identifies the content node,
+ * destination.parent says where it should land, and destination.role
+ * disambiguates when the source could legally land as more than one kind
+ * (e.g. a chapter dropped on a book root could be a chapter or, in future
+ * scoped-note slices, a note inside that book).
+ */
+export const moveContentSchema = z.object({
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("book"), bookSlug: z.string().min(1) }),
+    z.object({
+      kind: z.literal("chapter"),
+      bookSlug: z.string().min(1),
+      chapterPath: z.array(z.string().min(1)).min(1),
+    }),
+    z.object({ kind: z.literal("note"), slug: z.string().min(1) }),
+  ]),
+  destination: z.object({
+    parent: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("notes-root") }),
+      z.object({ kind: z.literal("book"), bookSlug: z.string().min(1) }),
+      z.object({
+        kind: z.literal("chapter"),
+        bookSlug: z.string().min(1),
+        chapterPath: z.array(z.string().min(1)).min(1),
+      }),
+    ]),
+    /** "chapter" or "note" — required when the (source, parent) pair is
+     * ambiguous (e.g. note dropped on a book could promote to chapter or
+     * land as a scoped note). Defaults match Phase-1 drag-drop semantics. */
+    role: z.enum(["chapter", "note"]).optional(),
+    order: z.number().int().positive().optional(),
+  }),
+  revision: z.string().min(1).optional(),
+});
+
 export const generalSettingsSchema = z.object({
   colorTheme: colorThemeSchema,
   analyticsMeasurementId: analyticsMeasurementIdSchema,
