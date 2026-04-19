@@ -171,6 +171,48 @@ function noteFilePath(slug: string) {
   return path.join(notesRoot, `${slug}.md`);
 }
 
+/**
+ * Filesystem path for a note at any {@link NoteLocation}. Mirrors the
+ * read-side convention used by listScopedNoteRecords.
+ */
+function noteFilePathFor(location: NoteLocation, slug: string): string {
+  if (location.kind === "root") return noteFilePath(slug);
+  if (location.kind === "book") {
+    return path.join(bookDirectory(location.bookSlug), "notes", `${slug}.md`);
+  }
+  // chapter-scoped — companion folder is `<chapter-stem>/notes/`
+  // We need to find the chapter file's directory path. Caller passes the
+  // chapterPath as slugs; the actual on-disk dir name is `<order>-<slug>`,
+  // so we ask the resolver for the canonical filePath instead of guessing.
+  throw new Error(
+    "noteFilePathFor(chapter): use noteFilePathForChapter which resolves the chapter file path",
+  );
+}
+
+async function noteFilePathForChapter(
+  bookSlug: string,
+  chapterPath: string[],
+  slug: string,
+): Promise<string> {
+  const resolved = await resolveChapterRecord(bookSlug, chapterPath);
+  if (!resolved) throw new Error("Destination chapter not found");
+  const chapterFolder = path.join(
+    path.dirname(resolved.chapter.filePath),
+    path.basename(resolved.chapter.filePath, ".md"),
+  );
+  return path.join(chapterFolder, "notes", `${slug}.md`);
+}
+
+async function resolveNoteFilePath(
+  location: NoteLocation,
+  slug: string,
+): Promise<string> {
+  if (location.kind === "chapter") {
+    return noteFilePathForChapter(location.bookSlug, location.chapterPath, slug);
+  }
+  return noteFilePathFor(location, slug);
+}
+
 function contentOrder(order?: number) {
   return order ?? Number.MAX_SAFE_INTEGER;
 }
@@ -1736,12 +1778,23 @@ async function resolveBookRecord(bookSlug: string) {
 async function resolveNoteRecord(slug: string) {
   ensureSafeSlugOrThrow(slug);
   await ensureContentScaffold();
-  const notes = await listNoteRecords();
-  const canonical = notes.find((note) => note.meta.slug === slug) ?? null;
-  if (canonical) {
-    return { record: canonical, aliased: false as const };
+  const rootNotes = await listNoteRecords();
+  const rootMatch = rootNotes.find((note) => note.meta.slug === slug);
+  if (rootMatch) {
+    return { record: rootMatch, aliased: false as const };
   }
 
+  // Phase-2: scoped notes share the global slug lookup. Root wins on
+  // collision (legacy URL stability). Otherwise the first scoped match
+  // returns — the path-explicit ContentRef API is the long-term fix.
+  const books = await listBookRecords();
+  const scopedNotes = await listScopedNoteRecords(books);
+  const scopedMatch = scopedNotes.find((note) => note.meta.slug === slug);
+  if (scopedMatch) {
+    return { record: scopedMatch, aliased: false as const };
+  }
+
+  const notes = [...rootNotes, ...scopedNotes];
   const matches = notes.filter((note) =>
     matchesRouteAlias(note.meta.routeAliases, "note", slug),
   );
@@ -2758,18 +2811,23 @@ export async function moveContent(input: unknown) {
   }
 
   if (source.kind === "note") {
+    // Locate the note's current home so we can move (or no-op) accordingly.
+    const existing = await resolveNoteRecord(source.slug);
+    if (!existing) throw new Error("Source note not found");
+
     if (destination.parent.kind === "notes-root") {
-      // Notes stay in content/notes/ already; this is the legacy reorder path
-      // surface — for now we leave it to the dedicated /api/notes/reorder.
-      throw new Error(
-        "Note → notes-root: use the notes reorder endpoint for sibling reorder",
-      );
+      // Move from any current scope back to /content/notes (root).
+      return moveNoteToLocation(source.slug, existing.record.location, {
+        kind: "root",
+      });
     }
     if (destination.parent.kind === "book") {
       if (destination.role === "note") {
-        throw new Error(
-          "Moving a note into a book's scoped notes folder is not yet supported",
-        );
+        // Drop note into <book>/notes/ — stays a note, just relocated.
+        return moveNoteToLocation(source.slug, existing.record.location, {
+          kind: "book",
+          bookSlug: destination.parent.bookSlug,
+        });
       }
       return moveNoteToBook(source.slug, {
         destinationBookSlug: destination.parent.bookSlug,
@@ -2780,9 +2838,12 @@ export async function moveContent(input: unknown) {
     }
     if (destination.parent.kind === "chapter") {
       if (destination.role === "note") {
-        throw new Error(
-          "Moving a note into a chapter's scoped notes folder is not yet supported",
-        );
+        // Drop note into <chapter-folder>/notes/ — stays a note.
+        return moveNoteToLocation(source.slug, existing.record.location, {
+          kind: "chapter",
+          bookSlug: destination.parent.bookSlug,
+          chapterPath: destination.parent.chapterPath,
+        });
       }
       return moveNoteToBook(source.slug, {
         destinationBookSlug: destination.parent.bookSlug,
@@ -3860,6 +3921,52 @@ export async function updateNote(slug: string, input: unknown) {
   }
   await rebuildIndexes();
   return getNote(nextSlug);
+}
+
+/**
+ * Move a note between {@link NoteLocation}s without changing its kind.
+ * Use this for "drag note from root into <book>/notes/" and similar
+ * gestures — the file stays a note, only its directory changes.
+ *
+ * Caller must already have verified the note exists at `currentLocation`.
+ * This helper does the safety checks (collision, no-op, parent-dir
+ * creation), then renames atomically and triggers an index rebuild.
+ */
+async function moveNoteToLocation(
+  slug: string,
+  currentLocation: NoteLocation,
+  destLocation: NoteLocation,
+): Promise<NoteRecord | null> {
+  ensureSafeSlugOrThrow(slug);
+  const sourcePath = await resolveNoteFilePath(currentLocation, slug);
+  const destPath = await resolveNoteFilePath(destLocation, slug);
+
+  if (sourcePath === destPath) {
+    // No-op: caller asked for the same on-disk location.
+    return getNote(slug);
+  }
+
+  // Reject if destination already holds a note with this slug — slugs are
+  // unique per directory but not globally; the user can rename via update.
+  try {
+    await fs.access(destPath);
+    throw new Error("A note with that slug already exists at the destination");
+  } catch (err) {
+    if (
+      !(err instanceof Error) ||
+      !("code" in err) ||
+      (err as NodeJS.ErrnoException).code !== "ENOENT"
+    ) {
+      throw err;
+    }
+  }
+
+  await fs.mkdir(path.dirname(destPath), { recursive: true });
+  await fs.rename(sourcePath, destPath);
+  await rebuildIndexes();
+
+  // Note is now found via the same slug; getNote walks all locations.
+  return getNote(slug);
 }
 
 export async function moveNoteToBook(slug: string, input: unknown) {
