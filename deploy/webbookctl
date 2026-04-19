@@ -19,6 +19,8 @@ usage() {
 Usage:
   webbookctl install
   webbookctl update [ref]
+  webbookctl update --skip-backup-prompt [ref]
+  webbookctl backup-url
   webbookctl status
   webbookctl logs [service]
   webbookctl backup
@@ -26,6 +28,11 @@ Usage:
   webbookctl rollback
   webbookctl update-config
   webbookctl doctor
+
+The default 'update' flow pauses to remind you to download a workspace
+backup through your admin browser session, then runs a server-side
+backup, then deploys the requested ref. Pass --skip-backup-prompt for
+unattended automation.
 EOF
 }
 
@@ -77,9 +84,93 @@ logs_command() {
 }
 
 update_command() {
-  local target="${1:-main}"
+  local skip_backup_prompt=0
+  local target=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --skip-backup-prompt)
+        skip_backup_prompt=1
+        shift
+        ;;
+      --)
+        shift
+        target="${1:-}"
+        break
+        ;;
+      *)
+        target="$1"
+        shift
+        ;;
+    esac
+  done
+  target="${target:-main}"
+
   require_repo
+  load_env
+
+  if (( skip_backup_prompt == 0 )); then
+    prompt_for_browser_backup
+  fi
+
+  echo "Running server-side backup before update..."
+  if ! "$BACKUP_SCRIPT"; then
+    echo "Backup failed. Aborting update." >&2
+    exit 1
+  fi
+
   exec "$DEPLOY_SCRIPT" update "$target"
+}
+
+backup_url_command() {
+  require_repo
+  load_env
+  print_browser_backup_url
+}
+
+print_browser_backup_url() {
+  local domain="${DOMAIN:-}"
+  if [[ -n "$domain" ]]; then
+    printf 'https://%s/api/settings/general/export\n' "$domain"
+  else
+    printf '<your-domain>/api/settings/general/export\n'
+    echo "(DOMAIN is not set in $WEBBOOK_ENV_FILE; substitute your real host)" >&2
+  fi
+}
+
+prompt_for_browser_backup() {
+  if [[ ! -t 0 ]]; then
+    cat <<EOF >&2
+Refusing to update without a TTY because the operator must confirm
+they have downloaded a workspace backup. Re-run interactively, or
+pass --skip-backup-prompt for unattended automation (e.g. CI/cron).
+EOF
+    exit 1
+  fi
+
+  local backup_dir="${BACKUP_LOCAL_DIR:-$WEBBOOK_ROOT/backups}"
+  cat <<EOF
+─────────────────────────────────────────────────────────────────────
+  Backup before update
+─────────────────────────────────────────────────────────────────────
+  Download a workspace backup as an admin from your browser:
+
+      $(print_browser_backup_url)
+
+  This produces a webbook-workspace-*.zip with the full content tree,
+  settings, and indexes — your off-server safety copy.
+
+  A server-side backup will also be written to:
+      ${backup_dir}
+
+EOF
+
+  local answer=""
+  printf 'Have you downloaded the browser backup? [y/N] '
+  read -r answer
+  if [[ ! "$answer" =~ ^[Yy] ]]; then
+    echo "Aborted. Run 'webbookctl update' again after backing up." >&2
+    exit 1
+  fi
 }
 
 rollback_command() {
@@ -165,6 +256,9 @@ main() {
       ;;
     update|deploy)
       update_command "$@"
+      ;;
+    backup-url)
+      backup_url_command
       ;;
     status)
       status_command
