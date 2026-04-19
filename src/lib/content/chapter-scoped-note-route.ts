@@ -1,5 +1,5 @@
 import type { NoteRecord } from "@/lib/content/schemas";
-import { getContent } from "@/lib/content/service";
+import { getNoteAtLocation } from "@/lib/content/service";
 
 /**
  * Detect a chapter-scoped note request masquerading as a chapter URL.
@@ -34,16 +34,15 @@ export async function detectChapterScopedNote(
   const candidateChapterPath = chapterPath.slice(0, -2);
   if (candidateChapterPath.length === 0) return null;
 
-  const note = await getContent({ kind: "note", slug: noteSlug });
-  if (!note || note.kind !== "note") return null;
-  if (
-    note.location.kind !== "chapter" ||
-    note.location.bookSlug !== bookSlug ||
-    note.location.chapterPath.length !== candidateChapterPath.length ||
-    !note.location.chapterPath.every((s, i) => s === candidateChapterPath[i])
-  ) {
-    return null;
-  }
+  // Location-aware lookup: two notes can share a slug across folders
+  // (e.g. setup.md inside two different chapters). Slug-only resolution
+  // would return the wrong one and the location guard would silently 404.
+  const note = await getNoteAtLocation(noteSlug, {
+    kind: "chapter",
+    bookSlug,
+    chapterPath: candidateChapterPath,
+  });
+  if (!note) return null;
 
   return { noteSlug, chapterPath: candidateChapterPath, note };
 }

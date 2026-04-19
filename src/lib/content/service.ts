@@ -2732,6 +2732,51 @@ export async function getPublicContentTree(): Promise<PublicContentTree> {
  * routes, sidebar, search) migrate to this in place of getBook/getChapter/
  * getNote so a single ref shape carries through the stack.
  */
+/**
+ * Look up a note by both slug AND location — the disambiguating lookup
+ * that the slug-only resolver can't do today. Use this whenever the
+ * caller already knows where the note lives (URL path, drag source).
+ *
+ * Returns null when no note matches both axes.
+ */
+export async function getNoteAtLocation(
+  slug: string,
+  location: NoteLocation,
+): Promise<NoteRecord | null> {
+  ensureSafeSlugOrThrow(slug);
+  await ensureContentScaffold();
+
+  const matches = (candidate: NoteLocation): boolean => {
+    if (candidate.kind !== location.kind) return false;
+    if (location.kind === "root") return true;
+    if (location.kind === "book") {
+      return (
+        candidate.kind === "book" && candidate.bookSlug === location.bookSlug
+      );
+    }
+    if (
+      candidate.kind === "chapter" &&
+      candidate.bookSlug === location.bookSlug &&
+      candidate.chapterPath.length === location.chapterPath.length
+    ) {
+      return candidate.chapterPath.every((s, i) => s === location.chapterPath[i]);
+    }
+    return false;
+  };
+
+  if (location.kind === "root") {
+    const rootNotes = await listNoteRecords();
+    return rootNotes.find((n) => n.meta.slug === slug) ?? null;
+  }
+
+  const books = await listBookRecords();
+  const scopedNotes = await listScopedNoteRecords(books);
+  return (
+    scopedNotes.find((n) => n.meta.slug === slug && matches(n.location)) ??
+    null
+  );
+}
+
 export async function getContent(ref: ContentRef): Promise<ContentRecord | null> {
   const resolved = await resolveContentRef(ref);
   if (!resolved) return null;

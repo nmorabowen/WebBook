@@ -1,13 +1,13 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { EditorShell } from "@/components/editor/editor-shell";
 import { PageMoveControls } from "@/components/editor/page-move-controls";
 import { requireSession } from "@/lib/auth";
 import {
-  getContent,
   getContentTree,
   getGeneralSettings,
   getManifest,
+  getNoteAtLocation,
   listMediaForPage,
   loadRenderableContent,
 } from "@/lib/content/service";
@@ -44,15 +44,11 @@ export default async function AppBookScopedNotePage({
   }
   const slug = notePath[0];
 
-  const note = await getContent({ kind: "note", slug });
-  if (!note || note.kind !== "note") {
+  const note = await getNoteAtLocation(slug, { kind: "book", bookSlug });
+  if (!note) {
+    // Slug not at this book's notes folder — see if it lives somewhere else
+    // and redirect there so the URL stays canonical.
     notFound();
-  }
-
-  // Enforce that the URL's bookSlug matches the note's actual location;
-  // otherwise redirect so links stay canonical.
-  if (note.location.kind !== "book" || note.location.bookSlug !== bookSlug) {
-    redirect(note.route ? `/app${note.route}` : `/app/notes/${slug}`);
   }
 
   const loaded = await loadRenderableContent(note.id);

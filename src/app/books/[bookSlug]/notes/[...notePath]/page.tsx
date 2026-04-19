@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { MathHydrator } from "@/components/markdown/math-hydrator";
 import { PublicDocumentContent } from "@/components/public-document-content";
@@ -7,7 +7,7 @@ import { PublicStyleFrame } from "@/components/public-style-frame";
 import { PublicShell } from "@/components/public-shell";
 import { TocPanel } from "@/components/toc-panel";
 import {
-  getContent,
+  getNoteAtLocation,
   getPublicBacklinks,
   getGeneralSettings,
   getPublicManifest,
@@ -23,8 +23,7 @@ import { buildPublicMetadata } from "@/lib/seo";
  * to the canonical route so backlinks and search results stay clean.
  */
 type LoadResult =
-  | { kind: "redirect"; to: string }
-  | { kind: "note"; note: Extract<Awaited<ReturnType<typeof getContent>>, { kind: "note" }> }
+  | { kind: "note"; note: NonNullable<Awaited<ReturnType<typeof getNoteAtLocation>>> }
   | null;
 
 async function loadBookScopedPublishedNote(
@@ -33,11 +32,8 @@ async function loadBookScopedPublishedNote(
 ): Promise<LoadResult> {
   if (notePath.length !== 1) return null;
   const slug = notePath[0];
-  const note = await getContent({ kind: "note", slug });
-  if (!note || note.kind !== "note") return null;
-  if (note.location.kind !== "book" || note.location.bookSlug !== bookSlug) {
-    return { kind: "redirect", to: note.route };
-  }
+  const note = await getNoteAtLocation(slug, { kind: "book", bookSlug });
+  if (!note) return null;
   if (note.meta.status !== "published") return null;
   return { kind: "note", note };
 }
@@ -78,7 +74,6 @@ export default async function BookScopedNotePage({
   const { bookSlug, notePath } = await params;
   const result = await loadBookScopedPublishedNote(bookSlug, notePath);
   if (!result) notFound();
-  if (result.kind === "redirect") redirect(result.to);
 
   const note = result.note;
   const [tree, manifest, backlinks, generalSettings] = await Promise.all([

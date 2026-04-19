@@ -318,6 +318,14 @@ export function ContentTreeSidebar({
           />,
         ];
       }
+      if (ref.kind === "notes-root") {
+        return (
+          <RowMenuButton
+            label="Create note here"
+            onClick={() => promptCreateNote(ref)}
+          />
+        );
+      }
       if (ref.kind === "note") {
         const firstBook = model.tree?.books[0];
         const items: React.ReactNode[] = [];
@@ -605,6 +613,7 @@ function TreeRow({
         onMenuToggle
           ? (e) => {
               e.preventDefault();
+              e.stopPropagation();
               onMenuToggle();
             }
           : undefined
@@ -842,19 +851,33 @@ function NotesSection({
     data: { ref: { kind: "notes-root" } satisfies NodeRef },
   });
   const notesRootHovered = hoverInfo?.overId === "drop:notes-root";
+  const rootRef: NodeRef = { kind: "notes-root" };
+  const rootRowId = refId(rootRef);
 
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "mt-3 grid gap-0.5 rounded p-1",
+        "relative mt-3 grid gap-0.5 rounded p-1",
         notesRootHovered && "bg-[rgba(73,57,38,0.08)] ring-1 ring-[rgba(73,57,38,0.3)]",
       )}
       data-testid="notes-drop-zone"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuFor((prev) => (prev && refId(prev) === rootRowId ? null : rootRef));
+      }}
     >
       <div className="flex items-center gap-1 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--paper-muted)]">
         <FileText className="h-3 w-3" /> Notes
       </div>
+      {menuIdFor === rootRowId ? (
+        <div
+          role="menu"
+          className="absolute left-2 top-6 z-20 grid min-w-[180px] max-w-[240px] gap-1 rounded-[12px] border border-[var(--paper-border)] bg-[rgba(255,250,240,0.98)] p-1 text-xs shadow-[0_18px_45px_rgba(47,34,21,0.16)]"
+        >
+          {buildMenu(rootRef)}
+        </div>
+      ) : null}
       {notes.map((note) => {
         const href = `/app/notes/${note.meta.slug}`;
         const ref: NodeRef = { kind: "note", slug: note.meta.slug };
