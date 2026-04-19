@@ -38,6 +38,11 @@ function nodeKey(kind: "book" | "chapter", ...parts: string[]) {
   return `${kind}:${parts.join("/")}`;
 }
 
+/** Lookup key for chapter-scoped notes — `<bookSlug>::<chapterPath>`. */
+function scopedChapterKey(bookSlug: string, chapterPath: string[]) {
+  return `${bookSlug}::${chapterPath.join("/")}`;
+}
+
 function refId(ref: NodeRef): string {
   switch (ref.kind) {
     case "book":
@@ -360,6 +365,32 @@ export function ContentTreeSidebar({
     [activeDrag, model.tree],
   );
 
+  // Slice N: group scoped notes by their parent so we can render them under
+  // the relevant book or chapter. Root notes stay in the bottom Notes section.
+  const notesByLocation = useMemo(() => {
+    const root: ContentTree["notes"] = [];
+    const byBook = new Map<string, ContentTree["notes"]>();
+    const byChapter = new Map<string, ContentTree["notes"]>();
+    for (const note of model.tree?.notes ?? []) {
+      if (note.location.kind === "root") {
+        root.push(note);
+      } else if (note.location.kind === "book") {
+        const arr = byBook.get(note.location.bookSlug) ?? [];
+        arr.push(note);
+        byBook.set(note.location.bookSlug, arr);
+      } else {
+        const key = scopedChapterKey(
+          note.location.bookSlug,
+          note.location.chapterPath,
+        );
+        const arr = byChapter.get(key) ?? [];
+        arr.push(note);
+        byChapter.set(key, arr);
+      }
+    }
+    return { root, byBook, byChapter };
+  }, [model.tree]);
+
   if (!mounted || (model.loading && !model.tree)) {
     return (
       <div
@@ -452,13 +483,24 @@ export function ContentTreeSidebar({
                   </button>
                 }
               />
-              {open && book.chapters.length ? (
+              {open ? (
                 <div className="ml-6 grid gap-0.5 border-l border-[rgba(73,57,38,0.12)] pl-2">
-                  <ChapterTreeRows
-                    bookSlug={book.meta.slug}
-                    chapters={book.chapters}
-                    expanded={expanded}
-                    toggle={toggle}
+                  {book.chapters.length ? (
+                    <ChapterTreeRows
+                      bookSlug={book.meta.slug}
+                      chapters={book.chapters}
+                      expanded={expanded}
+                      toggle={toggle}
+                      currentPath={currentPath}
+                      menuIdFor={menuIdFor}
+                      setMenuFor={setMenuFor}
+                      buildMenu={buildMenu}
+                      hoverPositionFor={hoverPositionFor}
+                      notesByChapter={notesByLocation.byChapter}
+                    />
+                  ) : null}
+                  <ScopedNotesGroup
+                    notes={notesByLocation.byBook.get(book.meta.slug) ?? []}
                     currentPath={currentPath}
                     menuIdFor={menuIdFor}
                     setMenuFor={setMenuFor}
@@ -472,7 +514,7 @@ export function ContentTreeSidebar({
         })}
 
         <NotesSection
-          tree={model.tree}
+          notes={notesByLocation.root}
           currentPath={currentPath}
           menuIdFor={menuIdFor}
           setMenuFor={setMenuFor}
@@ -626,6 +668,7 @@ function ChapterTreeRows({
   setMenuFor,
   buildMenu,
   hoverPositionFor,
+  notesByChapter,
 }: {
   bookSlug: string;
   chapters: ChapterTreeNode[];
@@ -636,6 +679,7 @@ function ChapterTreeRows({
   setMenuFor: React.Dispatch<React.SetStateAction<NodeRef | null>>;
   buildMenu: (ref: NodeRef) => React.ReactNode;
   hoverPositionFor: (rowId: string) => DropPosition | null;
+  notesByChapter: Map<string, ContentTree["notes"]>;
 }) {
   return (
     <>
@@ -679,13 +723,24 @@ function ChapterTreeRows({
                 ) : undefined
               }
             />
-            {open && hasChildren ? (
+            {open ? (
               <div className="ml-6 grid gap-0.5 border-l border-[rgba(73,57,38,0.12)] pl-2">
-                <ChapterTreeRows
-                  bookSlug={bookSlug}
-                  chapters={chapter.children}
-                  expanded={expanded}
-                  toggle={toggle}
+                {hasChildren ? (
+                  <ChapterTreeRows
+                    bookSlug={bookSlug}
+                    chapters={chapter.children}
+                    expanded={expanded}
+                    toggle={toggle}
+                    currentPath={currentPath}
+                    menuIdFor={menuIdFor}
+                    setMenuFor={setMenuFor}
+                    buildMenu={buildMenu}
+                    hoverPositionFor={hoverPositionFor}
+                    notesByChapter={notesByChapter}
+                  />
+                ) : null}
+                <ScopedNotesGroup
+                  notes={notesByChapter.get(scopedChapterKey(bookSlug, chapter.path)) ?? []}
                   currentPath={currentPath}
                   menuIdFor={menuIdFor}
                   setMenuFor={setMenuFor}
@@ -701,8 +756,51 @@ function ChapterTreeRows({
   );
 }
 
+function ScopedNotesGroup({
+  notes,
+  currentPath,
+  menuIdFor,
+  setMenuFor,
+  buildMenu,
+  hoverPositionFor,
+}: {
+  notes: ContentTree["notes"];
+  currentPath?: string;
+  menuIdFor: string | null;
+  setMenuFor: React.Dispatch<React.SetStateAction<NodeRef | null>>;
+  buildMenu: (ref: NodeRef) => React.ReactNode;
+  hoverPositionFor: (rowId: string) => DropPosition | null;
+}) {
+  if (notes.length === 0) return null;
+  return (
+    <>
+      {notes.map((note) => {
+        const ref: NodeRef = { kind: "note", slug: note.meta.slug };
+        const rowId = refId(ref);
+        const href = `/app${note.route}`;
+        return (
+          <TreeRow
+            key={`scoped:${note.meta.slug}`}
+            id={rowId}
+            ref_={ref}
+            href={href}
+            title={note.meta.title}
+            active={currentPath === href}
+            menuOpen={menuIdFor === rowId}
+            onMenuToggle={() =>
+              setMenuFor((prev) => (prev && refId(prev) === rowId ? null : ref))
+            }
+            menuContent={buildMenu(ref)}
+            hoverPosition={hoverPositionFor(rowId)}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 function NotesSection({
-  tree,
+  notes,
   currentPath,
   menuIdFor,
   setMenuFor,
@@ -710,7 +808,7 @@ function NotesSection({
   hoverPositionFor,
   hoverInfo,
 }: {
-  tree: ContentTree;
+  notes: ContentTree["notes"];
   currentPath?: string;
   menuIdFor: string | null;
   setMenuFor: React.Dispatch<React.SetStateAction<NodeRef | null>>;
@@ -736,7 +834,7 @@ function NotesSection({
       <div className="flex items-center gap-1 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--paper-muted)]">
         <FileText className="h-3 w-3" /> Notes
       </div>
-      {tree.notes.map((note) => {
+      {notes.map((note) => {
         const href = `/app/notes/${note.meta.slug}`;
         const ref: NodeRef = { kind: "note", slug: note.meta.slug };
         const rowId = refId(ref);
