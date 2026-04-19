@@ -92,20 +92,33 @@ describe("createNote with scoped location (Slice Q)", () => {
     expect(note!.route).toBe("/books/host/chapters/intro/notes/new-scoped-note");
   });
 
-  it("rejects a slug that already exists at any location", async () => {
+  it("allows the same slug in different locations but rejects collisions within one", async () => {
     const service = await loadService();
     await seedBook(service);
 
-    await service.createNote(NOTE_INPUT, { kind: "book", bookSlug: "host" });
+    // Create in book scope — first occurrence of this slug, accepted.
+    const inBook = await service.createNote(NOTE_INPUT, {
+      kind: "book",
+      bookSlug: "host",
+    });
+    expect(inBook).not.toBeNull();
 
-    await expect(service.createNote(NOTE_INPUT)).rejects.toThrow(/already exists/);
+    // Same slug in root is legal (different folder).
+    const inRoot = await service.createNote(NOTE_INPUT);
+    expect(inRoot).not.toBeNull();
+
+    // Same slug in chapter is also legal.
+    const inChapter = await service.createNote(NOTE_INPUT, {
+      kind: "chapter",
+      bookSlug: "host",
+      chapterPath: ["intro"],
+    });
+    expect(inChapter).not.toBeNull();
+
+    // But a second write in the same book scope collides.
     await expect(
-      service.createNote(NOTE_INPUT, {
-        kind: "chapter",
-        bookSlug: "host",
-        chapterPath: ["intro"],
-      }),
-    ).rejects.toThrow(/already exists/);
+      service.createNote(NOTE_INPUT, { kind: "book", bookSlug: "host" }),
+    ).rejects.toThrow(/already exists in this folder/);
   });
 
   it("assigns per-folder ordering (siblings start at 1, second sibling at 2)", async () => {

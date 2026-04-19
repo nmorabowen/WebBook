@@ -3824,39 +3824,43 @@ export async function createNote(
   const slug = toSlug(data.slug);
   ensureSafeSlugOrThrow(slug);
 
-  // Slug uniqueness is global today (single shared resolver namespace).
-  // Phase-3 work will tighten this to per-folder once refs carry the
-  // explicit path; for now reject collisions across every location.
+  // Slug uniqueness is enforced PER FOLDER (file-manager semantics).
+  // Two notes with the same slug in different locations are legal; the
+  // slug-based resolver prefers root-first, then the first scoped match —
+  // same behavior on lookup as before this change.
   const books = await listBookRecords();
   const [rootNotes, scopedNotes] = await Promise.all([
     listNoteRecords(),
     listScopedNoteRecords(books),
   ]);
   const allNotes = [...rootNotes, ...scopedNotes];
-  if (allNotes.some((note) => note.meta.slug === slug)) {
-    throw new Error("A note with that slug already exists");
-  }
-
-  const now = new Date().toISOString();
-  // Order is per-location: count siblings already at the destination.
-  const siblingsAtLocation = allNotes.filter((note) => {
-    if (note.location.kind !== location.kind) return false;
+  const isSameLocation = (noteLocation: NoteLocation) => {
+    if (noteLocation.kind !== location.kind) return false;
     if (location.kind === "root") return true;
     if (location.kind === "book")
       return (
-        note.location.kind === "book" && note.location.bookSlug === location.bookSlug
+        noteLocation.kind === "book" &&
+        noteLocation.bookSlug === location.bookSlug
       );
     if (
-      note.location.kind === "chapter" &&
-      note.location.bookSlug === location.bookSlug &&
-      note.location.chapterPath.length === location.chapterPath.length
+      noteLocation.kind === "chapter" &&
+      noteLocation.bookSlug === location.bookSlug &&
+      noteLocation.chapterPath.length === location.chapterPath.length
     ) {
-      return note.location.chapterPath.every(
+      return noteLocation.chapterPath.every(
         (s, i) => s === location.chapterPath[i],
       );
     }
     return false;
-  });
+  };
+  const siblingsAtLocation = allNotes.filter((note) =>
+    isSameLocation(note.location),
+  );
+  if (siblingsAtLocation.some((note) => note.meta.slug === slug)) {
+    throw new Error("A note with that slug already exists in this folder");
+  }
+
+  const now = new Date().toISOString();
   const nextOrder =
     siblingsAtLocation.reduce(
       (highestOrder, note) => Math.max(highestOrder, note.meta.order ?? 0),
