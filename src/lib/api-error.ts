@@ -19,5 +19,15 @@ export function apiError(
         ? errorOrMessage
         : (fallback ?? "An unexpected error occurred");
 
+  // Log non-string errors (i.e. real exceptions) to stderr so the dev
+  // console surfaces stack traces. 4xx user-input errors are still logged
+  // because most "400 from a click" reports want the original message.
+  if (errorOrMessage instanceof Error || status >= 500) {
+    const errLine = errorOrMessage instanceof Error
+      ? errorOrMessage.stack ?? errorOrMessage.message
+      : message;
+    console.error(`[apiError ${status}] ${fallback ?? ""}\n${errLine}`);
+  }
+
   return NextResponse.json({ error: message }, { status });
 }
