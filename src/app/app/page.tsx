@@ -107,7 +107,9 @@ export default async function AppDashboardPage() {
                 <h2 className="text-2xl font-semibold">Notes</h2>
               </div>
               <div className="mt-4 grid" style={{ gap: `calc(${tileSpacing} * 0.5)` }}>
-                {tree.notes.map((note) => (
+                {tree.notes
+                  .filter((note) => note.location.kind === "root")
+                  .map((note) => (
                   <a
                     key={note.meta.slug}
                     href={`/app/notes/${note.meta.slug}`}

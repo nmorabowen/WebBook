@@ -279,7 +279,9 @@ export function PublicShell({
                       {book.meta.title}
                     </Link>
                   ))}
-                  {tree.notes.map((note) => (
+                  {tree.notes
+                    .filter((note) => note.location.kind === "root")
+                    .map((note) => (
                     <Link key={note.meta.slug} href={`/notes/${note.meta.slug}`} className="paper-nav-link">
                       {note.meta.title}
                     </Link>

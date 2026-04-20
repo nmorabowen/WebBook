@@ -154,10 +154,14 @@ export default async function HomePage() {
                   <p className="paper-label">Notes</p>
                   <h2 className="font-serif text-4xl leading-none">Note stack</h2>
                 </div>
-                <span className="paper-badge">{tree.notes.length}</span>
+                <span className="paper-badge">
+                  {tree.notes.filter((n) => n.location.kind === "root").length}
+                </span>
               </div>
               <div className="moleskine-stack-grid">
-                {tree.notes.map((note, index) => (
+                {tree.notes
+                  .filter((note) => note.location.kind === "root")
+                  .map((note, index) => (
                   <Link
                     key={note.meta.slug}
                     href={`/notes/${note.meta.slug}`}

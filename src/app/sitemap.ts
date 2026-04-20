@@ -33,7 +33,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       })),
     ]),
     ...tree.notes.map((note) => ({
-      url: absoluteUrl(`/notes/${note.meta.slug}`).toString(),
+      // Use the note's full route — for scoped notes this is path-aware
+      // (/books/<book>/notes/<slug>) so root + scoped notes never collide
+      // on URL even when they share a slug.
+      url: absoluteUrl(note.route).toString(),
       lastModified: new Date(note.meta.updatedAt),
       changeFrequency: "weekly" as const,
       priority: 0.8,

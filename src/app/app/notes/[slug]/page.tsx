@@ -89,7 +89,9 @@ export default async function AppNotePage({
           <PageMoveControls
             mode="note"
             slug={loaded.content.meta.slug}
-            orderedSlugs={tree.notes.map((note) => note.meta.slug)}
+            orderedSlugs={tree.notes
+              .filter((note) => note.location.kind === "root")
+              .map((note) => note.meta.slug)}
             workspaceTree={tree}
             currentPath={`/app/notes/${loaded.content.meta.slug}`}
             canManageTopLevel={session.role === "admin"}

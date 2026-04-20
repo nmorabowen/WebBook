@@ -1195,7 +1195,9 @@ export function AuthoringSidebar({
           Notes
         </div>
         <div className="grid gap-2">
-          {localTree.notes.map((note, noteIndex) => (
+          {localTree.notes
+            .filter((note) => note.location.kind === "root")
+            .map((note, noteIndex) => (
             <div key={note.meta.slug} className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <NavLink
