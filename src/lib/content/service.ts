@@ -4099,10 +4099,21 @@ export async function moveNoteToBook(slug: string, input: unknown) {
   }
 
   const insertedPath = [...parentChapterPath, existing.meta.slug];
-  await withTransactionalMove({
-    targetPath: destinationChaptersPath,
-    stagingPrefix: "note-move",
-    populate: async (stagingPath) => {
+
+  // Same-book promote: when the source note lives inside the destination
+  // book's chapters tree (a scoped note in some chapter), copyChapterSubtree
+  // would otherwise sweep it into the staging dir and the post-swap rm
+  // would only delete the path that's now a fresh copy. Delete the source
+  // up front so the chapter-subtree copy never sees it. If the
+  // transactional move then fails, restore the source from the in-memory
+  // raw so the user does not lose content.
+  await fs.rm(existing.filePath, { force: true });
+
+  try {
+    await withTransactionalMove({
+      targetPath: destinationChaptersPath,
+      stagingPrefix: "note-move",
+      populate: async (stagingPath) => {
       for (let index = 0; index < chapterEntries.length + 1; index += 1) {
         const nextOrder = index + 1;
         if (index === requestedOrder - 1) {
@@ -4155,9 +4166,18 @@ export async function moveNoteToBook(slug: string, input: unknown) {
         );
       }
     },
-  });
+    });
+  } catch (err) {
+    // Restore the source note we removed above so the user can retry.
+    try {
+      await fs.mkdir(path.dirname(existing.filePath), { recursive: true });
+      await fs.writeFile(existing.filePath, existing.raw, "utf8");
+    } catch {
+      // Best effort — the createRevision call above is the durable backup.
+    }
+    throw err;
+  }
 
-  await fs.rm(existing.filePath, { force: true });
   const notes = await listOrderedNoteFiles();
   await Promise.all(
     notes

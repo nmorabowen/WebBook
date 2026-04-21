@@ -291,6 +291,40 @@ describe("Slice M: moveContent dispatcher", () => {
     }
   });
 
+  it("promotes a chapter-scoped note within the same book without leaving an orphan source", async () => {
+    const service = await loadService();
+    await seedTwoBooks(service);
+
+    // Create a chapter-scoped note inside source/intro.
+    await service.createNote(
+      {
+        title: "Whats",
+        slug: "whats",
+        summary: "",
+        body: "body",
+        status: "draft",
+        theme: "paper",
+      },
+      { kind: "chapter", bookSlug: "source", chapterPath: ["intro"] },
+    );
+
+    // Promote it as a chapter in the SAME book — this is the dangerous
+    // path because copyChapterSubtree would otherwise sweep the source
+    // back into the new chapters/ dir alongside the new chapter file,
+    // leaving two records sharing the same id and breaking rebuildIndexes.
+    await service.moveContent({
+      source: { kind: "note", slug: "whats" },
+      destination: { parent: { kind: "book", bookSlug: "source" } },
+    });
+
+    const tree = await service.getContentTree();
+    const sourceBook = tree.books.find((b) => b.meta.slug === "source");
+    // New chapter exists at the book root.
+    expect(sourceBook!.chapters.some((c) => c.meta.slug === "whats")).toBe(true);
+    // No orphan note remains anywhere in the tree.
+    expect(tree.notes.some((n) => n.meta.slug === "whats")).toBe(false);
+  });
+
   it("rejects unknown source/destination combinations cleanly", async () => {
     const service = await loadService();
     await service.ensureContentScaffold();
