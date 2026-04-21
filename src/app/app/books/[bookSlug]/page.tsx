@@ -114,22 +114,22 @@ export default async function AppBookPage({
         }}
         updateEndpoint={`/api/books/${loaded.content.meta.slug}`}
         shortcutScopeKey={session.username}
-        extraActions={
-          <>
-            <PageMoveControls
-              mode="book"
-              slug={loaded.content.meta.slug}
-              orderedSlugs={tree.books.map((book) => book.meta.slug)}
-              workspaceTree={tree}
-              currentPath={`/app/books/${loaded.content.meta.slug}`}
-              canManageTopLevel={session.role === "admin"}
-            />
-            <CreateChapterPanel
-              bookSlug={loaded.content.meta.slug}
-              rootNextOrder={nextRootChapterOrder}
-            />
-          </>
-        }
+        extraActions={[
+          <PageMoveControls
+            key="move-controls"
+            mode="book"
+            slug={loaded.content.meta.slug}
+            orderedSlugs={tree.books.map((book) => book.meta.slug)}
+            workspaceTree={tree}
+            currentPath={`/app/books/${loaded.content.meta.slug}`}
+            canManageTopLevel={session.role === "admin"}
+          />,
+          <CreateChapterPanel
+            key="create-chapter"
+            bookSlug={loaded.content.meta.slug}
+            rootNextOrder={nextRootChapterOrder}
+          />,
+        ]}
       />
     </AppShell>
   );

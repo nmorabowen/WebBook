@@ -2255,11 +2255,18 @@ export function EditorShell({
     },
   ];
 
+  // React 19 + Next 16 strict reconciliation flags Fragment children passed
+  // through createPortal as a list. Wrap each branch in a keyed div with
+  // className=contents so the DOM stays identical but the reconciler sees
+  // explicit keys.
   const inspectorContent = (
     <>
-      {extraActions}
+      <div key="inspector-extra-actions" className="contents">
+        {extraActions}
+      </div>
 
       <div
+        key="inspector-page-settings"
         className="editor-inspector-card border border-[var(--paper-border)] bg-[rgba(255,255,255,0.62)] p-5"
         style={workspacePanelStyle}
       >
