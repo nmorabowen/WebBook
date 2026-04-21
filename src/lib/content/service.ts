@@ -2663,7 +2663,42 @@ export async function listContent() {
     listNoteRecords(),
     listScopedNoteRecords(books),
   ]);
-  return { books, notes: [...rootNotes, ...scopedNotes] };
+  const allNotes = [...rootNotes, ...scopedNotes];
+  assertContentInvariants(books, allNotes);
+  return { books, notes: allNotes };
+}
+
+/**
+ * Pre-flight invariant check for the rebuild-indexes path. Catches the
+ * class of corruption that previously surfaced as opaque MiniSearch
+ * `duplicate ID` errors with no actionable detail. When two records share
+ * an id (typically because a transactional move left a copy of the source
+ * on disk), abort with the file paths so the operator knows exactly which
+ * files to reconcile.
+ */
+function assertContentInvariants(
+  books: BookRecord[],
+  notes: NoteRecord[],
+): void {
+  const seen = new Map<string, string>();
+  const visit = (id: string, filePath: string, kind: string) => {
+    const previous = seen.get(id);
+    if (previous && previous !== filePath) {
+      throw new Error(
+        `[content invariant] Duplicate id ${id} (${kind}):\n  ${previous}\n  ${filePath}\nReconcile or repair before continuing.`,
+      );
+    }
+    seen.set(id, filePath);
+  };
+  for (const book of books) {
+    visit(book.id, book.filePath, "book");
+    for (const chapter of flattenChapters(book.chapters)) {
+      visit(chapter.id, chapter.filePath, "chapter");
+    }
+  }
+  for (const note of notes) {
+    visit(note.id, note.filePath, "note");
+  }
 }
 
 export async function rebuildIndexes() {
@@ -2672,7 +2707,9 @@ export async function rebuildIndexes() {
     listNoteRecords(),
     listScopedNoteRecords(books),
   ]);
-  await writeIndexes({ books, notes: [...rootNotes, ...scopedNotes] });
+  const allNotes = [...rootNotes, ...scopedNotes];
+  assertContentInvariants(books, allNotes);
+  await writeIndexes({ books, notes: allNotes });
   await writeRevision();
   safeRevalidateTag(INDEXES_TAG);
   safeRevalidateTag(PUBLIC_INDEXES_TAG);
