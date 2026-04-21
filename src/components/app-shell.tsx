@@ -130,7 +130,7 @@ export function AppShell({
           >
             {rightPanel ? (
               <div className={cn("app-shell-inspector-stack grid gap-5", rightPanelClassName)}>
-                <div className="flex justify-end">
+                <div key="inspector-close" className="flex justify-end">
                   <button
                     type="button"
                     className="app-shell-panel-toggle"
@@ -141,7 +141,9 @@ export function AppShell({
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
-                {rightPanel}
+                <div key="inspector-content" className="contents">
+                  {rightPanel}
+                </div>
               </div>
             ) : null}
           </aside>
