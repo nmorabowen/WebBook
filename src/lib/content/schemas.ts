@@ -110,7 +110,7 @@ export const chapterMetaSchema = baseMetaSchema.extend({
   order: z.number().int().positive(),
   summary: z.string().optional(),
   status: statusSchema,
-  allowExecution: z.boolean(),
+  allowExecution: z.boolean().optional(),
   fontPreset: fontPresetSchema.optional(),
 });
 
@@ -119,7 +119,7 @@ export const noteMetaSchema = baseMetaSchema.extend({
   summary: z.string().optional(),
   order: z.number().int().nonnegative().optional(),
   status: statusSchema,
-  allowExecution: z.boolean(),
+  allowExecution: z.boolean().optional(),
   fontPreset: fontPresetSchema.optional(),
   typography: bookTypographySchema.optional(),
 });
@@ -255,7 +255,7 @@ export const saveNoteSchema = z.object({
   summary: z.string().optional(),
   body: z.string(),
   status: statusSchema.default("draft"),
-  allowExecution: z.boolean().default(true),
+  allowExecution: z.boolean().optional(),
   fontPreset: fontPresetSchema.default("source-serif"),
   typography: bookTypographySchema.optional(),
   createRevision: z.boolean().optional(),
@@ -280,7 +280,7 @@ const chapterContentFields = {
   summary: z.string().optional(),
   body: z.string(),
   status: statusSchema.default("draft"),
-  allowExecution: z.boolean().default(true),
+  allowExecution: z.boolean().optional(),
   fontPreset: fontPresetSchema.default("source-serif"),
   createRevision: z.boolean().optional(),
 } as const;

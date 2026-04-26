@@ -9,11 +9,6 @@ services:
       - ${WEBBOOK_ROOT}/.env.production
     ports:
       - "127.0.0.1:3000:3000"
-    depends_on:
-      redis:
-        condition: service_healthy
-      python-runner:
-        condition: service_healthy
     volumes:
       - ${WEBBOOK_CONTENT_HOST_PATH}:/app/content
     healthcheck:
@@ -27,31 +22,3 @@ services:
       timeout: 5s
       retries: 8
       start_period: 20s
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 15s
-      timeout: 5s
-      retries: 8
-
-  python-runner:
-    image: ${PYTHON_IMAGE}
-    build:
-      context: ./services/python-runner
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file:
-      - ${WEBBOOK_ROOT}/.env.production
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          python -c "import sys, urllib.request;
-          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/healthz').status == 200 else 1)"
-      interval: 15s
-      timeout: 5s
-      retries: 8
-      start_period: 10s

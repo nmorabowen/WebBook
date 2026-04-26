@@ -111,7 +111,7 @@ dump_release_diagnostics() {
   compose ps >&2 || true
   echo >&2
   echo "Recent container logs:" >&2
-  compose logs --no-color --tail 200 web python-runner redis >&2 || true
+  compose logs --no-color --tail 200 web >&2 || true
 }
 
 wait_for_container_health() {
@@ -140,11 +140,6 @@ wait_for_container_health() {
 wait_for_release_health() {
   if ! wait_for_http "http://127.0.0.1:3000/api/healthz" 45 2; then
     echo "Web health check failed: http://127.0.0.1:3000/api/healthz" >&2
-    return 1
-  fi
-
-  if ! wait_for_container_health "python-runner" 45 2; then
-    echo "Python runner health check failed." >&2
     return 1
   fi
 

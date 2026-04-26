@@ -7,7 +7,6 @@ import {
   cloneElement,
   isValidElement,
   useEffect,
-  useEffectEvent,
   useMemo,
   useRef,
   type CSSProperties,
@@ -17,10 +16,10 @@ import {
 } from "react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { ExecutableCodeBlock } from "@/components/markdown/executable-code-block";
 import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { CopyCodeButton } from "@/components/markdown/copy-code-button";
 import { MermaidDiagram } from "@/components/markdown/mermaid-diagram";
+import { SeafileLinkCard } from "@/components/markdown/seafile-link-card";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import type { ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -29,11 +28,7 @@ import {
   findSourceLineRestoreTarget,
   findVisibleSourceLine,
 } from "@/components/markdown/source-navigation";
-import {
-  hasUnrenderedMath,
-  MATHJAX_READY_EVENT,
-  queueMathJaxTypeset,
-} from "@/components/markdown/mathjax-runtime";
+import { useMathTypeset } from "@/components/markdown/use-math-typeset";
 import {
   createWikiLinkPlugin,
   headingId,
@@ -46,14 +41,13 @@ import {
   normalizeYouTubeIframes,
   parseInlineTextStyleHref,
   parseImageSizingFromUrl,
+  parseSeafileShareUrl,
 } from "@/lib/utils";
 
 type MarkdownRendererProps = {
   markdown: string;
   manifest: ManifestEntry[];
   pageId: string;
-  requester: "admin" | "public";
-  allowExecution?: boolean;
   className?: string;
   fontPreset?: FontPreset;
   typography?: Partial<BookTypography>;
@@ -170,9 +164,8 @@ function sourceLine(node?: { position?: { start?: { line?: number } } }) {
 
 function parseCodeMeta(meta?: string | null) {
   const value = meta ?? "";
-  const executable = /\bexec\b/.test(value);
   const id = value.match(/\bid=([A-Za-z0-9_-]+)/)?.[1];
-  return { executable, id };
+  return { id };
 }
 
 function collectNodeText(node: ReactNode): string {
@@ -519,8 +512,6 @@ export function MarkdownRenderer({
   markdown,
   manifest,
   pageId,
-  requester,
-  allowExecution = false,
   className,
   fontPreset = "source-serif",
   typography,
@@ -535,8 +526,7 @@ export function MarkdownRenderer({
   linkRel,
 }: MarkdownRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mathTypesetInFlightRef = useRef(false);
-  const mathTypesetCancelRef = useRef<(() => void) | null>(null);
+  const requestMathTypeset = useMathTypeset(containerRef);
   const normalizedMarkdown = useMemo(
     () => normalizeImageSizingMarkdown(normalizeYouTubeIframes(markdown)),
     [markdown],
@@ -583,40 +573,6 @@ export function MarkdownRenderer({
     return resolveWikiTargetFromManifest(manifest, trimmedTarget);
   };
 
-  const requestMathTypeset = useEffectEvent(() => {
-    const node = containerRef.current;
-    if (!node || typeof window === "undefined") {
-      return;
-    }
-
-    if (!hasUnrenderedMath(node) || mathTypesetInFlightRef.current) {
-      return;
-    }
-
-    let cancelled = false;
-    mathTypesetInFlightRef.current = true;
-    mathTypesetCancelRef.current = () => {
-      cancelled = true;
-    };
-
-    void queueMathJaxTypeset(node, {
-      shouldCancel: () => cancelled || containerRef.current !== node,
-    }).finally(() => {
-      if (containerRef.current === node) {
-        mathTypesetInFlightRef.current = false;
-        // Re-check after completion in case content changed while in-flight.
-        requestMathTypeset();
-      }
-      if (mathTypesetCancelRef.current) {
-        mathTypesetCancelRef.current = null;
-      }
-    });
-  });
-
-  useEffect(() => {
-    requestMathTypeset();
-  });
-
   useEffect(() => {
     const node = containerRef.current;
     if (!node || typeof ResizeObserver === "undefined") {
@@ -635,31 +591,7 @@ export function MarkdownRenderer({
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleMathLayoutChange);
     };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const handleMathJaxReady = () => {
-      requestMathTypeset();
-    };
-
-    window.addEventListener(MATHJAX_READY_EVENT, handleMathJaxReady);
-
-    return () => {
-      window.removeEventListener(MATHJAX_READY_EVENT, handleMathJaxReady);
-    };
   }, [requestMathTypeset]);
-
-  useEffect(() => {
-    return () => {
-      mathTypesetCancelRef.current?.();
-      mathTypesetCancelRef.current = null;
-      mathTypesetInFlightRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -924,7 +856,7 @@ export function MarkdownRenderer({
               }
 
               if (
-                isValidElement<{ href?: string }>(child) &&
+                isValidElement<{ href?: string; children?: ReactNode }>(child) &&
                 typeof child.props.href === "string"
               ) {
                 const videoId = extractYouTubeVideoId(child.props.href);
@@ -939,6 +871,23 @@ export function MarkdownRenderer({
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         referrerPolicy="strict-origin-when-cross-origin"
                         allowFullScreen
+                      />
+                    </div>,
+                    "source-nav-media",
+                  );
+                }
+
+                const seafile = parseSeafileShareUrl(child.props.href);
+                if (seafile) {
+                  const label = normalizeNodeText(child.props.children);
+                  return wrapWithSourceNavigation(
+                    line,
+                    <div className="seafile-link-card-block" data-source-line={line}>
+                      <SeafileLinkCard
+                        info={seafile}
+                        label={label || undefined}
+                        target={linkTarget}
+                        rel={linkRel}
                       />
                     </div>,
                     "source-nav-media",
@@ -1022,7 +971,7 @@ export function MarkdownRenderer({
               node && "meta" in node && typeof node.meta === "string"
                 ? node.meta
                 : undefined;
-            const { executable, id } = parseCodeMeta(meta);
+            const { id } = parseCodeMeta(meta);
             const value = String(children).replace(/\n$/, "");
             const isInlineMath = codeClassName?.includes("math-inline") ?? false;
             const isDisplayMath = codeClassName?.includes("math-display") ?? false;
@@ -1058,19 +1007,6 @@ export function MarkdownRenderer({
                 <code className={codeClassName} {...props}>
                   {children}
                 </code>
-              );
-            }
-
-            if (executable && language === "python") {
-              return (
-                <ExecutableCodeBlock
-                  code={value}
-                  language={language}
-                  pageId={pageId}
-                  cellId={id ?? `${pageId}-${language}`}
-                  executionEnabled={allowExecution}
-                  requester={requester}
-                />
               );
             }
 

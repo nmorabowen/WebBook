@@ -96,7 +96,6 @@ export default async function NotePage({
           manifest={manifest}
           pageId={note.id}
           requester="public"
-          allowExecution={note.meta.allowExecution}
           fontPreset={note.meta.fontPreset ?? "source-serif"}
           typography={note.meta.typography}
           generalSettings={generalSettings}

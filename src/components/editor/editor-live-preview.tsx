@@ -18,7 +18,6 @@ type EditorLivePreviewProps = {
   markdown: string;
   manifest: ManifestEntry[];
   pageId: string;
-  allowExecution?: boolean;
   fontPreset?: FontPreset;
   typography?: Partial<BookTypography>;
   generalSettings?: GeneralSettings;
@@ -44,7 +43,6 @@ export function EditorLivePreview({
   markdown,
   manifest,
   pageId,
-  allowExecution = false,
   fontPreset = "source-serif",
   typography,
   generalSettings,
@@ -107,7 +105,6 @@ export function EditorLivePreview({
           manifest={manifest}
           pageId={pageId}
           requester="admin"
-          allowExecution={allowExecution}
           fontPreset={fontPreset}
           typography={typography}
           generalSettings={generalSettings}

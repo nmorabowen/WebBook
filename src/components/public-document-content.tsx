@@ -21,7 +21,6 @@ type PublicDocumentContentProps = {
   manifest: ManifestEntry[];
   pageId: string;
   requester: "admin" | "public";
-  allowExecution?: boolean;
   fontPreset?: FontPreset;
   typography?: Partial<BookTypography>;
   bookTitle?: string;
@@ -41,8 +40,7 @@ export function PublicDocumentContent({
   markdown,
   manifest,
   pageId,
-  requester,
-  allowExecution = false,
+  requester: _requester,
   fontPreset = "source-serif",
   typography,
   bookTitle,
@@ -90,8 +88,6 @@ export function PublicDocumentContent({
             markdown={markdown}
             manifest={manifest}
             pageId={pageId}
-            requester={requester}
-            allowExecution={allowExecution}
             fontPreset={fontPreset}
             typography={typography}
             currentRoute={currentRoute}
@@ -121,7 +117,6 @@ export function PublicDocumentContent({
             markdown={markdown}
             manifest={manifest}
             pageId={pageId}
-            requester={requester}
             fontPreset={fontPreset}
             typography={typography}
             currentRoute={currentRoute}
@@ -205,8 +200,6 @@ export function PublicDocumentContent({
           markdown={markdown}
           manifest={manifest}
           pageId={pageId}
-          requester={requester}
-          allowExecution={allowExecution}
           fontPreset={fontPreset}
           typography={typography}
           currentRoute={currentRoute}

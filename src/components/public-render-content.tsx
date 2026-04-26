@@ -28,7 +28,6 @@ type PublicRenderContentProps = {
   manifest: ManifestEntry[];
   pageId: string;
   requester: "admin" | "public";
-  allowExecution?: boolean;
   fontPreset?: FontPreset;
   typography?: Partial<BookTypography>;
   bookTitle?: string;
@@ -54,8 +53,7 @@ export function PublicRenderContent({
   markdown,
   manifest,
   pageId,
-  requester,
-  allowExecution = false,
+  requester: _requester,
   fontPreset = "source-serif",
   typography,
   bookTitle,
@@ -109,8 +107,6 @@ export function PublicRenderContent({
             markdown={markdown}
             manifest={manifest}
             pageId={pageId}
-            requester={requester}
-            allowExecution={allowExecution}
             fontPreset={fontPreset}
             typography={typography}
             sourceNavigation={sourceNavigation}
@@ -146,8 +142,6 @@ export function PublicRenderContent({
             markdown={markdown}
             manifest={manifest}
             pageId={pageId}
-            requester={requester}
-            allowExecution={false}
             fontPreset={fontPreset}
             typography={typography}
             sourceNavigation={sourceNavigation}
@@ -237,8 +231,6 @@ export function PublicRenderContent({
           markdown={markdown}
           manifest={manifest}
           pageId={pageId}
-          requester={requester}
-          allowExecution={allowExecution}
           fontPreset={fontPreset}
           typography={typography}
           sourceNavigation={sourceNavigation}

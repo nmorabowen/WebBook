@@ -1,7 +1,15 @@
 "use client";
 
+import DOMPurify from "dompurify";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+function sanitizeSvg(svg: string): string {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ["foreignObject"],
+  });
+}
 
 type MermaidDiagramProps = {
   code: string;
@@ -105,7 +113,7 @@ export function MermaidDiagram({ code, id, sourceLine }: MermaidDiagramProps) {
         const { svg: rendered } = await mermaid.render(diagramId, code);
         if (!cancelled) {
           setError(null);
-          setSvg(rendered);
+          setSvg(sanitizeSvg(rendered));
         }
       } catch (err) {
         if (!cancelled) {

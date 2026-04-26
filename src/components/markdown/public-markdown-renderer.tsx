@@ -10,11 +10,11 @@ import {
 } from "react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { ExecutableCodeBlock } from "@/components/markdown/executable-code-block";
 import { HighlightedCode } from "@/components/markdown/highlighted-code";
 import { CopyCodeButton } from "@/components/markdown/copy-code-button";
 import { MermaidDiagram } from "@/components/markdown/mermaid-diagram";
 import { PublicMathTrigger } from "@/components/markdown/public-math-trigger";
+import { SeafileLinkCard } from "@/components/markdown/seafile-link-card";
 import { bookTypographyStyle, type BookTypography } from "@/lib/book-typography";
 import type { ManifestEntry } from "@/lib/content/schemas";
 import type { FontPreset } from "@/lib/font-presets";
@@ -30,14 +30,13 @@ import {
   normalizeYouTubeIframes,
   parseInlineTextStyleHref,
   parseImageSizingFromUrl,
+  parseSeafileShareUrl,
 } from "@/lib/utils";
 
 type PublicMarkdownRendererProps = {
   markdown: string;
   manifest: ManifestEntry[];
   pageId: string;
-  requester: "admin" | "public";
-  allowExecution?: boolean;
   className?: string;
   fontPreset?: FontPreset;
   typography?: Partial<BookTypography>;
@@ -69,9 +68,8 @@ type CalloutMeta = {
 
 function parseCodeMeta(meta?: string | null) {
   const value = meta ?? "";
-  const executable = /\bexec\b/.test(value);
   const id = value.match(/\bid=([A-Za-z0-9_-]+)/)?.[1];
-  return { executable, id };
+  return { id };
 }
 
 function collectNodeText(node: ReactNode): string {
@@ -386,8 +384,6 @@ export function PublicMarkdownRenderer({
   markdown,
   manifest,
   pageId,
-  requester,
-  allowExecution = false,
   className,
   fontPreset = "source-serif",
   typography,
@@ -507,7 +503,7 @@ export function PublicMarkdownRenderer({
               }
 
               if (
-                isValidElement<{ href?: string }>(child) &&
+                isValidElement<{ href?: string; children?: ReactNode }>(child) &&
                 typeof child.props.href === "string"
               ) {
                 const videoId = extractYouTubeVideoId(child.props.href);
@@ -521,6 +517,21 @@ export function PublicMarkdownRenderer({
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         referrerPolicy="strict-origin-when-cross-origin"
                         allowFullScreen
+                      />
+                    </div>
+                  );
+                }
+
+                const seafile = parseSeafileShareUrl(child.props.href);
+                if (seafile) {
+                  const label = normalizeNodeText(child.props.children);
+                  return (
+                    <div className="seafile-link-card-block" data-source-line={line}>
+                      <SeafileLinkCard
+                        info={seafile}
+                        label={label || undefined}
+                        target={linkTarget}
+                        rel={linkRel}
                       />
                     </div>
                   );
@@ -556,7 +567,7 @@ export function PublicMarkdownRenderer({
               node && "meta" in node && typeof node.meta === "string"
                 ? node.meta
                 : undefined;
-            const { executable, id } = parseCodeMeta(meta);
+            const { id } = parseCodeMeta(meta);
             const value = String(children).replace(/\n$/, "");
             const isInlineMath = codeClassName?.includes("math-inline") ?? false;
             const isDisplayMath = codeClassName?.includes("math-display") ?? false;
@@ -590,19 +601,6 @@ export function PublicMarkdownRenderer({
                 <code className={codeClassName} {...props}>
                   {children}
                 </code>
-              );
-            }
-
-            if (executable && language === "python") {
-              return (
-                <ExecutableCodeBlock
-                  code={value}
-                  language={language}
-                  pageId={pageId}
-                  cellId={id ?? `${pageId}-${language}`}
-                  executionEnabled={allowExecution}
-                  requester={requester}
-                />
               );
             }
 

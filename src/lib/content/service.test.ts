@@ -4,6 +4,11 @@ import path from "path";
 import JSZip from "jszip";
 import matter from "gray-matter";
 
+vi.mock("next/cache", () => ({
+  unstable_cache: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
+  revalidateTag: () => {},
+}));
+
 const tempRoot = ".tmp-content-test";
 
 async function loadService() {
@@ -2051,7 +2056,11 @@ describe("content service", () => {
       "webbook-handbook",
       "alpha-book",
     ]);
-    expect(tree.notes.map((note) => note.meta.slug)).toEqual(["beta-note", "alpha-note"]);
+    expect(tree.notes.map((note) => note.meta.slug)).toEqual([
+      "beta-note",
+      "webbook-notes",
+      "alpha-note",
+    ]);
   });
 
   it("persists note typography settings across save, duplicate, and public reads", async () => {
@@ -2463,7 +2472,7 @@ describe("content service", () => {
 
   it("prunes standalone note assignments when a note becomes a chapter", async () => {
     const service = await loadService();
-    const userStore = await import("./user-store");
+    const userStore = await import("../user-store");
     await service.ensureContentScaffold();
 
     await service.createBook({
@@ -2482,6 +2491,9 @@ describe("content service", () => {
       status: "draft",
       allowExecution: true,
     });
+    if (!note) {
+      throw new Error("Expected created note");
+    }
 
     await userStore.createUser({
       username: "editor-one",

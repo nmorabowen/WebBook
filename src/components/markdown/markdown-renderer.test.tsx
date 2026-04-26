@@ -1,10 +1,15 @@
 /** @vitest-environment jsdom */
 
+// React 19 requires this flag for act() to flush effects; without it
+// useEffect callbacks can be skipped inside act(async () => ...).
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 import { act } from "react-dom/test-utils";
 import { createRoot } from "react-dom/client";
 import { useRef } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { MarkdownRenderer } from "@/components/markdown/markdown-renderer";
+import { __resetMathJaxQueueForTests } from "@/components/markdown/mathjax-runtime";
 
 class ResizeObserverMock {
   static instances: ResizeObserverMock[] = [];
@@ -111,6 +116,15 @@ describe("MarkdownRenderer source navigation", () => {
   let container: HTMLDivElement | null = null;
   let root: ReturnType<typeof createRoot> | null = null;
 
+  beforeAll(() => {
+    // jsdom doesn't implement scrollIntoView; polyfill so effects that
+    // target any element don't throw. Individual tests can still spy on
+    // specific instances.
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = function scrollIntoView() {};
+    }
+  });
+
   afterEach(async () => {
     if (root) {
       await act(async () => {
@@ -125,6 +139,8 @@ describe("MarkdownRenderer source navigation", () => {
     document.body.innerHTML = "";
     ResizeObserverMock.reset();
     delete window.MathJax;
+    __resetMathJaxQueueForTests();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -137,7 +153,11 @@ describe("MarkdownRenderer source navigation", () => {
     vi.stubGlobal(
       "requestAnimationFrame",
       ((callback: FrameRequestCallback) => {
-        callback(0);
+        // Schedule via microtask so the caller's assignment of the returned
+        // frame id completes before syncVisibleLine clears it — otherwise the
+        // sync `visibleLineFrame = rAF(cb)` pattern ends up with a stale id
+        // and every subsequent scroll bails.
+        void Promise.resolve().then(() => callback(0));
         return 1;
       }) as typeof requestAnimationFrame,
     );
@@ -161,7 +181,6 @@ describe("MarkdownRenderer source navigation", () => {
           markdown={`# One\n\nAlpha\n\n## Two`}
           manifest={[]}
           pageId="page-1"
-          requester="admin"
           sourceNavigation
           currentRoute="/notes/page-1"
         />,
@@ -234,7 +253,11 @@ describe("MarkdownRenderer source navigation", () => {
     vi.stubGlobal(
       "requestAnimationFrame",
       ((callback: FrameRequestCallback) => {
-        callback(0);
+        // Schedule via microtask so the caller's assignment of the returned
+        // frame id completes before syncVisibleLine clears it — otherwise the
+        // sync `visibleLineFrame = rAF(cb)` pattern ends up with a stale id
+        // and every subsequent scroll bails.
+        void Promise.resolve().then(() => callback(0));
         return 1;
       }) as typeof requestAnimationFrame,
     );
@@ -256,7 +279,6 @@ describe("MarkdownRenderer source navigation", () => {
             markdown={`# One\n\nAlpha\n\n## Two`}
             manifest={[]}
             pageId="page-2"
-            requester="admin"
             sourceNavigation
             currentRoute="/notes/page-2"
             sourceNavigationViewportRef={viewportRef}
@@ -304,7 +326,10 @@ describe("MarkdownRenderer source navigation", () => {
       ({ top: 260, bottom: 340 } as DOMRect);
     lastCandidate!.getBoundingClientRect = () =>
       ({ top: 620, bottom: 700 } as DOMRect);
-    lastCandidate!.scrollIntoView = vi.fn() as typeof lastCandidate.scrollIntoView;
+    // ReactMarkdown recreates DOM nodes across rerenders, so a per-instance
+    // scrollIntoView mock on `lastCandidate` wouldn't survive. Spy on the
+    // prototype so we catch the call on whatever element ends up as the target.
+    const scrollIntoViewSpy = vi.spyOn(Element.prototype, "scrollIntoView");
 
     onVisibleSourceLineChange.mockClear();
 
@@ -312,7 +337,7 @@ describe("MarkdownRenderer source navigation", () => {
       root?.render(<TestHarness request={{ line: 5, nonce: 1 }} />);
     });
 
-    expect(lastCandidate!.scrollIntoView).toHaveBeenCalledWith({
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith({
       behavior: "auto",
       block: "center",
     });
@@ -321,14 +346,46 @@ describe("MarkdownRenderer source navigation", () => {
       5,
     );
 
+    // The request rerender recreated the source-nav-block DOM nodes, so
+    // getBoundingClientRect overrides on the pre-rerender references are no
+    // longer attached. Re-apply rect mocks to whatever is currently rendered
+    // before simulating the viewport scroll.
+    const rerenderedCandidates = Array.from(
+      container!.querySelectorAll<HTMLElement>("[data-source-line]"),
+    ).filter((element) => {
+      const line = Number(element.dataset.sourceLine);
+      return line === 1 || line === 3 || line === 5;
+    });
+    const rerenderedTop = rerenderedCandidates.find(
+      (element) => element.dataset.sourceLine === "1",
+    );
+    const rerenderedMiddle = rerenderedCandidates.find(
+      (element) => element.dataset.sourceLine === "3",
+    );
+    const rerenderedLast = rerenderedCandidates.find(
+      (element) => element.dataset.sourceLine === "5",
+    );
+    rerenderedTop!.getBoundingClientRect = () =>
+      ({ top: 120, bottom: 180 } as DOMRect);
+    rerenderedMiddle!.getBoundingClientRect = () =>
+      ({ top: 260, bottom: 340 } as DOMRect);
+    rerenderedLast!.getBoundingClientRect = () =>
+      ({ top: 620, bottom: 700 } as DOMRect);
+
+    onVisibleSourceLineChange.mockClear();
+
     await act(async () => {
       viewport?.dispatchEvent(new Event("scroll"));
     });
 
     expect(onVisibleSourceLineChange).toHaveBeenCalledWith(3);
 
+    const rerenderedSourceNavDot =
+      container!.querySelector<HTMLButtonElement>(".source-nav-dot");
+    expect(rerenderedSourceNavDot).toBeTruthy();
+
     await act(async () => {
-      sourceNavDot?.dispatchEvent(
+      rerenderedSourceNavDot?.dispatchEvent(
         new MouseEvent("click", { bubbles: true, cancelable: true }),
       );
     });
@@ -355,6 +412,8 @@ describe("MarkdownRenderer math rendering", () => {
     document.body.innerHTML = "";
     ResizeObserverMock.reset();
     delete window.MathJax;
+    __resetMathJaxQueueForTests();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -372,7 +431,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-1"
-          requester="admin"
         />,
       );
     });
@@ -385,6 +443,7 @@ describe("MarkdownRenderer math rendering", () => {
 
   it("retries initial startup when the first typeset pass does not render math", async () => {
     installResizeObserverMock();
+    vi.useFakeTimers();
     const mathJax = createMathJaxStub({ initialNoopCalls: 1 });
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -396,11 +455,14 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-startup-retry"
-          requester="admin"
         />,
       );
     });
     await flushEffects();
+    // First attempt ran as a noop; the queue is now awaiting its retry delay.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
     await flushEffects();
 
     expect(mathJax.typesetPromise).toHaveBeenCalledTimes(2);
@@ -420,7 +482,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-2"
-          requester="admin"
           className="render-pass-a"
         />,
       );
@@ -435,7 +496,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-2"
-          requester="admin"
           className="render-pass-b"
         />,
       );
@@ -459,7 +519,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-3"
-          requester="admin"
         />,
       );
     });
@@ -488,7 +547,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-ready-event"
-          requester="admin"
         />,
       );
     });
@@ -517,7 +575,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-4"
-          requester="admin"
           className="render-pass-a"
         />,
       );
@@ -530,7 +587,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-4"
-          requester="admin"
           className="render-pass-b"
         />,
       );
@@ -539,7 +595,6 @@ describe("MarkdownRenderer math rendering", () => {
           markdown={"Inline $x^2$ and\n\n$$y=x$$"}
           manifest={[]}
           pageId="math-4"
-          requester="admin"
           className="render-pass-c"
         />,
       );

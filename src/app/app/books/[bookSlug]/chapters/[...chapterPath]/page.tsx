@@ -91,7 +91,6 @@ export default async function AppChapterPage({
           summary: loaded.content.meta.summary,
           body: loaded.content.body,
           status: loaded.content.meta.status,
-          allowExecution: loaded.content.meta.allowExecution,
           fontPreset:
             loaded.content.meta.fontPreset ??
             book.meta.fontPreset ??

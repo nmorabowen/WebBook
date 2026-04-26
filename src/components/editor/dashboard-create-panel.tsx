@@ -44,7 +44,6 @@ export function DashboardCreatePanel({
                   summary: "A fresh standalone note.",
                   body: "# New note\n\nStart writing here.",
                   status: "draft",
-                  allowExecution: true,
                   typography: defaultNoteTypography,
                 },
           ),
